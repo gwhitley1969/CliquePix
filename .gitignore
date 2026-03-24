@@ -1,0 +1,96 @@
+# =============================================================================
+# CliquePix .gitignore
+# Covers: Flutter/Dart, Node.js/TypeScript, Azure Functions, IDE files
+# =============================================================================
+
+# ----- Flutter / Dart -----
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+/build/
+app/.dart_tool/
+app/.flutter-plugins
+app/.flutter-plugins-dependencies
+app/.packages
+app/build/
+app/.metadata
+app/ios/Pods/
+app/ios/.symlinks/
+app/ios/Flutter/Flutter.framework
+app/ios/Flutter/Flutter.podspec
+app/ios/Runner.xcworkspace/xcshareddata/WorkspaceSettings.xcsettings
+app/android/.gradle/
+app/android/app/debug/
+app/android/app/profile/
+app/android/app/release/
+app/android/local.properties
+app/android/key.properties
+app/.fvm/
+*.iml
+
+# ----- Node.js / TypeScript -----
+node_modules/
+dist/
+*.js.map
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ----- Azure Functions -----
+backend/dist/
+backend/node_modules/
+local.settings.json
+.funcignore
+
+# ----- Environment & Secrets -----
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+google-services.json
+GoogleService-Info.plist
+firebase_app_id_file.json
+firebase-service-account.json
+
+# ----- IDE -----
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ----- OS -----
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+
+# ----- Build artifacts -----
+*.apk
+*.aab
+*.ipa
+*.app
+*.dSYM.zip
+*.dSYM
+
+# ----- Coverage -----
+coverage/
+*.lcov
+
+# ----- Misc -----
+*.log
+.cache/
