@@ -1,6 +1,5 @@
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
 import { v4 as uuidv4 } from 'uuid';
-import sharp from 'sharp';
 import { authenticateRequest } from '../shared/middleware/authMiddleware';
 import { handleError } from '../shared/middleware/errorHandler';
 import { successResponse } from '../shared/utils/response';
@@ -65,6 +64,18 @@ async function enrichPhotoWithUrls(photo: Photo, userId: string): Promise<PhotoW
   };
 }
 
+async function generateThumbnailAsync(blobPath: string, photoId: string): Promise<void> {
+  const sharp = (await import('sharp')).default;
+  const buffer = await downloadBlob(blobPath);
+  const thumbBuffer = await sharp(buffer)
+    .resize({ width: 400, height: 400, fit: 'inside', withoutEnlargement: true })
+    .jpeg({ quality: 70 })
+    .toBuffer();
+  const thumbPath = blobPath.replace('/original.jpg', '/thumb.jpg');
+  await uploadBlob(thumbPath, thumbBuffer, 'image/jpeg');
+  await execute('UPDATE photos SET thumbnail_blob_path = $1 WHERE id = $2', [thumbPath, photoId]);
+}
+
 // POST /api/events/{eventId}/photos/upload-url
 async function getUploadUrl(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   try {
@@ -82,7 +93,7 @@ async function getUploadUrl(req: HttpRequest, context: InvocationContext): Promi
     }
 
     const photoId = uuidv4();
-    const blobPath = `${event.circle_id}/${eventId}/${photoId}/original.jpg`;
+    const blobPath = `photos/${event.circle_id}/${eventId}/${photoId}/original.jpg`;
 
     await queryOne<Photo>(
       `INSERT INTO photos (id, event_id, uploaded_by_user_id, blob_path, mime_type, status, expires_at)
@@ -161,18 +172,17 @@ async function confirmUpload(req: HttpRequest, context: InvocationContext): Prom
       throw new ValidationError('File size exceeds the 15MB limit.');
     }
 
-    // Validate the file is actually an image using sharp
-    const buffer = await downloadBlob(photo.blob_path);
-    const metadata = await sharp(buffer).metadata();
-    if (!metadata.format || !['jpeg', 'png'].includes(metadata.format)) {
+    // Validate blob content type from actual blob properties (spec: never touch photo bytes in confirm)
+    const blobContentType = blobProps.contentType ?? '';
+    if (!['image/jpeg', 'image/png'].includes(blobContentType)) {
       await deleteBlob(photo.blob_path);
       await execute('DELETE FROM photos WHERE id = $1', [photoId]);
-      throw new ValidationError('File is not a valid image.');
+      throw new ValidationError('File is not a valid JPEG or PNG image.');
     }
 
-    // Use sharp metadata for dimensions if client did not provide them
-    const finalWidth = width ?? metadata.width ?? null;
-    const finalHeight = height ?? metadata.height ?? null;
+    // Use client-supplied dimensions (server does not download the blob during confirm)
+    const finalWidth = width;
+    const finalHeight = height;
 
     // Update photo record to active
     const updatedPhoto = await queryOne<Photo>(
@@ -188,22 +198,10 @@ async function confirmUpload(req: HttpRequest, context: InvocationContext): Prom
       [mimeType, finalWidth, finalHeight, fileSizeBytes, originalFilename, photoId],
     );
 
-    // Generate thumbnail (non-fatal if it fails)
-    try {
-      const thumbBuffer = await sharp(buffer)
-        .resize({ width: 400, height: 400, fit: 'inside', withoutEnlargement: true })
-        .jpeg({ quality: 70 })
-        .toBuffer();
-      const thumbPath = photo.blob_path.replace('/original.jpg', '/thumb.jpg');
-      await uploadBlob(thumbPath, thumbBuffer, 'image/jpeg');
-      await execute('UPDATE photos SET thumbnail_blob_path = $1 WHERE id = $2', [thumbPath, photoId]);
-      // Reflect the thumbnail path in the response
-      if (updatedPhoto) {
-        updatedPhoto.thumbnail_blob_path = thumbPath;
-      }
-    } catch (thumbError) {
-      console.error('Thumbnail generation failed:', thumbError);
-    }
+    // Trigger async thumbnail generation (non-blocking, non-fatal)
+    generateThumbnailAsync(photo.blob_path, photoId).catch((err) => {
+      console.error('Async thumbnail generation failed:', err);
+    });
 
     // Send push notifications to other event members
     const tokens = await query<{ token: string }>(

@@ -10,14 +10,14 @@ function getPool(): Pool {
     }
     const config: PoolConfig = {
       connectionString,
-      max: 20,
+      max: 5,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 5000,
-      ssl: { rejectUnauthorized: false },
+      ssl: { rejectUnauthorized: true },
     };
     pool = new Pool(config);
     pool.on('error', (err) => {
-      console.error('Unexpected pool error:', err.message);
+      console.error('Unexpected pool error:', err.code ?? 'UNKNOWN');
     });
   }
   return pool;

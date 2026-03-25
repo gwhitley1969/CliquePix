@@ -32,7 +32,6 @@ export async function generateUploadSas(blobPath: string): Promise<string> {
 
   const permissions = new BlobSASPermissions();
   permissions.write = true;
-  permissions.create = true;
 
   const now = new Date();
   const expiresOn = new Date(now.getTime() + 5 * 60 * 1000); // 5 minutes
@@ -61,7 +60,7 @@ export async function generateViewSas(blobPath: string): Promise<string> {
   permissions.read = true;
 
   const now = new Date();
-  const expiresOn = new Date(now.getTime() + 15 * 60 * 1000); // 15 minutes
+  const expiresOn = new Date(now.getTime() + 5 * 60 * 1000); // 5 minutes
 
   const sasParams = generateBlobSASQueryParameters(
     {

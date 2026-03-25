@@ -2,6 +2,7 @@ import { HttpRequest } from '@azure/functions';
 import * as jwt from 'jsonwebtoken';
 import jwksRsa from 'jwks-rsa';
 import { queryOne } from '../services/dbService';
+import { UnauthorizedError, NotFoundError } from '../utils/errors';
 import { User } from '../models/user';
 
 const TENANT_ID = process.env.ENTRA_TENANT_ID || '';
@@ -29,7 +30,7 @@ export interface AuthenticatedUser {
 export async function authenticateRequest(req: HttpRequest): Promise<AuthenticatedUser> {
   const authHeader = req.headers.get('authorization');
   if (!authHeader?.startsWith('Bearer ')) {
-    throw new Error('UNAUTHORIZED');
+    throw new UnauthorizedError();
   }
 
   const token = authHeader.slice(7);
@@ -37,12 +38,12 @@ export async function authenticateRequest(req: HttpRequest): Promise<Authenticat
   // Decode header to get kid
   const decoded = jwt.decode(token, { complete: true });
   if (!decoded || typeof decoded === 'string') {
-    throw new Error('UNAUTHORIZED');
+    throw new UnauthorizedError();
   }
 
   const kid = decoded.header.kid;
   if (!kid) {
-    throw new Error('UNAUTHORIZED');
+    throw new UnauthorizedError();
   }
 
   // Get signing key and verify
@@ -56,7 +57,7 @@ export async function authenticateRequest(req: HttpRequest): Promise<Authenticat
 
   const externalAuthId = payload.sub || payload.oid;
   if (!externalAuthId) {
-    throw new Error('UNAUTHORIZED');
+    throw new UnauthorizedError();
   }
 
   // Look up user in database
@@ -66,7 +67,7 @@ export async function authenticateRequest(req: HttpRequest): Promise<Authenticat
   );
 
   if (!user) {
-    throw new Error('USER_NOT_FOUND');
+    throw new NotFoundError('user');
   }
 
   return {

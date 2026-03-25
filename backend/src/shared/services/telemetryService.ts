@@ -13,8 +13,13 @@ export function initTelemetry(): void {
       .setAutoCollectDependencies(true)
       .start();
     isInitialized = true;
+  } else {
+    console.warn('APPLICATIONINSIGHTS_CONNECTION_STRING not set — telemetry disabled');
   }
 }
+
+// Auto-initialize on module load so HTTP handlers get telemetry
+initTelemetry();
 
 export function trackEvent(name: string, properties?: Record<string, string>): void {
   if (!isInitialized) return;

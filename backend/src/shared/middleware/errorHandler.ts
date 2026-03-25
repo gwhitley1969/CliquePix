@@ -9,11 +9,6 @@ export function handleError(error: unknown): HttpResponseInit {
   }
 
   if (error instanceof Error) {
-    // Auth errors from middleware
-    if (error.message === 'UNAUTHORIZED' || error.message === 'USER_NOT_FOUND') {
-      return errorResponse('UNAUTHORIZED', 'Authentication required.', 401);
-    }
-
     // JWT-specific errors
     if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
       return errorResponse('UNAUTHORIZED', 'Invalid or expired token.', 401);
@@ -21,7 +16,7 @@ export function handleError(error: unknown): HttpResponseInit {
 
     // Log unexpected errors
     trackError(error);
-    console.error('Unhandled error:', error.message);
+    console.error('Unhandled error:', error.name, error.constructor.name);
   }
 
   return errorResponse('INTERNAL_ERROR', 'An unexpected error occurred.', 500);
