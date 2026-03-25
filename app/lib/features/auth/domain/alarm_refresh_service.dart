@@ -61,6 +61,7 @@ class AlarmRefreshService {
       ),
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       payload: 'TOKEN_REFRESH_TRIGGER',
+      uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
       matchDateTimeComponents: null,
     );
   }

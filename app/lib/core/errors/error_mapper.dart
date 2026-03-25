@@ -34,7 +34,7 @@ class ErrorMapper {
         return ValidationFailure(message ?? 'Conflict.');
       case 422:
         return ValidationFailure(message ?? 'Invalid input.');
-      case >= 500:
+      case int s when s >= 500:
         return ServerFailure(message ?? 'Server error.');
       default:
         return ServerFailure(message ?? 'An unexpected error occurred.');

@@ -1,5 +1,5 @@
+import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:path_provider/path_provider.dart';
@@ -12,7 +12,9 @@ class ImageCompressionService {
 
     // Get source image dimensions to avoid upscaling small images
     final sourceBytes = await sourceFile.readAsBytes();
-    final sourceImage = await ui.decodeImageFromList(sourceBytes);
+    final completer = Completer<ui.Image>();
+    ui.decodeImageFromList(sourceBytes, completer.complete);
+    final sourceImage = await completer.future;
     final srcWidth = sourceImage.width;
     final srcHeight = sourceImage.height;
 

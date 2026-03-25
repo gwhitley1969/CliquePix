@@ -8,8 +8,15 @@ import 'background_token_service.dart';
 class AuthRepository {
   final AuthApi api;
   final TokenStorageService tokenStorage;
+  final AlarmRefreshService? alarmRefreshService;
+  final BackgroundTokenService? backgroundTokenService;
 
-  AuthRepository({required this.api, required this.tokenStorage});
+  AuthRepository({
+    required this.api,
+    required this.tokenStorage,
+    this.alarmRefreshService,
+    this.backgroundTokenService,
+  });
 
   Future<UserModel> signIn() async {
     // TODO: Implement MSAL sign-in flow with cliquepix.onmicrosoft.com
@@ -40,8 +47,8 @@ class AuthRepository {
   }
 
   Future<void> signOut() async {
-    await AlarmRefreshService.cancelRefresh();
-    await BackgroundTokenService.cancel();
+    await alarmRefreshService?.cancelRefresh();
+    await backgroundTokenService?.cancel();
     await tokenStorage.clearAll();
   }
 
