@@ -64,8 +64,8 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data
-                    android:host="com.cliquepix.app"
-                    android:path="/callback"
+                    android:host="com.cliquepix.clique_pix"
+                    android:path="/W28%2BgAaZ9fNu1yL%2FGMRe94rK0dY%3D"
                     android:scheme="msauth" />
             </intent-filter>
         </activity>

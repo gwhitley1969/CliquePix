@@ -16,9 +16,7 @@ class AuthRepository {
   static const _clientId = '7db01206-135b-4a34-a4d5-2622d1a888bf';
   static const _authority =
       'https://cliquepix.ciamlogin.com/cliquepix.onmicrosoft.com/';
-  static const _scopes = <String>[
-    'https://cliquepix.ciamlogin.com/$_clientId/.default',
-  ];
+  static const _scopes = <String>['openid', 'offline_access', 'profile'];
 
   AuthRepository({
     required this.api,
@@ -32,7 +30,7 @@ class AuthRepository {
       clientId: _clientId,
       androidConfig: AndroidConfig(
         configFilePath: 'assets/msal_config.json',
-        redirectUri: 'msauth://com.cliquepix.app/callback',
+        redirectUri: 'msauth://com.cliquepix.clique_pix/W28%2BgAaZ9fNu1yL%2FGMRe94rK0dY%3D',
       ),
       appleConfig: AppleConfig(
         authority: _authority,
