@@ -1,10 +1,8 @@
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
+import { successResponse } from '../shared/utils/response';
 
 async function health(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
-  return {
-    status: 200,
-    jsonBody: { status: 'healthy', timestamp: new Date().toISOString() },
-  };
+  return successResponse({ status: 'healthy', timestamp: new Date().toISOString() });
 }
 
 app.http('health', {

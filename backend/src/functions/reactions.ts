@@ -40,7 +40,7 @@ async function addReaction(req: HttpRequest, context: InvocationContext): Promis
     trackEvent('reaction_added', { photoId, reactionType });
     return successResponse(reaction, 201);
   } catch (error) {
-    return handleError(error);
+    return handleError(error, context.invocationId);
   }
 }
 
@@ -65,7 +65,7 @@ async function removeReaction(req: HttpRequest, context: InvocationContext): Pro
     trackEvent('reaction_removed', { photoId, reactionId });
     return successResponse({ deleted: true });
   } catch (error) {
-    return handleError(error);
+    return handleError(error, context.invocationId);
   }
 }
 

@@ -30,7 +30,7 @@ async function listNotifications(req: HttpRequest, context: InvocationContext): 
 
     return successResponse({ notifications, next_cursor: nextCursor });
   } catch (error) {
-    return handleError(error);
+    return handleError(error, context.invocationId);
   }
 }
 
@@ -52,7 +52,7 @@ async function markRead(req: HttpRequest, context: InvocationContext): Promise<H
     await execute('UPDATE notifications SET is_read = true WHERE id = $1', [notificationId]);
     return successResponse({ ...notification, is_read: true });
   } catch (error) {
-    return handleError(error);
+    return handleError(error, context.invocationId);
   }
 }
 
@@ -77,7 +77,7 @@ async function registerPushToken(req: HttpRequest, context: InvocationContext): 
 
     return successResponse(result, 201);
   } catch (error) {
-    return handleError(error);
+    return handleError(error, context.invocationId);
   }
 }
 

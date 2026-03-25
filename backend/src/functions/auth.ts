@@ -82,7 +82,7 @@ async function authVerify(req: HttpRequest, context: InvocationContext): Promise
       created_at: user!.created_at,
     });
   } catch (error) {
-    return handleError(error);
+    return handleError(error, context.invocationId);
   }
 }
 
@@ -107,7 +107,7 @@ async function getMe(req: HttpRequest, context: InvocationContext): Promise<Http
       created_at: user.created_at,
     });
   } catch (error) {
-    return handleError(error);
+    return handleError(error, context.invocationId);
   }
 }
 

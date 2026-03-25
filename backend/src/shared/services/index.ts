@@ -1,5 +1,5 @@
 export * from './telemetryService';
 export * from './dbService';
-export * from './blobService';
+export { blobExists, getBlobProperties, downloadBlob, uploadBlob, deleteBlob } from './blobService';
 export * from './sasService';
 export * from './fcmService';

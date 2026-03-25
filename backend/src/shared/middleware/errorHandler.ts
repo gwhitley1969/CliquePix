@@ -3,7 +3,7 @@ import { AppError } from '../utils/errors';
 import { errorResponse } from '../utils/response';
 import { trackError } from '../services/telemetryService';
 
-export function handleError(error: unknown): HttpResponseInit {
+export function handleError(error: unknown, invocationId?: string): HttpResponseInit {
   if (error instanceof AppError) {
     return errorResponse(error.code, error.message, error.statusCode);
   }
@@ -15,8 +15,8 @@ export function handleError(error: unknown): HttpResponseInit {
     }
 
     // Log unexpected errors
-    trackError(error);
-    console.error('Unhandled error:', error.name, error.constructor.name);
+    trackError(error, invocationId ? { invocationId } : undefined);
+    console.error('Unhandled error:', error.name, error.constructor.name, invocationId ? `[${invocationId}]` : '');
   }
 
   return errorResponse('INTERNAL_ERROR', 'An unexpected error occurred.', 500);

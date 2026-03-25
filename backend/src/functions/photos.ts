@@ -112,7 +112,7 @@ async function getUploadUrl(req: HttpRequest, context: InvocationContext): Promi
       blob_path: blobPath,
     }, 201);
   } catch (error) {
-    return handleError(error);
+    return handleError(error, context.invocationId);
   }
 }
 
@@ -254,7 +254,7 @@ async function confirmUpload(req: HttpRequest, context: InvocationContext): Prom
     const enrichedPhoto = await enrichPhotoWithUrls(updatedPhoto!, authUser.id);
     return successResponse(enrichedPhoto, 201);
   } catch (error) {
-    return handleError(error);
+    return handleError(error, context.invocationId);
   }
 }
 
@@ -369,7 +369,7 @@ async function listPhotos(req: HttpRequest, context: InvocationContext): Promise
       next_cursor: nextCursor,
     });
   } catch (error) {
-    return handleError(error);
+    return handleError(error, context.invocationId);
   }
 }
 
@@ -408,7 +408,7 @@ async function getPhoto(req: HttpRequest, context: InvocationContext): Promise<H
 
     return successResponse(enrichedPhoto);
   } catch (error) {
-    return handleError(error);
+    return handleError(error, context.invocationId);
   }
 }
 
@@ -451,7 +451,7 @@ async function deletePhoto(req: HttpRequest, context: InvocationContext): Promis
 
     return successResponse({ message: 'Photo deleted.' });
   } catch (error) {
-    return handleError(error);
+    return handleError(error, context.invocationId);
   }
 }
 

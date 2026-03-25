@@ -60,7 +60,7 @@ async function createEvent(req: HttpRequest, context: InvocationContext): Promis
 
     return successResponse(event, 201);
   } catch (error) {
-    return handleError(error);
+    return handleError(error, context.invocationId);
   }
 }
 
@@ -93,7 +93,7 @@ async function listEvents(req: HttpRequest, context: InvocationContext): Promise
 
     return successResponse(events);
   } catch (error) {
-    return handleError(error);
+    return handleError(error, context.invocationId);
   }
 }
 
@@ -123,7 +123,7 @@ async function getEvent(req: HttpRequest, context: InvocationContext): Promise<H
 
     return successResponse(event);
   } catch (error) {
-    return handleError(error);
+    return handleError(error, context.invocationId);
   }
 }
 

@@ -43,7 +43,7 @@ async function createCircle(req: HttpRequest, context: InvocationContext): Promi
 
     return successResponse(circle, 201);
   } catch (error) {
-    return handleError(error);
+    return handleError(error, context.invocationId);
   }
 }
 
@@ -64,7 +64,7 @@ async function listCircles(req: HttpRequest, context: InvocationContext): Promis
 
     return successResponse(circles);
   } catch (error) {
-    return handleError(error);
+    return handleError(error, context.invocationId);
   }
 }
 
@@ -94,7 +94,7 @@ async function getCircle(req: HttpRequest, context: InvocationContext): Promise<
 
     return successResponse(circle);
   } catch (error) {
-    return handleError(error);
+    return handleError(error, context.invocationId);
   }
 }
 
@@ -126,7 +126,7 @@ async function getInviteInfo(req: HttpRequest, context: InvocationContext): Prom
       invite_url: `https://cliquepix.app/invite/${circle.invite_code}`,
     });
   } catch (error) {
-    return handleError(error);
+    return handleError(error, context.invocationId);
   }
 }
 
@@ -182,7 +182,7 @@ async function joinCircle(req: HttpRequest, context: InvocationContext): Promise
 
     return successResponse(updatedCircle);
   } catch (error) {
-    return handleError(error);
+    return handleError(error, context.invocationId);
   }
 }
 
@@ -223,7 +223,7 @@ async function listMembers(req: HttpRequest, context: InvocationContext): Promis
 
     return successResponse(members);
   } catch (error) {
-    return handleError(error);
+    return handleError(error, context.invocationId);
   }
 }
 
@@ -276,7 +276,7 @@ async function leaveCircle(req: HttpRequest, context: InvocationContext): Promis
 
     return successResponse({ message: 'You have left the circle.' });
   } catch (error) {
-    return handleError(error);
+    return handleError(error, context.invocationId);
   }
 }
 
