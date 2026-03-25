@@ -10,28 +10,39 @@ import 'app/app.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Firebase (FCM push transport)
-  await Firebase.initializeApp();
+  try {
+    // Initialize Firebase (FCM push transport)
+    await Firebase.initializeApp();
+  } catch (e) {
+    debugPrint('Firebase init failed: $e');
+  }
 
   // Initialize timezone for scheduled notifications
   tz.initializeTimeZones();
 
-  // Initialize WorkManager for background token refresh (Layer 4)
-  await Workmanager().initialize(callbackDispatcher);
+  try {
+    // Initialize WorkManager for background token refresh (Layer 4)
+    await Workmanager().initialize(callbackDispatcher);
+  } catch (e) {
+    debugPrint('WorkManager init failed: $e');
+  }
 
-  // Initialize local notifications for AlarmManager (Layer 2)
-  final notificationsPlugin = FlutterLocalNotificationsPlugin();
-  const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
-  const iosInit = DarwinInitializationSettings();
-  const initSettings =
-      InitializationSettings(android: androidInit, iOS: iosInit);
-  await notificationsPlugin.initialize(
-    initSettings,
-    onDidReceiveNotificationResponse: (response) {
-      // Filter out TOKEN_REFRESH_TRIGGER payloads to prevent navigation errors
-      if (response.payload == 'TOKEN_REFRESH_TRIGGER') return;
-    },
-  );
+  try {
+    // Initialize local notifications for AlarmManager (Layer 2)
+    final notificationsPlugin = FlutterLocalNotificationsPlugin();
+    const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const iosInit = DarwinInitializationSettings();
+    const initSettings =
+        InitializationSettings(android: androidInit, iOS: iosInit);
+    await notificationsPlugin.initialize(
+      initSettings,
+      onDidReceiveNotificationResponse: (response) {
+        if (response.payload == 'TOKEN_REFRESH_TRIGGER') return;
+      },
+    );
+  } catch (e) {
+    debugPrint('Notifications init failed: $e');
+  }
 
   runApp(
     const ProviderScope(
