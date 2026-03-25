@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Privacy Policy — Clique Pix</title>
+    <meta name="description" content="Privacy Policy for Clique Pix, a private event-based photo sharing app by Xtend-AI, LLC.">
+    <link rel="icon" type="image/png" href="assets/logo_120x120.png">
+    <style>
+        *, *::before, *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --electric-aqua: #00C2D1;
+            --deep-blue: #2563EB;
+            --violet-accent: #7C3AED;
+            --soft-aqua-bg: #E6FBFF;
+            --white-surface: #FFFFFF;
+            --primary-text: #0F172A;
+            --secondary-text: #64748B;
+            --gradient: linear-gradient(135deg, #00C2D1, #2563EB, #7C3AED);
+            --font-stack: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            --radius: 12px;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: var(--font-stack);
+            color: var(--primary-text);
+            background: var(--white-surface);
+            line-height: 1.7;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* ── Nav ── */
+        .nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            background: rgba(255, 255, 255, 0.92);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+        }
+
+        .nav-inner {
+            max-width: 1120px;
+            margin: 0 auto;
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .nav-brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-decoration: none;
+            color: var(--primary-text);
+        }
+
+        .nav-logo {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+        }
+
+        .nav-title {
+            font-size: 20px;
+            font-weight: 700;
+            letter-spacing: -0.3px;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 24px;
+            align-items: center;
+        }
+
+        .nav-links a {
+            text-decoration: none;
+            color: var(--secondary-text);
+            font-size: 15px;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+
+        .nav-links a:hover {
+            color: var(--deep-blue);
+        }
+
+        /* ── Page Header ── */
+        .page-header {
+            background: var(--soft-aqua-bg);
+            padding: 120px 24px 48px;
+            text-align: center;
+        }
+
+        .page-header h1 {
+            font-size: 36px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            margin-bottom: 8px;
+        }
+
+        .page-header .effective-date {
+            font-size: 15px;
+            color: var(--secondary-text);
+        }
+
+        /* ── Legal Content ── */
+        .legal-content {
+            max-width: 760px;
+            margin: 0 auto;
+            padding: 48px 24px 96px;
+        }
+
+        .legal-content h2 {
+            font-size: 24px;
+            font-weight: 700;
+            margin-top: 48px;
+            margin-bottom: 16px;
+            letter-spacing: -0.3px;
+        }
+
+        .legal-content h3 {
+            font-size: 18px;
+            font-weight: 600;
+            margin-top: 32px;
+            margin-bottom: 12px;
+        }
+
+        .legal-content p {
+            font-size: 16px;
+            margin-bottom: 16px;
+            color: var(--primary-text);
+        }
+
+        .legal-content ul {
+            margin: 0 0 16px 24px;
+            font-size: 16px;
+        }
+
+        .legal-content ul li {
+            margin-bottom: 8px;
+        }
+
+        .legal-content a {
+            color: var(--deep-blue);
+            text-decoration: none;
+        }
+
+        .legal-content a:hover {
+            text-decoration: underline;
+        }
+
+        /* ── Footer ── */
+        .footer {
+            background: var(--primary-text);
+            color: rgba(255, 255, 255, 0.7);
+            padding: 48px 24px;
+        }
+
+        .footer-inner {
+            max-width: 1120px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 24px;
+        }
+
+        .footer-brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .footer-logo {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+        }
+
+        .footer-brand-name {
+            color: #FFFFFF;
+            font-size: 18px;
+            font-weight: 700;
+        }
+
+        .footer-links {
+            display: flex;
+            gap: 24px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .footer-links a {
+            color: rgba(255, 255, 255, 0.7);
+            text-decoration: none;
+            font-size: 14px;
+            transition: color 0.2s;
+        }
+
+        .footer-links a:hover {
+            color: #FFFFFF;
+        }
+
+        .footer-legal {
+            font-size: 13px;
+            text-align: center;
+            line-height: 1.6;
+        }
+
+        .footer-legal a {
+            color: rgba(255, 255, 255, 0.7);
+            text-decoration: none;
+        }
+
+        .footer-legal a:hover {
+            color: #FFFFFF;
+        }
+
+        /* ── Responsive ── */
+        @media (max-width: 768px) {
+            .page-header {
+                padding: 100px 20px 40px;
+            }
+
+            .page-header h1 {
+                font-size: 28px;
+            }
+
+            .legal-content {
+                padding: 32px 20px 64px;
+            }
+
+            .legal-content h2 {
+                font-size: 20px;
+                margin-top: 36px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Nav -->
+    <nav class="nav">
+        <div class="nav-inner">
+            <a href="/" class="nav-brand">
+                <img src="assets/logo_120x120.png" alt="Clique Pix" class="nav-logo">
+                <span class="nav-title">Clique Pix</span>
+            </a>
+            <div class="nav-links">
+                <a href="/">Home</a>
+                <a href="terms.html">Terms</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Page Header -->
+    <header class="page-header">
+        <h1>Privacy Policy</h1>
+        <p class="effective-date">Effective Date: March 25, 2026</p>
+    </header>
+
+    <!-- Content -->
+    <main class="legal-content">
+
+        <h2>1. Introduction</h2>
+        <p>Xtend-AI, LLC ("we," "us," or "our") operates Clique Pix, a private, event-based photo sharing mobile application (the "Service"). This Privacy Policy describes how we collect, use, store, and protect your personal information when you use Clique Pix. By accessing or using the Service, you acknowledge that you have read, understood, and agree to the practices described in this Privacy Policy.</p>
+        <p>We are committed to protecting your privacy. Clique Pix is designed with privacy at its core: there are no public feeds, no user directories, and no content discovery features. Your photos are shared only with the people you choose, within the Circles and Events you participate in.</p>
+
+        <h2>2. Information We Collect</h2>
+
+        <h3>Account Information</h3>
+        <p>When you create an account, we collect the email address or social sign-in credentials (such as Google or Apple) that you use to authenticate. We rely on third-party identity providers (Microsoft Entra External ID, Google, and Apple) to handle authentication. We do not store your passwords. Your account is identified by a unique user ID generated by the identity provider, and we store only the information necessary to associate your account with your Circles, Events, and photos.</p>
+
+        <h3>Profile Information</h3>
+        <p>You may provide a display name that is visible to other members of your Circles. This display name is the only profile information shared with other users. We do not require or collect your real name, phone number, date of birth, or physical address as part of the registration process.</p>
+
+        <h3>Photos</h3>
+        <p>When you upload a photo to Clique Pix, the image is first compressed on your device before being transmitted to our servers. As part of this on-device processing, all EXIF metadata is stripped from the image, including GPS coordinates, device information, camera settings, and timestamps. This means that we never receive or store the location where a photo was taken, the device it was taken on, or any other embedded metadata. We store only the compressed image data necessary to display the photo to Circle members.</p>
+
+        <h3>Circle and Event Data</h3>
+        <p>We collect information about the Circles you create or join, including Circle names, your membership status, and your role (owner or member). We also collect information about Events you create or participate in, including event names, duration settings, and participation records. This information is necessary to operate the core features of the Service.</p>
+
+        <h3>Push Notification Tokens</h3>
+        <p>If you enable push notifications, we collect your device's push notification token, which is issued by Firebase Cloud Messaging (FCM). This token is used solely to deliver notifications to your device, such as alerts when a new photo is added to an Event or when an Event is about to expire. We store push tokens associated with your account and remove them when you log out or uninstall the application.</p>
+
+        <h3>Usage and Diagnostic Data</h3>
+        <p>We collect anonymized usage data and diagnostic information to improve the performance and reliability of Clique Pix. This may include information about app interactions (such as screens visited and features used), crash reports, device type, operating system version, and app version. This data is collected through Microsoft Application Insights and is used solely for the purposes of improving the Service, diagnosing technical issues, and understanding aggregate usage patterns. We do not use this data to identify individual users or to build user profiles for advertising purposes.</p>
+
+        <h2>3. How We Handle Your Photos</h2>
+        <p>Photos are at the center of the Clique Pix experience, and we take their handling seriously. Here is exactly what happens to your photos at each stage:</p>
+        <p><strong>On-device processing.</strong> Before any photo leaves your device, Clique Pix compresses the image to reduce file size and strips all EXIF metadata. This includes GPS coordinates, device identifiers, camera settings, and timestamps embedded in the original image file. The photo that reaches our servers contains only the image pixels and nothing else.</p>
+        <p><strong>Secure upload.</strong> Photos are uploaded directly from your device to secure cloud storage (Microsoft Azure Blob Storage) using short-lived, scoped authorization tokens. Each upload token is valid for only five minutes, grants write access to a single specific file path, and cannot be used to read, list, or delete any other data. The upload never passes through our application servers; it goes directly from your device to encrypted cloud storage.</p>
+        <p><strong>Restricted visibility.</strong> Once uploaded, a photo is visible only to members of the Event's Circle. There are no public feeds, no discovery features, and no way for anyone outside the Circle to access the photo. When Circle members view photos, they receive short-lived, read-only authorization tokens scoped to individual images. These tokens expire quickly and cannot be reused or shared to grant persistent access.</p>
+        <p><strong>Automatic cloud deletion.</strong> Every Event in Clique Pix has a set duration: 24 hours, 3 days, or 7 days. When the Event expires, all photos associated with that Event are automatically and permanently deleted from our cloud storage. This deletion is performed by an automated process that runs at regular intervals. Once deleted, the photos cannot be recovered from our servers.</p>
+        <p><strong>Device-saved copies.</strong> If you choose to save a photo to your device before the Event expires, that copy lives on your device and is entirely under your control. Cloud deletion does not affect copies saved to your device. We have no access to or control over photos stored on your personal device.</p>
+        <p><strong>No secondary use.</strong> We do not use your photos for advertising, marketing, training artificial intelligence or machine learning models, facial recognition, content analysis, or any purpose other than displaying them to the members of the relevant Circle for the duration of the Event. Your photos exist in our systems for one reason only: to be shared with the people you chose to share them with.</p>
+
+        <h2>4. How We Use Your Information</h2>
+        <p>We use the information we collect for the following purposes:</p>
+        <p><strong>Provide and operate Clique Pix.</strong> We use your account information to authenticate you, your profile information to identify you within Circles, your Circle and Event data to manage group memberships and event participation, and your photos to display them in Event feeds to Circle members. Without this information, the core functionality of the Service cannot operate.</p>
+        <p><strong>Authenticate your identity.</strong> We use your email address or social sign-in credentials to verify your identity each time you log in. Authentication is handled by third-party identity providers, and we rely on tokens issued by these providers to confirm that you are who you claim to be.</p>
+        <p><strong>Send push notifications.</strong> We use your push notification token to deliver timely alerts, including notifications when a new photo is added to an Event you are part of and reminders when an Event is approaching expiration. You can disable push notifications at any time through your device settings.</p>
+        <p><strong>Improve app performance and fix issues.</strong> We use anonymized usage and diagnostic data to identify performance bottlenecks, diagnose crashes, understand which features are most and least used, and prioritize improvements. This data is aggregated and is not used to identify or profile individual users.</p>
+        <p><strong>Respond to customer support requests.</strong> If you contact us for support, we may use your account information and relevant usage data to investigate and resolve your issue.</p>
+        <p><strong>Comply with legal obligations.</strong> We may use or retain information as necessary to comply with applicable laws, regulations, legal processes, or enforceable governmental requests.</p>
+
+        <h2>5. How We Share Your Information</h2>
+        <p><strong>We do not sell your personal information.</strong> Under no circumstances do we sell, rent, lease, or trade your personal information to third parties for their marketing or commercial purposes.</p>
+        <p><strong>We do not share your information with advertisers.</strong> Clique Pix does not contain advertising, and we do not provide any user information to advertising networks, data brokers, or ad-tech companies.</p>
+        <p><strong>Service providers.</strong> We use a limited number of third-party service providers who process data on our behalf under strict contractual obligations. These providers are authorized to use your information only as necessary to perform services for us and are contractually prohibited from using it for their own purposes. Our current service providers include: Microsoft Azure, which provides cloud hosting, data storage, and authentication infrastructure; and Firebase Cloud Messaging (a Google service), which provides push notification delivery. These providers may have access to personal information only to the extent necessary to perform their specific functions and are obligated to maintain the confidentiality and security of that information.</p>
+        <p><strong>Legal requirements.</strong> We may disclose your information if we believe in good faith that such disclosure is necessary to: comply with applicable law, regulation, legal process, or enforceable governmental request; enforce our Terms of Service, including investigation of potential violations; detect, prevent, or otherwise address fraud, security, or technical issues; or protect the rights, property, or personal safety of Xtend-AI, LLC, our users, or the public as required or permitted by law.</p>
+        <p><strong>Business transfers.</strong> In the event that Xtend-AI, LLC is involved in a merger, acquisition, reorganization, bankruptcy, or sale of all or a portion of its assets, your personal information may be transferred as part of that transaction. In such an event, we will provide notice before your personal information becomes subject to a different privacy policy.</p>
+
+        <h2>6. Data Retention</h2>
+        <p><strong>Photos.</strong> Photos are automatically and permanently deleted from our cloud storage when the associated Event expires. Event durations are 24 hours, 3 days, or 7 days from the time the Event is created. This deletion is irreversible. Photos saved to your device are not affected by this process.</p>
+        <p><strong>Orphaned uploads.</strong> If a photo upload is initiated but not completed within 10 minutes (for example, due to a network interruption), both the partially uploaded file and the associated pending record are automatically cleaned up by our systems. This ensures that incomplete or abandoned data does not persist in our storage.</p>
+        <p><strong>Account data.</strong> Your account information, profile data, Circle memberships, and Event participation records are retained for as long as your account remains active. If you request deletion of your account, we will delete your personal data within 30 days of your request, except where retention is required by law. Deletion of your account will remove your profile, Circle memberships, and any photos you uploaded that have not yet expired.</p>
+        <p><strong>Security and diagnostic logs.</strong> Anonymized security logs and diagnostic data may be retained for 30 to 180 days for the purposes of security monitoring, incident investigation, and performance analysis. These logs do not contain photo content or direct personal identifiers.</p>
+
+        <h2>7. Security</h2>
+        <p>We implement reasonable administrative, technical, and physical security measures designed to protect your personal information from unauthorized access, disclosure, alteration, and destruction. These measures include, but are not limited to:</p>
+        <p><strong>Encryption in transit.</strong> All data transmitted between your device and our servers is encrypted using HTTPS (TLS 1.2 or higher). No unencrypted communication is accepted by our systems.</p>
+        <p><strong>Secure cloud storage.</strong> Our cloud storage infrastructure is secured using managed identity and role-based access control (RBAC). We do not use shared storage account keys. Access to stored data is granted on a least-privilege basis, ensuring that each component of our system can access only the data it needs to perform its specific function.</p>
+        <p><strong>Short-lived access tokens.</strong> Photo URLs provided to your device are short-lived and scoped to individual images. They expire within minutes and cannot be used to access other data. Photos are never accessible via permanent or publicly accessible URLs.</p>
+        <p><strong>Secure token storage on device.</strong> Authentication tokens and refresh tokens on your device are stored in platform-native secure storage mechanisms (Keychain on iOS, Encrypted Shared Preferences on Android). Sensitive credentials are never stored in plain text or in non-secure storage locations.</p>
+        <p><strong>Limitations.</strong> While we strive to protect your personal information, no method of electronic transmission or storage is 100% secure. We cannot guarantee absolute security, but we apply reasonable safeguards consistent with industry practices and the sensitivity of the data we handle. If we become aware of a security breach that affects your personal information, we will notify you and relevant authorities as required by applicable law.</p>
+
+        <h2>8. Your Rights and Choices</h2>
+        <p>You have the following rights with respect to your personal information:</p>
+        <p><strong>Access.</strong> You may request a copy of the personal information we hold about you. We will provide this information in a commonly used, machine-readable format within 30 days of your request.</p>
+        <p><strong>Correction.</strong> If your personal information is inaccurate or incomplete, you may request that we correct or update it. You can update your display name directly within the app at any time.</p>
+        <p><strong>Deletion.</strong> You may request that we delete your personal information. Upon receiving a deletion request, we will delete your account data, profile information, and any photos you have uploaded that have not yet expired, within 30 days. Please note that photos that have already been automatically deleted due to Event expiration cannot be recovered.</p>
+        <p><strong>Circle and photo management.</strong> You can leave Circles and delete your own photos at any time directly within the app. When you delete a photo, it is permanently removed from our cloud storage.</p>
+        <p><strong>Push notifications.</strong> You can disable push notifications at any time through your device's notification settings. Disabling push notifications will not affect the core functionality of the app, but you will no longer receive alerts about new photos or expiring Events.</p>
+        <p><strong>Exercising your rights.</strong> To exercise any of the rights described above, or if you have questions about your personal data, please contact us at <a href="mailto:support@xtend-ai.com">support@xtend-ai.com</a>. We will respond to your request within 30 days. We may ask you to verify your identity before processing your request to protect against unauthorized access to your data.</p>
+
+        <h2>9. Children's Privacy</h2>
+        <p>Clique Pix is not intended for use by children under the age of 13. We do not knowingly collect, solicit, or store personal information from children under 13 years of age. If you are a parent or guardian and you believe that your child under the age of 13 has provided personal information to us through the Service, please contact us immediately at <a href="mailto:support@xtend-ai.com">support@xtend-ai.com</a>. Upon verification, we will promptly delete all personal information associated with the child's account from our systems.</p>
+        <p>If we become aware that we have collected personal information from a child under 13 without verification of parental consent, we will take immediate steps to delete that information. We encourage parents and guardians to monitor their children's online activities and to help us enforce this policy by instructing their children to never provide personal information through the Service without their permission.</p>
+
+        <h2>10. International Users</h2>
+        <p>Clique Pix is operated by Xtend-AI, LLC from the United States. If you access or use the Service from outside the United States, please be aware that your information may be transferred to, stored, and processed in the United States or other countries where our service providers maintain facilities. The data protection and privacy laws in these jurisdictions may differ from the laws in your country of residence.</p>
+        <p>By using Clique Pix, you consent to the transfer of your information to the United States and other jurisdictions as described in this Privacy Policy. We will take reasonable steps to ensure that your information is treated securely and in accordance with this Privacy Policy regardless of where it is processed or stored.</p>
+
+        <h2>11. Changes to This Policy</h2>
+        <p>We may update this Privacy Policy from time to time to reflect changes in our practices, technologies, legal requirements, or other factors. When we make material changes to this Privacy Policy, we will notify you by posting the updated policy on this page with a revised "Effective Date" at the top. For significant changes that materially affect how we handle your personal information, we may also provide notice through the Clique Pix app or via email to the address associated with your account.</p>
+        <p>We encourage you to review this Privacy Policy periodically to stay informed about how we protect your information. Your continued use of the Service after any changes to this Privacy Policy constitutes your acceptance of the updated policy.</p>
+
+        <h2>12. Contact Us</h2>
+        <p>If you have any questions, concerns, or requests regarding this Privacy Policy or our privacy practices, please contact us:</p>
+        <p>
+            Xtend-AI, LLC<br>
+            Email: <a href="mailto:support@xtend-ai.com">support@xtend-ai.com</a>
+        </p>
+        <p>We will make every effort to respond to your inquiry within 30 days.</p>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-inner">
+            <div class="footer-brand">
+                <img src="assets/logo_120x120.png" alt="Clique Pix" class="footer-logo">
+                <span class="footer-brand-name">Clique Pix</span>
+            </div>
+            <div class="footer-links">
+                <a href="privacy.html">Privacy Policy</a>
+                <a href="terms.html">Terms of Service</a>
+                <a href="mailto:support@xtend-ai.com">Contact</a>
+            </div>
+            <div class="footer-legal">
+                &copy; 2026 Xtend-AI, LLC. All rights reserved. | <a href="mailto:support@xtend-ai.com">support@xtend-ai.com</a>
+            </div>
+        </div>
+    </footer>
+
+</body>
+</html>

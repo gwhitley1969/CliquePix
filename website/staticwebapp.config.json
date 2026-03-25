@@ -1,0 +1,26 @@
+{
+  "routes": [
+    {
+      "route": "/.well-known/apple-app-site-association",
+      "headers": {
+        "Content-Type": "application/json",
+        "Cache-Control": "public, max-age=86400"
+      }
+    },
+    {
+      "route": "/.well-known/assetlinks.json",
+      "headers": {
+        "Cache-Control": "public, max-age=86400"
+      }
+    }
+  ],
+  "globalHeaders": {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "strict-origin-when-cross-origin"
+  },
+  "mimeTypes": {
+    ".json": "application/json"
+  },
+  "trailingSlash": "never"
+}

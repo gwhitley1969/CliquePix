@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Terms of Service — Clique Pix</title>
+    <meta name="description" content="Terms of Service for Clique Pix, a private event-based photo sharing app by Xtend-AI, LLC.">
+    <link rel="icon" type="image/png" href="assets/logo_120x120.png">
+    <style>
+        *, *::before, *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --electric-aqua: #00C2D1;
+            --deep-blue: #2563EB;
+            --violet-accent: #7C3AED;
+            --soft-aqua-bg: #E6FBFF;
+            --white-surface: #FFFFFF;
+            --primary-text: #0F172A;
+            --secondary-text: #64748B;
+            --gradient: linear-gradient(135deg, #00C2D1, #2563EB, #7C3AED);
+            --font-stack: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            --radius: 12px;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: var(--font-stack);
+            color: var(--primary-text);
+            background: var(--white-surface);
+            line-height: 1.7;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* ── Nav ── */
+        .nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            background: rgba(255, 255, 255, 0.92);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+        }
+
+        .nav-inner {
+            max-width: 1120px;
+            margin: 0 auto;
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .nav-brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-decoration: none;
+            color: var(--primary-text);
+        }
+
+        .nav-logo {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+        }
+
+        .nav-title {
+            font-size: 20px;
+            font-weight: 700;
+            letter-spacing: -0.3px;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 24px;
+            align-items: center;
+        }
+
+        .nav-links a {
+            text-decoration: none;
+            color: var(--secondary-text);
+            font-size: 15px;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+
+        .nav-links a:hover {
+            color: var(--deep-blue);
+        }
+
+        /* ── Page Header ── */
+        .page-header {
+            background: var(--soft-aqua-bg);
+            padding: 120px 24px 48px;
+            text-align: center;
+        }
+
+        .page-header h1 {
+            font-size: 36px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            margin-bottom: 8px;
+        }
+
+        .page-header .effective-date {
+            font-size: 15px;
+            color: var(--secondary-text);
+        }
+
+        /* ── Legal Content ── */
+        .legal-content {
+            max-width: 760px;
+            margin: 0 auto;
+            padding: 48px 24px 96px;
+        }
+
+        .legal-content h2 {
+            font-size: 24px;
+            font-weight: 700;
+            margin-top: 48px;
+            margin-bottom: 16px;
+            letter-spacing: -0.3px;
+        }
+
+        .legal-content h3 {
+            font-size: 18px;
+            font-weight: 600;
+            margin-top: 32px;
+            margin-bottom: 12px;
+        }
+
+        .legal-content p {
+            font-size: 16px;
+            margin-bottom: 16px;
+            color: var(--primary-text);
+        }
+
+        .legal-content ul {
+            margin: 0 0 16px 24px;
+            font-size: 16px;
+        }
+
+        .legal-content ul li {
+            margin-bottom: 8px;
+        }
+
+        .legal-content a {
+            color: var(--deep-blue);
+            text-decoration: none;
+        }
+
+        .legal-content a:hover {
+            text-decoration: underline;
+        }
+
+        /* ── Footer ── */
+        .footer {
+            background: var(--primary-text);
+            color: rgba(255, 255, 255, 0.7);
+            padding: 48px 24px;
+        }
+
+        .footer-inner {
+            max-width: 1120px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 24px;
+        }
+
+        .footer-brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .footer-logo {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+        }
+
+        .footer-brand-name {
+            color: #FFFFFF;
+            font-size: 18px;
+            font-weight: 700;
+        }
+
+        .footer-links {
+            display: flex;
+            gap: 24px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .footer-links a {
+            color: rgba(255, 255, 255, 0.7);
+            text-decoration: none;
+            font-size: 14px;
+            transition: color 0.2s;
+        }
+
+        .footer-links a:hover {
+            color: #FFFFFF;
+        }
+
+        .footer-legal {
+            font-size: 13px;
+            text-align: center;
+            line-height: 1.6;
+        }
+
+        .footer-legal a {
+            color: rgba(255, 255, 255, 0.7);
+            text-decoration: none;
+        }
+
+        .footer-legal a:hover {
+            color: #FFFFFF;
+        }
+
+        /* ── Responsive ── */
+        @media (max-width: 768px) {
+            .page-header {
+                padding: 100px 20px 40px;
+            }
+
+            .page-header h1 {
+                font-size: 28px;
+            }
+
+            .legal-content {
+                padding: 32px 20px 64px;
+            }
+
+            .legal-content h2 {
+                font-size: 20px;
+                margin-top: 36px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Nav -->
+    <nav class="nav">
+        <div class="nav-inner">
+            <a href="/" class="nav-brand">
+                <img src="assets/logo_120x120.png" alt="Clique Pix" class="nav-logo">
+                <span class="nav-title">Clique Pix</span>
+            </a>
+            <div class="nav-links">
+                <a href="/">Home</a>
+                <a href="privacy.html">Privacy</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Page Header -->
+    <header class="page-header">
+        <h1>Terms of Service</h1>
+        <p class="effective-date">Effective Date: March 25, 2026</p>
+    </header>
+
+    <!-- Content -->
+    <main class="legal-content">
+
+        <h2>1. Acceptance of Terms</h2>
+        <p>These Terms of Service ("Terms") constitute a legally binding agreement between you ("you" or "your") and Xtend-AI, LLC ("we," "us," or "our"), governing your access to and use of Clique Pix, including the mobile application and all related services (collectively, the "Service"). By creating an account, accessing, or using Clique Pix, you acknowledge that you have read, understood, and agree to be bound by these Terms in their entirety.</p>
+        <p>If you do not agree to these Terms, you must not create an account or use the Service. Your continued use of Clique Pix after any modifications to these Terms constitutes your acceptance of the revised Terms. We encourage you to review these Terms periodically to stay informed of any changes.</p>
+
+        <h2>2. Eligibility</h2>
+        <p>You must be at least 13 years of age to create an account and use Clique Pix. If you are under the age of majority in your jurisdiction (typically 18 years of age), you represent that your parent or legal guardian has reviewed and agreed to these Terms on your behalf. We do not knowingly collect personal information from individuals under the age of 13. If we learn that we have inadvertently collected information from a user under 13, we will promptly delete that information and terminate the associated account.</p>
+        <p>By using the Service, you represent and warrant that you meet the eligibility requirements stated above, that you have the legal capacity to enter into this agreement, and that you are not prohibited from using the Service under the laws of your jurisdiction.</p>
+
+        <h2>3. Account Responsibilities</h2>
+        <p>To use Clique Pix, you must create an account by authenticating through a supported third-party identity provider, such as Microsoft, Google, or Apple. You agree to provide accurate, current, and complete information during the registration process and to keep your account information up to date.</p>
+        <p>You are solely responsible for maintaining the security and confidentiality of your account credentials and for all activities that occur under your account, whether or not authorized by you. You agree to notify us immediately at <a href="mailto:support@xtend-ai.com">support@xtend-ai.com</a> if you become aware of any unauthorized access to or use of your account.</p>
+        <p>We are not liable for any loss or damage arising from your failure to maintain the security of your account credentials. You acknowledge that you may not share your account with others, create multiple accounts for the same person, or create an account on behalf of another person without their explicit consent.</p>
+
+        <h2>4. Description of Service</h2>
+        <p>Clique Pix is a private, event-based photo sharing application designed for sharing photos within trusted groups. The core functionality of the Service includes:</p>
+        <p><strong>Circles.</strong> Circles are persistent groups that you create or join. Each Circle represents a group of people (such as friends, family, or teammates) with whom you wish to share photos. You can invite others to join your Circles using invite links, text messages, or QR codes.</p>
+        <p><strong>Events.</strong> Events are temporary photo sharing sessions created within a Circle. When you create an Event, you select a duration: 24 hours, 3 days, or 7 days. All photos uploaded to the Event are automatically and permanently deleted from our cloud storage when the Event expires.</p>
+        <p><strong>Photo sharing.</strong> Within an active Event, Circle members can take photos using the in-app camera or upload photos from their device's gallery. Photos are compressed and stripped of metadata on the device before upload. Uploaded photos appear in the Event feed and are visible only to members of the associated Circle.</p>
+        <p><strong>Reactions and saving.</strong> Circle members can react to photos using a set of lightweight reactions. Members can also save individual photos to their personal device. Photos saved to your device remain on your device and are not affected by the automatic cloud deletion that occurs when an Event expires.</p>
+        <p><strong>Automatic deletion.</strong> When an Event's duration expires, all associated photos are automatically and permanently deleted from our cloud storage. This is a core feature of the Service, not a bug. Photos that you have saved to your device before expiration are not affected.</p>
+        <p>We reserve the right to modify, suspend, or discontinue any aspect of the Service at any time, with or without notice. We will make reasonable efforts to provide advance notice of significant changes that materially affect the Service.</p>
+
+        <h2>5. User Content</h2>
+        <p>You retain full ownership of the photos and other content you upload to Clique Pix ("User Content"). We do not claim ownership of your User Content.</p>
+        <p>By uploading User Content to the Service, you grant Xtend-AI, LLC a limited, non-exclusive, royalty-free, worldwide license to store, process, display, and distribute your User Content solely for the purpose of operating the Service. Specifically, this license allows us to: store your photos in our cloud storage infrastructure; generate thumbnails for display in Event feeds; display your photos to members of the relevant Circle; and process your photos as necessary for the technical operation of the Service (such as serving them via secure, short-lived URLs).</p>
+        <p>This license is limited in duration and terminates automatically when your User Content is deleted from our cloud storage, whether through automatic Event expiration, your manual deletion of a photo, or your request for account deletion. After deletion, we retain no rights to your User Content.</p>
+        <p>You represent and warrant that you own or have the necessary rights, licenses, and permissions to upload and share any User Content you submit through the Service, and that your User Content does not infringe upon the intellectual property rights, privacy rights, or any other rights of any third party.</p>
+
+        <h2>6. Acceptable Use</h2>
+        <p>You agree to use Clique Pix in accordance with these Terms, all applicable laws and regulations, and commonly accepted standards of online conduct. Specifically, you agree that you will not:</p>
+        <ul>
+            <li>Upload, share, or distribute content that is illegal, threatening, abusive, harassing, defamatory, obscene, or otherwise objectionable, including but not limited to content that promotes violence, discrimination, or hatred against any individual or group.</li>
+            <li>Upload, share, or distribute content that depicts the sexual exploitation or abuse of minors, or any content that violates laws regarding child exploitation. We report all such content to the National Center for Missing and Exploited Children (NCMEC) and relevant law enforcement authorities.</li>
+            <li>Upload, share, or distribute content that infringes upon the intellectual property rights of others, including copyrights, trademarks, patents, trade secrets, or other proprietary rights.</li>
+            <li>Upload, share, or distribute content that violates the privacy rights of others, including sharing photos of individuals without their consent where required by law.</li>
+            <li>Attempt to access, tamper with, or use the accounts, data, or systems of other users without authorization.</li>
+            <li>Reverse engineer, decompile, disassemble, or otherwise attempt to derive the source code of the application or any component thereof.</li>
+            <li>Use the Service to send unsolicited communications, spam, or advertisements of any kind.</li>
+            <li>Interfere with, disrupt, or place an undue burden on the Service or the networks, servers, or infrastructure connected to the Service.</li>
+            <li>Use automated means (including bots, scrapers, or crawlers) to access, collect data from, or interact with the Service.</li>
+            <li>Impersonate any person or entity, or falsely state or otherwise misrepresent your affiliation with a person or entity.</li>
+            <li>Use the Service for any unlawful purpose or in furtherance of any illegal activity.</li>
+        </ul>
+        <p>We reserve the right to investigate and take appropriate action against anyone who, in our sole discretion, violates these acceptable use standards. Such action may include, without limitation, removing offending content, suspending or terminating the violator's account, and reporting the violator to law enforcement authorities.</p>
+
+        <h2>7. Privacy</h2>
+        <p>Your privacy is important to us. Your use of Clique Pix is governed by our <a href="privacy.html">Privacy Policy</a>, which describes how we collect, use, store, and protect your personal information. The Privacy Policy is incorporated into these Terms by reference. By using the Service, you acknowledge that you have read and understood our Privacy Policy and consent to the practices described therein.</p>
+        <p>For questions about how we handle your data, please review our Privacy Policy at <a href="https://clique-pix.com/privacy.html">https://clique-pix.com/privacy.html</a> or contact us at <a href="mailto:support@xtend-ai.com">support@xtend-ai.com</a>.</p>
+
+        <h2>8. Intellectual Property</h2>
+        <p>Clique Pix, including its name, logo, visual design, user interface, source code, object code, algorithms, documentation, and all other elements of the Service (collectively, "Clique Pix IP"), is the exclusive property of Xtend-AI, LLC and is protected by copyright, trademark, patent, trade secret, and other intellectual property laws of the United States and international jurisdictions.</p>
+        <p>These Terms grant you a limited, non-exclusive, non-transferable, revocable license to use the Service for your personal, non-commercial purposes in accordance with these Terms. This license does not include the right to: copy, modify, adapt, or create derivative works based on any part of the Service; distribute, publicly display, or publicly perform any part of the Service; reverse engineer, decompile, or disassemble any part of the Service; or use the Clique Pix name, logo, or branding for any purpose without our prior written consent.</p>
+        <p>All rights not expressly granted in these Terms are reserved by Xtend-AI, LLC.</p>
+
+        <h2>9. Disclaimers</h2>
+        <p>THE SERVICE IS PROVIDED ON AN "AS IS" AND "AS AVAILABLE" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED. TO THE FULLEST EXTENT PERMITTED BY APPLICABLE LAW, XTEND-AI, LLC EXPRESSLY DISCLAIMS ALL WARRANTIES, WHETHER EXPRESS, IMPLIED, STATUTORY, OR OTHERWISE, INCLUDING BUT NOT LIMITED TO: IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE, AND NON-INFRINGEMENT; WARRANTIES ARISING FROM COURSE OF DEALING, USAGE, OR TRADE PRACTICE; AND ANY WARRANTIES REGARDING THE ACCURACY, RELIABILITY, AVAILABILITY, TIMELINESS, SECURITY, OR PERFORMANCE OF THE SERVICE.</p>
+        <p>WITHOUT LIMITING THE FOREGOING, WE DO NOT WARRANT THAT THE SERVICE WILL BE UNINTERRUPTED, ERROR-FREE, SECURE, OR FREE OF VIRUSES OR OTHER HARMFUL COMPONENTS. WE DO NOT WARRANT THAT ANY DEFECTS IN THE SERVICE WILL BE CORRECTED, THAT THE SERVICE WILL MEET YOUR REQUIREMENTS, OR THAT THE SERVICE WILL BE COMPATIBLE WITH ANY PARTICULAR HARDWARE OR SOFTWARE CONFIGURATION.</p>
+        <p>YOU ACKNOWLEDGE AND AGREE THAT YOUR USE OF THE SERVICE IS AT YOUR SOLE RISK. YOU ARE SOLELY RESPONSIBLE FOR ANY DAMAGE TO YOUR DEVICE, LOSS OF DATA, OR OTHER HARM THAT RESULTS FROM YOUR USE OF THE SERVICE.</p>
+        <p>THE AUTOMATIC DELETION OF PHOTOS UPON EVENT EXPIRATION IS A DELIBERATE AND CORE FEATURE OF THE SERVICE. WE ARE NOT RESPONSIBLE FOR THE LOSS OF PHOTOS THAT YOU DID NOT SAVE TO YOUR DEVICE BEFORE THE ASSOCIATED EVENT EXPIRED.</p>
+
+        <h2>10. Limitation of Liability</h2>
+        <p>TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, IN NO EVENT SHALL XTEND-AI, LLC, ITS OFFICERS, DIRECTORS, EMPLOYEES, AGENTS, AFFILIATES, SUCCESSORS, OR ASSIGNS BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, EXEMPLARY, OR PUNITIVE DAMAGES, REGARDLESS OF THE CAUSE OF ACTION OR THE THEORY OF LIABILITY, INCLUDING BUT NOT LIMITED TO: LOSS OF REVENUE, INCOME, PROFITS, OR BUSINESS; LOSS OF DATA, USE, GOODWILL, OR OTHER INTANGIBLE LOSSES; DAMAGE TO REPUTATION; COST OF PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; OR ANY OTHER DAMAGES ARISING OUT OF OR IN CONNECTION WITH YOUR ACCESS TO, USE OF, OR INABILITY TO USE THE SERVICE, EVEN IF WE HAVE BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.</p>
+        <p>TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, OUR TOTAL AGGREGATE LIABILITY TO YOU FOR ALL CLAIMS ARISING OUT OF OR RELATING TO THESE TERMS OR YOUR USE OF THE SERVICE SHALL NOT EXCEED THE GREATER OF: (A) THE AMOUNT YOU HAVE PAID TO US FOR ACCESS TO THE SERVICE IN THE TWELVE (12) MONTHS PRECEDING THE CLAIM, OR (B) ONE HUNDRED UNITED STATES DOLLARS ($100.00).</p>
+        <p>THE LIMITATIONS OF LIABILITY SET FORTH IN THIS SECTION SHALL APPLY TO THE FULLEST EXTENT PERMITTED BY LAW IN THE APPLICABLE JURISDICTION, EVEN IF ANY REMEDY SPECIFIED IN THESE TERMS IS DEEMED TO HAVE FAILED OF ITS ESSENTIAL PURPOSE.</p>
+
+        <h2>11. Indemnification</h2>
+        <p>You agree to indemnify, defend, and hold harmless Xtend-AI, LLC, and its officers, directors, employees, agents, affiliates, successors, and assigns from and against any and all claims, demands, actions, suits, proceedings, losses, damages, liabilities, costs, and expenses (including reasonable attorneys' fees and court costs) arising out of or in connection with: your access to or use of the Service; your User Content; your violation of these Terms; your violation of any applicable law, regulation, or third-party right; or any dispute between you and any third party related to the Service.</p>
+        <p>We reserve the right, at our own expense, to assume the exclusive defense and control of any matter otherwise subject to indemnification by you, and in such event, you agree to cooperate with our defense of such claim. You agree not to settle any matter without our prior written consent.</p>
+
+        <h2>12. Termination</h2>
+        <p>We reserve the right to suspend or terminate your account and access to the Service, in whole or in part, at any time and for any reason, including but not limited to: violation of these Terms; conduct that we determine, in our sole discretion, is harmful to other users, to us, or to third parties; or if we believe that your use of the Service poses a security risk.</p>
+        <p>You may terminate your account at any time by deleting your account through the app or by contacting us at <a href="mailto:support@xtend-ai.com">support@xtend-ai.com</a>. Upon termination of your account, whether initiated by you or by us: your license to use the Service will immediately terminate; your account data, profile information, and Circle memberships will be deleted; and any photos you uploaded that have not yet expired will be deleted from our cloud storage.</p>
+        <p>The following sections of these Terms shall survive termination: User Content (to the extent any content remains in the system during the deletion process), Disclaimers, Limitation of Liability, Indemnification, Governing Law, and any other provisions that by their nature should survive termination.</p>
+
+        <h2>13. Governing Law</h2>
+        <p>These Terms and any dispute arising out of or relating to these Terms or the Service shall be governed by and construed in accordance with the laws of the State of North Carolina, United States of America, without regard to its conflict of law principles. You agree that any legal action or proceeding relating to these Terms or the Service shall be brought exclusively in the state or federal courts located in North Carolina, and you hereby consent to the personal jurisdiction and venue of such courts.</p>
+        <p>Notwithstanding the foregoing, we reserve the right to seek injunctive or other equitable relief in any court of competent jurisdiction to prevent the actual or threatened infringement, misappropriation, or violation of our intellectual property rights or other proprietary rights.</p>
+
+        <h2>14. Changes to Terms</h2>
+        <p>We reserve the right to modify, amend, or update these Terms at any time, at our sole discretion. When we make changes, we will update the "Effective Date" at the top of this page and post the revised Terms on this website. For material changes that significantly affect your rights or obligations, we may also provide notice through the Clique Pix app or via email to the address associated with your account.</p>
+        <p>Your continued use of the Service after the posting of revised Terms constitutes your acceptance of and agreement to the updated Terms. If you do not agree to the revised Terms, you must stop using the Service and delete your account. We encourage you to review these Terms periodically to stay informed about the terms that govern your use of Clique Pix.</p>
+
+        <h2>15. General Provisions</h2>
+        <p><strong>Entire Agreement.</strong> These Terms, together with our Privacy Policy, constitute the entire agreement between you and Xtend-AI, LLC regarding your use of the Service and supersede all prior and contemporaneous agreements, proposals, and representations, whether written or oral, regarding the subject matter herein.</p>
+        <p><strong>Severability.</strong> If any provision of these Terms is held to be invalid, illegal, or unenforceable by a court of competent jurisdiction, the remaining provisions of these Terms shall remain in full force and effect. The invalid, illegal, or unenforceable provision shall be modified to the minimum extent necessary to make it valid, legal, and enforceable while preserving the original intent of the provision.</p>
+        <p><strong>Waiver.</strong> Our failure to enforce any right or provision of these Terms shall not constitute a waiver of such right or provision. Any waiver of any provision of these Terms shall be effective only if made in writing and signed by an authorized representative of Xtend-AI, LLC.</p>
+        <p><strong>Assignment.</strong> You may not assign or transfer these Terms or your rights hereunder, in whole or in part, without our prior written consent. We may assign these Terms and our rights hereunder without restriction. These Terms shall be binding upon and inure to the benefit of the parties and their respective successors and permitted assigns.</p>
+
+        <h2>16. Contact</h2>
+        <p>If you have any questions or concerns about these Terms of Service, please contact us:</p>
+        <p>
+            Xtend-AI, LLC<br>
+            Email: <a href="mailto:support@xtend-ai.com">support@xtend-ai.com</a>
+        </p>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-inner">
+            <div class="footer-brand">
+                <img src="assets/logo_120x120.png" alt="Clique Pix" class="footer-logo">
+                <span class="footer-brand-name">Clique Pix</span>
+            </div>
+            <div class="footer-links">
+                <a href="privacy.html">Privacy Policy</a>
+                <a href="terms.html">Terms of Service</a>
+                <a href="mailto:support@xtend-ai.com">Contact</a>
+            </div>
+            <div class="footer-legal">
+                &copy; 2026 Xtend-AI, LLC. All rights reserved. | <a href="mailto:support@xtend-ai.com">support@xtend-ai.com</a>
+            </div>
+        </div>
+    </footer>
+
+</body>
+</html>
