@@ -4,9 +4,11 @@ import '../domain/photos_repository.dart';
 import '../domain/image_compression_service.dart';
 import '../domain/blob_upload_service.dart';
 import '../data/photos_api.dart';
+import '../../../services/api_client.dart';
 
 final photosApiProvider = Provider<PhotosApi>((ref) {
-  throw UnimplementedError('Wire up PhotosApi with Dio');
+  final apiClient = ref.watch(apiClientProvider);
+  return PhotosApi(apiClient.dio);
 });
 
 final photosRepositoryProvider = Provider<PhotosRepository>((ref) {

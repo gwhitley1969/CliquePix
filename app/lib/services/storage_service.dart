@@ -24,4 +24,12 @@ class StorageService {
       await file.delete();
     }
   }
+
+  Future<String> downloadToTempFile(String url, String photoId) async {
+    final dio = Dio();
+    final tempDir = await getTemporaryDirectory();
+    final filePath = '${tempDir.path}/cliquepix_share_$photoId.jpg';
+    await dio.download(url, filePath);
+    return filePath;
+  }
 }

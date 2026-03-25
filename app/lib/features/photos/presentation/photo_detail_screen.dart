@@ -57,7 +57,20 @@ class PhotoDetailScreen extends ConsumerWidget {
                     }
                     break;
                   case 'share':
-                    Share.share(photo.originalUrl ?? photo.thumbnailUrl ?? '');
+                    try {
+                      final storageService = ref.read(storageServiceProvider);
+                      final filePath = await storageService.downloadToTempFile(
+                        photo.originalUrl ?? photo.thumbnailUrl ?? '',
+                        photo.id,
+                      );
+                      await Share.shareXFiles([XFile(filePath)]);
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Failed to share: $e')),
+                        );
+                      }
+                    }
                     break;
                   case 'delete':
                     final confirm = await showDialog<bool>(

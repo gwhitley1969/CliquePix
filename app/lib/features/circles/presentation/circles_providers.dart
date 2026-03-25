@@ -2,9 +2,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/circle_model.dart';
 import '../domain/circles_repository.dart';
 import '../data/circles_api.dart';
+import '../../../services/api_client.dart';
 
 final circlesApiProvider = Provider<CirclesApi>((ref) {
-  throw UnimplementedError('Wire up CirclesApi with Dio');
+  final apiClient = ref.watch(apiClientProvider);
+  return CirclesApi(apiClient.dio);
 });
 
 final circlesRepositoryProvider = Provider<CirclesRepository>((ref) {

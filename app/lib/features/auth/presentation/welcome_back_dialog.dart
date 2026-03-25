@@ -10,7 +10,7 @@ import '../../../widgets/gradient_button.dart';
 class WelcomeBackDialog extends StatelessWidget {
   final String? displayName;
   final String? email;
-  final VoidCallback onSignIn;
+  final void Function(String? loginHint) onSignIn;
   final VoidCallback onDifferentAccount;
 
   const WelcomeBackDialog({
@@ -25,7 +25,7 @@ class WelcomeBackDialog extends StatelessWidget {
     BuildContext context, {
     String? displayName,
     String? email,
-    required VoidCallback onSignIn,
+    required void Function(String? loginHint) onSignIn,
     required VoidCallback onDifferentAccount,
   }) {
     return showDialog(
@@ -67,7 +67,7 @@ class WelcomeBackDialog extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
-            GradientButton(text: 'Sign In', onPressed: onSignIn),
+            GradientButton(text: 'Sign In', onPressed: () => onSignIn(email)),
             const SizedBox(height: 12),
             TextButton(
               onPressed: onDifferentAccount,

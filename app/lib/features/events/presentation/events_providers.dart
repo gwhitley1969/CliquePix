@@ -2,9 +2,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/event_model.dart';
 import '../domain/events_repository.dart';
 import '../data/events_api.dart';
+import '../../../services/api_client.dart';
 
 final eventsApiProvider = Provider<EventsApi>((ref) {
-  throw UnimplementedError('Wire up EventsApi with Dio');
+  final apiClient = ref.watch(apiClientProvider);
+  return EventsApi(apiClient.dio);
 });
 
 final eventsRepositoryProvider = Provider<EventsRepository>((ref) {

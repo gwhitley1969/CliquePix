@@ -10,4 +10,9 @@ class ImageHelpers {
   static bool isValidImageType(String mimeType) {
     return mimeType == 'image/jpeg' || mimeType == 'image/png';
   }
+
+  static bool isHeicFormat(String path) {
+    final lower = path.toLowerCase();
+    return lower.endsWith('.heic') || lower.endsWith('.heif');
+  }
 }
