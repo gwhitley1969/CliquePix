@@ -123,7 +123,7 @@ async function getInviteInfo(req: HttpRequest, context: InvocationContext): Prom
 
     return successResponse({
       invite_code: circle.invite_code,
-      invite_url: `https://cliquepix.app/invite/${circle.invite_code}`,
+      invite_url: `https://clique-pix.com/invite/${circle.invite_code}`,
     });
   } catch (error) {
     return handleError(error, context.invocationId);

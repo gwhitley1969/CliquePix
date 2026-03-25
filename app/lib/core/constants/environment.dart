@@ -10,7 +10,7 @@ class Environment {
   static String get apiBaseUrl {
     switch (env) {
       case 'prod':
-        return 'https://api.cliquepix.app';
+        return 'https://api.clique-pix.com';
       default:
         // Dev: direct to Front Door FQDN until custom domain is configured
         return 'https://fd-cliquepix-prod.azurefd.net';
@@ -25,5 +25,5 @@ class Environment {
       'https://cliquepix.ciamlogin.com/$entraTenantId';
 
   // Deep link domain
-  static const deepLinkDomain = 'cliquepix.app';
+  static const deepLinkDomain = 'clique-pix.com';
 }

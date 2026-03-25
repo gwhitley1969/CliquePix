@@ -588,7 +588,7 @@ Circle invites are core to the product loop. When a user taps an invite link (vi
 ## Link Format
 
 ```
-https://cliquepix.app/invite/{inviteCode}
+https://clique-pix.com/invite/{inviteCode}
 ```
 
 QR codes encode this same URL. Generate QR on the client using `qr_flutter`.
@@ -596,12 +596,12 @@ QR codes encode this same URL. Generate QR on the client using `qr_flutter`.
 ## Platform Configuration
 
 ### iOS — Universal Links
-- Host `apple-app-site-association` at `https://cliquepix.app/.well-known/apple-app-site-association`
-- Configure Associated Domains in Xcode: `applinks:cliquepix.app`
+- Host `apple-app-site-association` at `https://clique-pix.com/.well-known/apple-app-site-association`
+- Configure Associated Domains in Xcode: `applinks:clique-pix.com`
 - Handle incoming link via `app_links` package in Flutter
 
 ### Android — App Links
-- Host `assetlinks.json` at `https://cliquepix.app/.well-known/assetlinks.json`
+- Host `assetlinks.json` at `https://clique-pix.com/.well-known/assetlinks.json`
 - Configure intent filter in AndroidManifest with `autoVerify="true"`
 - Handle incoming link via `app_links` package in Flutter
 

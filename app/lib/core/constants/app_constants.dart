@@ -38,6 +38,6 @@ class AppConstants {
   static const feedPollIntervalSeconds = 30;
 
   // Deep link
-  static const deepLinkHost = 'cliquepix.app';
+  static const deepLinkHost = 'clique-pix.com';
   static const invitePath = '/invite/';
 }
