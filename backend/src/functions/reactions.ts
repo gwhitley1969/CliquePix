@@ -5,14 +5,14 @@ import { successResponse } from '../shared/utils/response';
 import { query, queryOne, execute } from '../shared/services/dbService';
 import { trackEvent } from '../shared/services/telemetryService';
 import { isValidUUID, validateReactionType } from '../shared/utils/validators';
-import { NotFoundError, ForbiddenError } from '../shared/utils/errors';
+import { NotFoundError, ForbiddenError, ValidationError } from '../shared/utils/errors';
 
 async function addReaction(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   try {
     const authUser = await authenticateRequest(req);
     const photoId = req.params.photoId;
     if (!photoId || !isValidUUID(photoId)) {
-      throw new (await import('../shared/utils/errors')).ValidationError('Invalid photo ID.');
+      throw new ValidationError('Invalid photo ID.');
     }
 
     const body = await req.json() as Record<string, unknown>;
@@ -37,7 +37,7 @@ async function addReaction(req: HttpRequest, context: InvocationContext): Promis
       [photoId, authUser.id, reactionType],
     );
 
-    trackEvent('reaction_added', { photo_id: photoId, reaction_type: reactionType });
+    trackEvent('reaction_added', { photoId, reactionType });
     return successResponse(reaction, 201);
   } catch (error) {
     return handleError(error);
@@ -51,7 +51,7 @@ async function removeReaction(req: HttpRequest, context: InvocationContext): Pro
     const reactionId = req.params.reactionId;
 
     if (!photoId || !isValidUUID(photoId) || !reactionId || !isValidUUID(reactionId)) {
-      throw new (await import('../shared/utils/errors')).ValidationError('Invalid ID.');
+      throw new ValidationError('Invalid ID.');
     }
 
     const reaction = await queryOne<any>(
@@ -62,7 +62,7 @@ async function removeReaction(req: HttpRequest, context: InvocationContext): Pro
     if (reaction.user_id !== authUser.id) throw new ForbiddenError('You can only remove your own reactions.');
 
     await execute('DELETE FROM reactions WHERE id = $1', [reactionId]);
-    trackEvent('reaction_removed', { photo_id: photoId });
+    trackEvent('reaction_removed', { photoId, reactionId });
     return successResponse({ deleted: true });
   } catch (error) {
     return handleError(error);

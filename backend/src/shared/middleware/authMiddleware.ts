@@ -8,6 +8,13 @@ import { User } from '../models/user';
 const TENANT_ID = process.env.ENTRA_TENANT_ID || '';
 const CLIENT_ID = process.env.ENTRA_CLIENT_ID || '';
 
+if (!TENANT_ID) {
+  console.warn('ENTRA_TENANT_ID is not set — authentication will fail');
+}
+if (!CLIENT_ID) {
+  console.warn('ENTRA_CLIENT_ID is not set — authentication will fail');
+}
+
 const jwksClient = jwksRsa({
   jwksUri: `https://cliquepix.ciamlogin.com/${TENANT_ID}/discovery/v2.0/keys`,
   cache: true,

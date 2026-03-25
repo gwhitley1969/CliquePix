@@ -237,6 +237,15 @@ async function confirmUpload(req: HttpRequest, context: InvocationContext): Prom
           [failedTokens],
         );
       }
+
+      // Track notification telemetry
+      const successCount = tokens.length - failedTokens.length;
+      if (successCount > 0) {
+        trackEvent('notification_sent', { eventId, photoId: photoId as string, count: String(successCount) });
+      }
+      if (failedTokens.length > 0) {
+        trackEvent('notification_send_failed', { eventId, photoId: photoId as string, count: String(failedTokens.length) });
+      }
     }
 
     trackEvent('photo_upload_completed', { photoId, eventId, userId: authUser.id });

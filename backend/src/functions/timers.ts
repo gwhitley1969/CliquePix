@@ -38,13 +38,18 @@ async function cleanupExpired(myTimer: Timer, context: InvocationContext): Promi
   }
 
   // Check for events that should be marked expired
-  await execute(
+  const expiredEventRows = await query<{ id: string }>(
     `UPDATE events SET status = 'expired'
      WHERE status = 'active' AND expires_at < NOW()
      AND NOT EXISTS (
        SELECT 1 FROM photos WHERE event_id = events.id AND status = 'active'
-     )`,
+     )
+     RETURNING id`,
   );
+
+  if (expiredEventRows.length > 0) {
+    trackEvent('event_expired', { count: String(expiredEventRows.length) });
+  }
 
   trackEvent('expired_photos_deleted', { count: String(deletedCount) });
   context.log(`Cleaned up ${deletedCount} expired photos`);
@@ -89,7 +94,13 @@ async function notifyExpiring(myTimer: Timer, context: InvocationContext): Promi
      FROM events e
      WHERE e.status = 'active'
        AND e.expires_at > NOW() + INTERVAL '23 hours'
-       AND e.expires_at <= NOW() + INTERVAL '25 hours'`,
+       AND e.expires_at <= NOW() + INTERVAL '25 hours'
+       AND NOT EXISTS (
+         SELECT 1 FROM notifications n
+         WHERE n.type = 'event_expiring'
+           AND n.payload_json->>'event_id' = e.id::text
+           AND n.created_at > NOW() - INTERVAL '20 hours'
+       )`,
   );
 
   if (expiringEvents.length === 0) {
@@ -136,7 +147,7 @@ async function notifyExpiring(myTimer: Timer, context: InvocationContext): Promi
     }
   }
 
-  trackEvent('expiration_notifications_sent', { count: String(notifiedCount) });
+  trackEvent('notification_sent', { type: 'event_expiring', count: String(notifiedCount) });
   context.log(`Sent ${notifiedCount} expiration notifications`);
 }
 
