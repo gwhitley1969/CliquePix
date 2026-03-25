@@ -83,6 +83,11 @@
             android:name="firebase_analytics_collection_enabled"
             android:value="false" />
 
+        <!-- Flutter v2 embedding -->
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
+
     </application>
 
     <!-- Required for file provider (image_picker) -->

@@ -1,4 +1,4 @@
-import 'package:msal_flutter/msal_flutter.dart';
+import 'package:msal_auth/msal_auth.dart';
 import '../../../models/user_model.dart';
 import '../../../services/token_storage_service.dart';
 import '../data/auth_api.dart';
@@ -11,7 +11,7 @@ class AuthRepository {
   final AlarmRefreshService? alarmRefreshService;
   final BackgroundTokenService? backgroundTokenService;
 
-  PublicClientApplication? _pca;
+  SingleAccountPca? _pca;
 
   static const _clientId = '7db01206-135b-4a34-a4d5-2622d1a888bf';
   static const _authority =
@@ -27,26 +27,36 @@ class AuthRepository {
     this.backgroundTokenService,
   });
 
-  Future<PublicClientApplication> _getOrCreatePca() async {
-    _pca ??= await PublicClientApplication.createPublicClientApplication(
-      _clientId,
-      authority: _authority,
+  Future<SingleAccountPca> _getOrCreatePca() async {
+    _pca ??= await SingleAccountPca.create(
+      clientId: _clientId,
+      androidConfig: AndroidConfig(
+        configFilePath: 'assets/msal_config.json',
+        redirectUri: 'msauth://com.cliquepix.app/callback',
+      ),
+      appleConfig: AppleConfig(
+        authority: _authority,
+        authorityType: AuthorityType.b2c,
+        broker: Broker.safariBrowser,
+      ),
     );
     return _pca!;
   }
 
   /// Interactive sign-in — opens browser/webview for Entra login.
-  /// [loginHint] is stored for Layer 5 graceful re-login UX but
-  /// msal_flutter 2.x does not support passing it to acquireToken.
+  /// [loginHint] pre-fills the user's email for Layer 5 graceful re-login UX.
   Future<UserModel> signIn({String? loginHint}) async {
     final pca = await _getOrCreatePca();
 
-    final accessToken = await pca.acquireToken(_scopes);
+    final result = await pca.acquireToken(
+      scopes: _scopes,
+      loginHint: loginHint,
+    );
 
     // MSAL manages refresh tokens internally — we store the access token
     // and track lastRefreshTime for the proactive refresh logic.
     await tokenStorage.saveTokens(
-      accessToken: accessToken,
+      accessToken: result.accessToken,
       refreshToken: '',
     );
 
@@ -63,10 +73,10 @@ class AuthRepository {
   Future<UserModel> silentSignIn() async {
     final pca = await _getOrCreatePca();
 
-    final accessToken = await pca.acquireTokenSilent(_scopes);
+    final result = await pca.acquireTokenSilent(scopes: _scopes);
 
     await tokenStorage.saveTokens(
-      accessToken: accessToken,
+      accessToken: result.accessToken,
       refreshToken: '',
     );
 
@@ -93,9 +103,9 @@ class AuthRepository {
   Future<void> signOut() async {
     try {
       final pca = await _getOrCreatePca();
-      await pca.logout();
+      await pca.signOut();
     } catch (_) {
-      // MSAL logout may fail if no active session — continue cleanup
+      // MSAL sign out may fail if no active session — continue cleanup
     }
     await alarmRefreshService?.cancelRefresh();
     await backgroundTokenService?.cancel();
@@ -107,9 +117,9 @@ class AuthRepository {
   Future<bool> refreshToken() async {
     try {
       final pca = await _getOrCreatePca();
-      final accessToken = await pca.acquireTokenSilent(_scopes);
+      final result = await pca.acquireTokenSilent(scopes: _scopes);
       await tokenStorage.saveTokens(
-        accessToken: accessToken,
+        accessToken: result.accessToken,
         refreshToken: '',
       );
       return true;

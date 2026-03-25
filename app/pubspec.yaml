@@ -39,13 +39,13 @@ dependencies:
   qr_flutter: ^4.1.0
 
   # Auth
-  msal_flutter: ^2.0.1
+  msal_auth: ^3.3.0
 
   # Permissions
   permission_handler: ^11.3.1
 
   # Background tasks
-  workmanager: ^0.5.2
+  workmanager: ^0.9.0
   flutter_local_notifications: ^17.1.2
 
   # Sharing & saving
@@ -70,3 +70,6 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  assets:
+    - assets/
