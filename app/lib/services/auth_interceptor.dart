@@ -4,8 +4,9 @@ import 'token_storage_service.dart';
 
 class AuthInterceptor extends Interceptor {
   final Ref ref;
+  final Dio dio;
 
-  AuthInterceptor({required this.ref});
+  AuthInterceptor({required this.ref, required this.dio});
 
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) async {
@@ -20,15 +21,13 @@ class AuthInterceptor extends Interceptor {
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) async {
     if (err.response?.statusCode == 401) {
-      // Attempt silent token refresh
       try {
         final tokenStorage = ref.read(tokenStorageServiceProvider);
         final refreshed = await tokenStorage.refreshToken();
         if (refreshed) {
-          // Retry the original request
           final accessToken = await tokenStorage.getAccessToken();
           err.requestOptions.headers['Authorization'] = 'Bearer $accessToken';
-          final response = await Dio().fetch(err.requestOptions);
+          final response = await dio.fetch(err.requestOptions);
           return handler.resolve(response);
         }
       } catch (_) {

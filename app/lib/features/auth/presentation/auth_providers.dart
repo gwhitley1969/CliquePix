@@ -3,10 +3,11 @@ import '../domain/auth_state.dart';
 import '../domain/auth_repository.dart';
 import '../data/auth_api.dart';
 import '../../../services/token_storage_service.dart';
+import '../../../services/api_client.dart';
 
 final authApiProvider = Provider<AuthApi>((ref) {
-  // TODO: Wire up with actual Dio instance from ApiClient
-  throw UnimplementedError('Wire up AuthApi with Dio');
+  final apiClient = ref.watch(apiClientProvider);
+  return AuthApi(apiClient.dio);
 });
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
@@ -41,7 +42,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final user = await _repository.signIn();
       state = AuthAuthenticated(user);
     } catch (e) {
-      state = AuthError(e.toString());
+      state = const AuthError('Sign in failed. Please try again.');
     }
   }
 

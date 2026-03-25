@@ -2,6 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/user_model.dart';
 import '../../../services/token_storage_service.dart';
 import '../data/auth_api.dart';
+import 'alarm_refresh_service.dart';
+import 'background_token_service.dart';
 
 class AuthRepository {
   final AuthApi api;
@@ -38,9 +40,9 @@ class AuthRepository {
   }
 
   Future<void> signOut() async {
-    // TODO: MSAL sign out
+    await AlarmRefreshService.cancelRefresh();
+    await BackgroundTokenService.cancel();
     await tokenStorage.clearAll();
-    // TODO: Cancel AlarmManager, WorkManager background tasks
   }
 
   Future<bool> refreshToken() async {

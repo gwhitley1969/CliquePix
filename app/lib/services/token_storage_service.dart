@@ -16,6 +16,12 @@ class TokenStorageService {
   static const _lastKnownUserKey = 'last_known_user';
   static const _lastKnownUserNameKey = 'last_known_user_name';
 
+  Future<bool> Function()? _refreshCallback;
+
+  void setRefreshCallback(Future<bool> Function() callback) {
+    _refreshCallback = callback;
+  }
+
   Future<String?> getAccessToken() async {
     return _storage.read(key: _accessTokenKey);
   }
@@ -65,8 +71,9 @@ class TokenStorageService {
   }
 
   Future<bool> refreshToken() async {
-    // This is a placeholder - actual refresh logic is in auth_repository
-    // The auth interceptor calls this, which delegates to MSAL
+    if (_refreshCallback != null) {
+      return _refreshCallback!();
+    }
     return false;
   }
 

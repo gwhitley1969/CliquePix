@@ -8,8 +8,8 @@ import '../../../widgets/gradient_button.dart';
 import 'circles_providers.dart';
 
 class JoinCircleScreen extends ConsumerStatefulWidget {
-  final String? inviteCode;
-  const JoinCircleScreen({super.key, this.inviteCode});
+  final String inviteCode;
+  const JoinCircleScreen({super.key, required this.inviteCode});
 
   @override
   ConsumerState<JoinCircleScreen> createState() => _JoinCircleScreenState();
@@ -23,8 +23,8 @@ class _JoinCircleScreenState extends ConsumerState<JoinCircleScreen> {
   @override
   void initState() {
     super.initState();
-    _codeController = TextEditingController(text: widget.inviteCode ?? '');
-    if (widget.inviteCode != null && widget.inviteCode!.isNotEmpty) {
+    _codeController = TextEditingController(text: widget.inviteCode);
+    if (widget.inviteCode.isNotEmpty) {
       _joinCircle();
     }
   }

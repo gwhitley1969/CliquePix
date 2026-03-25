@@ -15,13 +15,25 @@ import '../../features/photos/presentation/photo_detail_screen.dart';
 import '../../features/notifications/presentation/notifications_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
 import '../../app/shell_screen.dart';
+import '../../features/auth/domain/auth_state.dart';
+import '../../features/auth/presentation/auth_providers.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
+  final authState = ref.watch(authStateProvider);
+
   return GoRouter(
     initialLocation: '/circles',
     redirect: (context, state) {
-      // Auth guard - check if user is authenticated
-      // This will be connected to auth state provider
+      final isAuthenticated = authState is AuthAuthenticated;
+      final isLoginRoute = state.matchedLocation == '/login';
+      final isInviteRoute = state.matchedLocation.startsWith('/invite/');
+
+      if (!isAuthenticated && !isLoginRoute && !isInviteRoute) {
+        return '/login';
+      }
+      if (isAuthenticated && isLoginRoute) {
+        return '/circles';
+      }
       return null;
     },
     routes: [
@@ -32,7 +44,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/invite/:inviteCode',
         builder: (context, state) => JoinCircleScreen(
-          inviteCode: state.pathParameters['inviteCode'],
+          inviteCode: state.pathParameters['inviteCode']!,
         ),
       ),
       StatefulShellRoute.indexedStack(

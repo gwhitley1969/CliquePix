@@ -23,7 +23,7 @@ class InviteScreen extends ConsumerWidget {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (err, _) => Center(child: Text(err.toString())),
         data: (circle) {
-          final inviteUrl = 'https://clique-pix.com/invite/${circle.inviteCode}';
+          final inviteUrl = 'https://cliquepix.app/invite/${circle.inviteCode}';
 
           return SingleChildScrollView(
             padding: const EdgeInsets.all(AppTheme.standardPadding * 2),

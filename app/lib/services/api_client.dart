@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../core/constants/environment.dart';
 import 'auth_interceptor.dart';
 import 'error_interceptor.dart';
 import 'retry_interceptor.dart';
@@ -16,9 +17,13 @@ class ApiClient {
     ));
 
     dio.interceptors.addAll([
-      AuthInterceptor(ref: ref),
+      AuthInterceptor(ref: ref, dio: dio),
       ErrorInterceptor(),
       RetryInterceptor(dio: dio),
     ]);
   }
 }
+
+final apiClientProvider = Provider<ApiClient>((ref) {
+  return ApiClient(baseUrl: Environment.apiBaseUrl, ref: ref);
+});
