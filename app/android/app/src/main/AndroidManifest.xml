@@ -57,6 +57,19 @@
             </intent-filter>
         </activity>
 
+        <!-- MSAL browser redirect for Entra External ID auth -->
+        <activity android:name="com.microsoft.identity.client.BrowserTabActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:host="com.cliquepix.app"
+                    android:path="/callback"
+                    android:scheme="msauth" />
+            </intent-filter>
+        </activity>
+
         <!-- FCM default notification channel -->
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"

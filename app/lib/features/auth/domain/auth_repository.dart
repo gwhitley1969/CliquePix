@@ -1,4 +1,4 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:msal_flutter/msal_flutter.dart';
 import '../../../models/user_model.dart';
 import '../../../services/token_storage_service.dart';
 import '../data/auth_api.dart';
@@ -11,6 +11,15 @@ class AuthRepository {
   final AlarmRefreshService? alarmRefreshService;
   final BackgroundTokenService? backgroundTokenService;
 
+  PublicClientApplication? _pca;
+
+  static const _clientId = '7db01206-135b-4a34-a4d5-2622d1a888bf';
+  static const _authority =
+      'https://cliquepix.ciamlogin.com/cliquepix.onmicrosoft.com/';
+  static const _scopes = <String>[
+    'https://cliquepix.ciamlogin.com/$_clientId/.default',
+  ];
+
   AuthRepository({
     required this.api,
     required this.tokenStorage,
@@ -18,20 +27,55 @@ class AuthRepository {
     this.backgroundTokenService,
   });
 
-  Future<UserModel> signIn() async {
-    // TODO: Implement MSAL sign-in flow with cliquepix.onmicrosoft.com
-    // 1. Call MSAL interactive login
-    // 2. Get access token + refresh token
-    // 3. Save tokens via tokenStorage.saveTokens()
-    // 4. Call api.verify() to upsert user
-    // 5. Return UserModel
-    throw UnimplementedError('MSAL integration pending');
+  Future<PublicClientApplication> _getOrCreatePca() async {
+    _pca ??= await PublicClientApplication.createPublicClientApplication(
+      _clientId,
+      authority: _authority,
+    );
+    return _pca!;
   }
 
+  /// Interactive sign-in — opens browser/webview for Entra login.
+  /// [loginHint] is stored for Layer 5 graceful re-login UX but
+  /// msal_flutter 2.x does not support passing it to acquireToken.
+  Future<UserModel> signIn({String? loginHint}) async {
+    final pca = await _getOrCreatePca();
+
+    final accessToken = await pca.acquireToken(_scopes);
+
+    // MSAL manages refresh tokens internally — we store the access token
+    // and track lastRefreshTime for the proactive refresh logic.
+    await tokenStorage.saveTokens(
+      accessToken: accessToken,
+      refreshToken: '',
+    );
+
+    final user = await verifyAndGetUser();
+
+    // Schedule background refresh (Layers 2 & 4)
+    await alarmRefreshService?.scheduleNextRefresh();
+    await backgroundTokenService?.register();
+
+    return user;
+  }
+
+  /// Silent token acquisition — uses MSAL's cached token/refresh token.
   Future<UserModel> silentSignIn() async {
-    // Try silent token acquisition via MSAL
-    // If successful, call api.verify()
-    throw UnimplementedError('MSAL integration pending');
+    final pca = await _getOrCreatePca();
+
+    final accessToken = await pca.acquireTokenSilent(_scopes);
+
+    await tokenStorage.saveTokens(
+      accessToken: accessToken,
+      refreshToken: '',
+    );
+
+    final user = await verifyAndGetUser();
+
+    // Reschedule background refresh
+    await alarmRefreshService?.scheduleNextRefresh();
+
+    return user;
   }
 
   Future<UserModel> verifyAndGetUser() async {
@@ -47,16 +91,28 @@ class AuthRepository {
   }
 
   Future<void> signOut() async {
+    try {
+      final pca = await _getOrCreatePca();
+      await pca.logout();
+    } catch (_) {
+      // MSAL logout may fail if no active session — continue cleanup
+    }
     await alarmRefreshService?.cancelRefresh();
     await backgroundTokenService?.cancel();
     await tokenStorage.clearAll();
   }
 
+  /// Attempt silent token refresh via MSAL.
+  /// Returns true on success, false on failure.
   Future<bool> refreshToken() async {
     try {
-      // TODO: MSAL silent token acquisition
-      // await tokenStorage.saveTokens(accessToken: newToken, refreshToken: newRefresh);
-      return false;
+      final pca = await _getOrCreatePca();
+      final accessToken = await pca.acquireTokenSilent(_scopes);
+      await tokenStorage.saveTokens(
+        accessToken: accessToken,
+        refreshToken: '',
+      );
+      return true;
     } catch (_) {
       return false;
     }

@@ -42,6 +42,22 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 
+	<!-- MSAL redirect URI scheme for Entra External ID auth -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>msauth.com.cliquepix.app</string>
+			</array>
+		</dict>
+	</array>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>msauthv2</string>
+		<string>msauthv3</string>
+	</array>
+
 	<!-- Camera Usage -->
 	<key>NSCameraUsageDescription</key>
 	<string>Clique Pix needs camera access to take photos for your events.</string>
