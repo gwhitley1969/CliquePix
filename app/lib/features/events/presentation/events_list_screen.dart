@@ -62,10 +62,10 @@ class EventsListScreen extends ConsumerWidget {
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                 decoration: BoxDecoration(
                                   color: event.isExpiringSoon
-                                      ? AppColors.warning.withOpacity(0.1)
+                                      ? AppColors.warning.withValues(alpha: 0.1)
                                       : event.isExpired
-                                          ? AppColors.error.withOpacity(0.1)
-                                          : AppColors.success.withOpacity(0.1),
+                                          ? AppColors.error.withValues(alpha: 0.1)
+                                          : AppColors.success.withValues(alpha: 0.1),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Text(

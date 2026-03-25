@@ -145,7 +145,7 @@ class PhotoDetailScreen extends ConsumerWidget {
                       const Spacer(),
                       Text(
                         AppDateUtils.timeAgo(photo.createdAt),
-                        style: AppTextStyles.caption.copyWith(color: AppColors.whiteSurface.withOpacity(0.7)),
+                        style: AppTextStyles.caption.copyWith(color: AppColors.whiteSurface.withValues(alpha: 0.7)),
                       ),
                     ],
                   ),

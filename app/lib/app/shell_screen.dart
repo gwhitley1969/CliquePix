@@ -17,7 +17,7 @@ class ShellScreen extends StatelessWidget {
           navigationShell.goBranch(index, initialLocation: index == navigationShell.currentIndex);
         },
         backgroundColor: AppColors.whiteSurface,
-        indicatorColor: AppColors.deepBlue.withOpacity(0.1),
+        indicatorColor: AppColors.deepBlue.withValues(alpha: 0.1),
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.group_outlined),

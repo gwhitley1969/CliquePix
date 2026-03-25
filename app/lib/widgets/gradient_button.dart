@@ -23,7 +23,7 @@ class GradientButton extends StatelessWidget {
       height: AppTheme.minTapTarget,
       decoration: BoxDecoration(
         gradient: onPressed != null ? AppGradients.primary : null,
-        color: onPressed == null ? AppColors.secondaryText.withOpacity(0.3) : null,
+        color: onPressed == null ? AppColors.secondaryText.withValues(alpha: 0.3) : null,
         borderRadius: BorderRadius.circular(AppTheme.cardRadius),
       ),
       child: Material(

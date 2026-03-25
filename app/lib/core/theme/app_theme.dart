@@ -51,11 +51,11 @@ class AppTheme {
       fillColor: AppColors.whiteSurface,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(cardRadius),
-        borderSide: BorderSide(color: AppColors.secondaryText.withOpacity(0.3)),
+        borderSide: BorderSide(color: AppColors.secondaryText.withValues(alpha: 0.3)),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(cardRadius),
-        borderSide: BorderSide(color: AppColors.secondaryText.withOpacity(0.3)),
+        borderSide: BorderSide(color: AppColors.secondaryText.withValues(alpha: 0.3)),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(cardRadius),

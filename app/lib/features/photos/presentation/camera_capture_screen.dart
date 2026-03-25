@@ -106,7 +106,7 @@ class _CameraCaptureScreenState extends ConsumerState<CameraCaptureScreen> {
                   : Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.add_a_photo, size: 80, color: AppColors.deepBlue.withOpacity(0.3)),
+                        Icon(Icons.add_a_photo, size: 80, color: AppColors.deepBlue.withValues(alpha: 0.3)),
                         const SizedBox(height: 16),
                         Text('Choose a photo to share', style: AppTextStyles.body.copyWith(color: AppColors.secondaryText)),
                         const SizedBox(height: 32),
@@ -178,7 +178,7 @@ class _SourceButton extends StatelessWidget {
         decoration: BoxDecoration(
           color: AppColors.whiteSurface,
           borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-          border: Border.all(color: AppColors.secondaryText.withOpacity(0.2)),
+          border: Border.all(color: AppColors.secondaryText.withValues(alpha: 0.2)),
         ),
         child: Column(
           children: [

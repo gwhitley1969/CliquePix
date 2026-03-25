@@ -17,8 +17,8 @@ class LoadingShimmer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Shimmer.fromColors(
-      baseColor: AppColors.secondaryText.withOpacity(0.1),
-      highlightColor: AppColors.secondaryText.withOpacity(0.05),
+      baseColor: AppColors.secondaryText.withValues(alpha: 0.1),
+      highlightColor: AppColors.secondaryText.withValues(alpha: 0.05),
       child: Container(
         width: width,
         height: height,

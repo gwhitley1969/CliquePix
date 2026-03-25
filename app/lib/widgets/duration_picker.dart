@@ -32,7 +32,7 @@ class DurationPicker extends StatelessWidget {
                   color: isSelected ? AppColors.deepBlue : AppColors.whiteSurface,
                   borderRadius: BorderRadius.circular(AppTheme.cardRadius),
                   border: Border.all(
-                    color: isSelected ? AppColors.deepBlue : AppColors.secondaryText.withOpacity(0.3),
+                    color: isSelected ? AppColors.deepBlue : AppColors.secondaryText.withValues(alpha: 0.3),
                   ),
                 ),
                 child: Center(

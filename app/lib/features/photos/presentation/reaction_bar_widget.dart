@@ -93,7 +93,7 @@ class _ReactionBarWidgetState extends ConsumerState<ReactionBarWidget> {
               duration: const Duration(milliseconds: 200),
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
-                color: isActive ? AppColors.deepBlue.withOpacity(0.1) : AppColors.softAquaBackground,
+                color: isActive ? AppColors.deepBlue.withValues(alpha: 0.1) : AppColors.softAquaBackground,
                 borderRadius: BorderRadius.circular(20),
                 border: isActive ? Border.all(color: AppColors.deepBlue, width: 1.5) : null,
               ),
