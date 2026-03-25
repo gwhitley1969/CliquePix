@@ -11,7 +11,7 @@ class PhotoModel {
   final int? fileSizeBytes;
   final String status;
   final Map<String, int> reactionCounts;
-  final List<String> userReactions;
+  final List<({String id, String type})> userReactions;
   final DateTime createdAt;
   final DateTime expiresAt;
 
@@ -49,7 +49,11 @@ class PhotoModel {
       reactionCounts: (json['reaction_counts'] as Map<String, dynamic>?)
           ?.map((k, v) => MapEntry(k, (v as num).toInt())) ?? {},
       userReactions: (json['user_reactions'] as List<dynamic>?)
-          ?.map((e) => e as String).toList() ?? [],
+          ?.map((e) {
+            if (e is String) return (id: '', type: e);
+            final m = e as Map<String, dynamic>;
+            return (id: m['id'] as String? ?? '', type: m['reaction_type'] as String);
+          }).toList() ?? [],
       createdAt: DateTime.parse(json['created_at'] as String),
       expiresAt: DateTime.parse(json['expires_at'] as String),
     );

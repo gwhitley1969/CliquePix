@@ -29,10 +29,7 @@ class CirclesRepository {
   }
 
   Future<CircleModel> joinByInviteCode(String inviteCode) async {
-    // The API expects circleId, but we look up by invite code
-    // The join endpoint accepts invite_code in the body
-    // We need to find the circle first or the API handles it
-    final data = await api.joinCircle('_', inviteCode);
+    final data = await api.joinByInviteCode(inviteCode);
     return CircleModel.fromJson(data);
   }
 

@@ -8,7 +8,7 @@ import 'photos_providers.dart';
 class ReactionBarWidget extends ConsumerStatefulWidget {
   final String photoId;
   final Map<String, int> reactionCounts;
-  final List<String> userReactions;
+  final List<({String id, String type})> userReactions;
 
   const ReactionBarWidget({
     super.key,
@@ -24,12 +24,17 @@ class ReactionBarWidget extends ConsumerStatefulWidget {
 class _ReactionBarWidgetState extends ConsumerState<ReactionBarWidget> {
   late Map<String, int> _counts;
   late Set<String> _userReactions;
+  late Map<String, String> _userReactionIds; // type -> id
 
   @override
   void initState() {
     super.initState();
     _counts = Map.from(widget.reactionCounts);
-    _userReactions = Set.from(widget.userReactions);
+    _userReactionIds = {};
+    for (final r in widget.userReactions) {
+      _userReactionIds[r.type] = r.id;
+    }
+    _userReactions = Set.from(_userReactionIds.keys);
   }
 
   void _toggleReaction(String type) async {
@@ -50,9 +55,10 @@ class _ReactionBarWidgetState extends ConsumerState<ReactionBarWidget> {
 
     try {
       if (wasActive) {
-        // TODO: Need reaction ID for removal — would need to track it
-        // For now this is a simplified version
-        await repo.removeReaction(widget.photoId, type);
+        final reactionId = _userReactionIds[type];
+        if (reactionId != null && reactionId.isNotEmpty) {
+          await repo.removeReaction(widget.photoId, reactionId);
+        }
       } else {
         await repo.addReaction(widget.photoId, type);
       }

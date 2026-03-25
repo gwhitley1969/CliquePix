@@ -13,7 +13,7 @@ class BlobUploadService {
 
     await _dio.put(
       sasUrl,
-      data: Stream.fromIterable(bytes.map((e) => [e])),
+      data: bytes,
       options: Options(
         headers: {
           'x-ms-blob-type': 'BlockBlob',

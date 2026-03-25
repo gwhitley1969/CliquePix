@@ -33,6 +33,15 @@ class CirclesApi {
     return response.data['data'] as Map<String, dynamic>;
   }
 
+  Future<Map<String, dynamic>> joinByInviteCode(String inviteCode) async {
+    // The join endpoint accepts invite_code in body; circleId is resolved server-side
+    final response = await dio.post(
+      '/api/circles/_/join',
+      data: {'invite_code': inviteCode},
+    );
+    return response.data['data'] as Map<String, dynamic>;
+  }
+
   Future<List<dynamic>> listMembers(String circleId) async {
     final response = await dio.get(ApiEndpoints.circleMembers(circleId));
     return response.data['data'] as List<dynamic>;

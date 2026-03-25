@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../core/theme/app_colors.dart';
 
 class AvatarWidget extends StatelessWidget {
@@ -22,7 +23,7 @@ class AvatarWidget extends StatelessWidget {
     if (imageUrl != null && imageUrl!.isNotEmpty) {
       return CircleAvatar(
         radius: size / 2,
-        backgroundImage: NetworkImage(imageUrl!),
+        backgroundImage: CachedNetworkImageProvider(imageUrl!),
         backgroundColor: AppColors.softAquaBackground,
       );
     }

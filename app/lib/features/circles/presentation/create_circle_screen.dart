@@ -17,6 +17,12 @@ class _CreateCircleScreenState extends ConsumerState<CreateCircleScreen> {
   bool _isLoading = false;
 
   @override
+  void initState() {
+    super.initState();
+    _nameController.addListener(() => setState(() {}));
+  }
+
+  @override
   void dispose() {
     _nameController.dispose();
     super.dispose();
