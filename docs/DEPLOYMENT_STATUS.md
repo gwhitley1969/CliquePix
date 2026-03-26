@@ -33,7 +33,7 @@ Last updated: 2026-03-26
 |-----------|--------|-------|
 | Project scaffold (pubspec.yaml, analysis_options) | Done | Flutter 3.35.5, Dart 3.9.2 |
 | Native scaffolding (Android/iOS) | Done | `flutter create` with org `com.cliquepix`, package `com.cliquepix.clique_pix` |
-| Design system (colors, gradients, typography, theme) | Done | Uses `withValues(alpha:)` (Flutter 3.27+) |
+| Design system (colors, gradients, typography, theme) | Done | Dark theme throughout, uses `withValues(alpha:)` (Flutter 3.27+) |
 | Constants (endpoints, app constants, environment) | Done | Domain: `clique-pix.com` |
 | Error types (sealed AppFailure, error mapper) | Done | |
 | Routing (GoRouter with shell route) | Done | Auth guard + deep link /invite/:code |
@@ -41,19 +41,20 @@ Last updated: 2026-03-26
 | Token storage service | Done | Refresh callback mechanism wired to MSAL |
 | Storage service (save to gallery + share download) | Done | Downloads to temp file before sharing |
 | Deep link service | Done | Host: clique-pix.com |
-| Shared widgets (7 widgets) | Done | CachedNetworkImageProvider for avatars |
+| Shared widgets (7 widgets) | Done | Gradient-ringed avatars, dark-themed bottom nav with gradient icons |
 | Data models (5 models) | Done | PhotoModel includes status field, reaction IDs tracked |
 | Auth feature (MSAL integration) | Done | `msal_auth` 3.3.0, custom API scope `access_as_user`, interactive + silent sign-in, token refresh |
 | 5-layer token refresh defense | Done | All layers wired; loginHint threaded through Layer 5 |
-| Circles feature (API, repository, providers, 5 screens) | Done | joinByInviteCode dedicated API method |
+| Circles feature (API, repository, providers, 5 screens) | Done | Dark theme, gradient-bordered cards, gradient-ringed avatars, joinByInviteCode |
 | Events feature (API, repository, providers, 3 screens) | Done | |
 | Photos feature (API, repository, services, providers, 6 screens/widgets) | Done | Compression constrains max dim without upscaling; feed polls every 30s |
-| Notifications feature (API, repository, providers, 1 screen) | Done | |
-| Profile feature (1 screen) | Done | |
+| Notifications feature (API, repository, providers, 1 screen) | Done | Dark theme, colored icon badges, unread/read styling |
+| Profile feature (1 screen) | Done | Dark theme, gradient profile card, grouped settings with gradient icons |
 | App entry point (main.dart) | Done | Firebase, timezone, WorkManager, notifications initialized |
 | All API providers wired to ApiClient | Done | No UnimplementedError providers |
 | App launcher icon | Done | Clique Pix camera logo at all Android densities |
 | Login screen | Done | Dark gradient, animated glowing logo, slide-in animations |
+| App-wide dark theme | Done | All screens use consistent dark (#0E1525) background with gradient accents |
 | Android manifest | Done | Permissions, App Links, FCM, MSAL BrowserTabActivity |
 | iOS Info.plist | Done | Camera/photo permissions, background modes, MSAL URL schemes |
 | Firebase config (Android) | Done | `google-services.json` placed in `android/app/` |

@@ -2,12 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/app_text_styles.dart';
+import '../../../core/theme/app_gradients.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/date_utils.dart';
 import '../../../widgets/empty_state_widget.dart';
 import '../../../widgets/error_widget.dart';
-import '../../../widgets/gradient_app_bar.dart';
 import 'notifications_providers.dart';
 
 class NotificationsScreen extends ConsumerWidget {
@@ -18,46 +17,106 @@ class NotificationsScreen extends ConsumerWidget {
     final notificationsAsync = ref.watch(notificationsListProvider);
 
     return Scaffold(
-      appBar: const GradientAppBar(title: 'Notifications'),
-      body: notificationsAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, _) => AppErrorWidget(
-          message: err.toString(),
-          onRetry: () => ref.invalidate(notificationsListProvider),
-        ),
-        data: (notifications) {
-          if (notifications.isEmpty) {
-            return const EmptyStateWidget(
-              icon: Icons.notifications_none,
-              title: 'No notifications',
-              subtitle: 'You\'ll be notified when new photos are shared',
-            );
-          }
-
-          return RefreshIndicator(
-            onRefresh: () async => ref.invalidate(notificationsListProvider),
-            child: ListView.builder(
-              padding: const EdgeInsets.all(AppTheme.standardPadding),
-              itemCount: notifications.length,
-              itemBuilder: (context, index) {
-                final notification = notifications[index];
-                return _NotificationTile(
-                  notification: notification,
-                  onTap: () {
-                    // Mark as read
-                    ref.read(notificationsRepositoryProvider).markRead(notification.id);
-
-                    // Navigate based on type
-                    final eventId = notification.payload['event_id'] as String?;
-                    if (eventId != null) {
-                      context.go('/events/$eventId');
-                    }
-                  },
-                );
-              },
+      backgroundColor: const Color(0xFF0E1525),
+      body: CustomScrollView(
+        slivers: [
+          SliverAppBar(
+            expandedHeight: 120,
+            floating: false,
+            pinned: true,
+            backgroundColor: const Color(0xFF0E1525),
+            flexibleSpace: FlexibleSpaceBar(
+              title: ShaderMask(
+                shaderCallback: (bounds) => const LinearGradient(
+                  colors: [AppColors.deepBlue, AppColors.violetAccent],
+                ).createShader(bounds),
+                child: const Text(
+                  'Notifications',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 22,
+                    color: Colors.white,
+                    letterSpacing: -0.3,
+                  ),
+                ),
+              ),
+              centerTitle: true,
+              background: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      AppColors.violetAccent.withValues(alpha: 0.12),
+                      const Color(0xFF0E1525),
+                    ],
+                  ),
+                ),
+              ),
             ),
-          );
-        },
+          ),
+          notificationsAsync.when(
+            loading: () => const SliverFillRemaining(
+              child: Center(child: CircularProgressIndicator(color: AppColors.violetAccent)),
+            ),
+            error: (err, _) => SliverFillRemaining(
+              child: AppErrorWidget(
+                message: err.toString(),
+                onRetry: () => ref.invalidate(notificationsListProvider),
+              ),
+            ),
+            data: (notifications) {
+              if (notifications.isEmpty) {
+                return SliverFillRemaining(
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          ShaderMask(
+                            shaderCallback: (bounds) => const LinearGradient(
+                              colors: [AppColors.deepBlue, AppColors.violetAccent],
+                            ).createShader(bounds),
+                            child: const Icon(Icons.notifications_none_rounded, size: 72, color: Colors.white),
+                          ),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'No notifications',
+                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Colors.white),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            "You'll be notified when new photos are shared",
+                            style: TextStyle(fontSize: 14, color: Colors.white.withValues(alpha: 0.5)),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }
+
+              return SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) => _NotificationTile(
+                      notification: notifications[index],
+                      onTap: () {
+                        ref.read(notificationsRepositoryProvider).markRead(notifications[index].id);
+                        final eventId = notifications[index].payload['event_id'] as String?;
+                        if (eventId != null) context.go('/events/$eventId');
+                      },
+                    ),
+                    childCount: notifications.length,
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
       ),
     );
   }
@@ -69,12 +128,16 @@ class _NotificationTile extends StatelessWidget {
 
   const _NotificationTile({required this.notification, required this.onTap});
 
-  IconData get _icon {
+  (IconData, List<Color>) get _iconAndColors {
     switch (notification.type) {
-      case 'new_photo': return Icons.photo_camera;
-      case 'event_expiring': return Icons.timer;
-      case 'event_expired': return Icons.timer_off;
-      default: return Icons.notifications;
+      case 'new_photo':
+        return (Icons.photo_camera_rounded, [AppColors.electricAqua, AppColors.deepBlue]);
+      case 'event_expiring':
+        return (Icons.timer_rounded, [AppColors.warning, const Color(0xFFEF4444)]);
+      case 'event_expired':
+        return (Icons.timer_off_rounded, [const Color(0xFF6B7280), const Color(0xFF374151)]);
+      default:
+        return (Icons.notifications_rounded, [AppColors.deepBlue, AppColors.violetAccent]);
     }
   }
 
@@ -89,20 +152,81 @@ class _NotificationTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      color: notification.isRead ? AppColors.whiteSurface : AppColors.softAquaBackground,
-      child: ListTile(
-        leading: Icon(_icon, color: notification.isRead ? AppColors.secondaryText : AppColors.deepBlue),
-        title: Text(_title, style: AppTextStyles.body.copyWith(
-          fontWeight: notification.isRead ? FontWeight.normal : FontWeight.w600,
-        )),
-        subtitle: Text(AppDateUtils.timeAgo(notification.createdAt), style: AppTextStyles.caption),
-        trailing: notification.isRead ? null : Container(
-          width: 8, height: 8,
-          decoration: const BoxDecoration(color: AppColors.deepBlue, shape: BoxShape.circle),
+    final (icon, colors) = _iconAndColors;
+    final isUnread = !notification.isRead;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              color: isUnread
+                  ? colors[0].withValues(alpha: 0.06)
+                  : Colors.white.withValues(alpha: 0.03),
+              border: Border.all(
+                color: isUnread
+                    ? colors[0].withValues(alpha: 0.2)
+                    : Colors.white.withValues(alpha: 0.06),
+                width: 1,
+              ),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            child: Row(
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    gradient: LinearGradient(
+                      colors: isUnread
+                          ? colors
+                          : [Colors.white.withValues(alpha: 0.08), Colors.white.withValues(alpha: 0.04)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                  ),
+                  child: Icon(icon, color: isUnread ? Colors.white : Colors.white.withValues(alpha: 0.4), size: 20),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _title,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: isUnread ? FontWeight.w700 : FontWeight.w500,
+                          color: isUnread ? Colors.white : Colors.white.withValues(alpha: 0.6),
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        AppDateUtils.timeAgo(notification.createdAt),
+                        style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.35)),
+                      ),
+                    ],
+                  ),
+                ),
+                if (isUnread)
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(colors: colors),
+                    ),
+                  ),
+              ],
+            ),
+          ),
         ),
-        onTap: onTap,
       ),
     );
   }

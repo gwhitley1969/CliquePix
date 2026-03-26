@@ -2,12 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_gradients.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../widgets/empty_state_widget.dart';
 import '../../../widgets/error_widget.dart';
-import '../../../widgets/gradient_app_bar.dart';
 import '../../../widgets/avatar_widget.dart';
+import '../../../models/circle_model.dart';
 import 'circles_providers.dart';
 
 class CirclesListScreen extends ConsumerWidget {
@@ -18,54 +19,211 @@ class CirclesListScreen extends ConsumerWidget {
     final circlesAsync = ref.watch(circlesListProvider);
 
     return Scaffold(
-      appBar: const GradientAppBar(title: 'My Circles'),
-      body: circlesAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, _) => AppErrorWidget(
-          message: err.toString(),
-          onRetry: () => ref.read(circlesListProvider.notifier).refresh(),
-        ),
-        data: (circles) {
-          if (circles.isEmpty) {
-            return EmptyStateWidget(
-              icon: Icons.group_outlined,
-              title: 'No circles yet',
-              subtitle: 'Create a circle to start sharing photos with friends',
-              actionText: 'Create Circle',
-              onAction: () => context.go('/circles/create'),
-            );
-          }
+      backgroundColor: const Color(0xFF0E1525),
+      body: CustomScrollView(
+        slivers: [
+          // Gradient header with brand personality
+          SliverAppBar(
+            expandedHeight: 120,
+            floating: false,
+            pinned: true,
+            backgroundColor: const Color(0xFF0E1525),
+            flexibleSpace: FlexibleSpaceBar(
+              title: ShaderMask(
+                shaderCallback: (bounds) => AppGradients.primary.createShader(bounds),
+                child: const Text(
+                  'My Circles',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 22,
+                    color: Colors.white,
+                    letterSpacing: -0.3,
+                  ),
+                ),
+              ),
+              centerTitle: true,
+              background: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      AppColors.deepBlue.withValues(alpha: 0.15),
+                      const Color(0xFF0E1525),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
 
-          return RefreshIndicator(
-            onRefresh: () => ref.read(circlesListProvider.notifier).refresh(),
-            child: ListView.builder(
-              padding: const EdgeInsets.all(AppTheme.standardPadding),
-              itemCount: circles.length,
-              itemBuilder: (context, index) {
-                final circle = circles[index];
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.all(16),
-                    leading: AvatarWidget(name: circle.name, size: 48),
-                    title: Text(circle.name, style: AppTextStyles.heading3),
-                    subtitle: Text(
-                      '${circle.memberCount} member${circle.memberCount != 1 ? 's' : ''}',
-                      style: AppTextStyles.caption,
-                    ),
-                    trailing: const Icon(Icons.chevron_right, color: AppColors.secondaryText),
-                    onTap: () => context.go('/circles/${circle.id}'),
+          // Content
+          circlesAsync.when(
+            loading: () => const SliverFillRemaining(
+              child: Center(
+                child: CircularProgressIndicator(color: AppColors.electricAqua),
+              ),
+            ),
+            error: (err, _) => SliverFillRemaining(
+              child: AppErrorWidget(
+                message: err.toString(),
+                onRetry: () => ref.read(circlesListProvider.notifier).refresh(),
+              ),
+            ),
+            data: (circles) {
+              if (circles.isEmpty) {
+                return SliverFillRemaining(
+                  child: EmptyStateWidget(
+                    icon: Icons.group_outlined,
+                    title: 'No circles yet',
+                    subtitle: 'Create a circle to start sharing photos with friends',
+                    actionText: 'Create Circle',
+                    onAction: () => context.go('/circles/create'),
                   ),
                 );
-              },
-            ),
-          );
-        },
+              }
+
+              return SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) => _CircleCard(circle: circles[index]),
+                    childCount: circles.length,
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => context.go('/circles/create'),
-        backgroundColor: AppColors.deepBlue,
-        child: const Icon(Icons.add, color: AppColors.whiteSurface),
+      floatingActionButton: Container(
+        decoration: BoxDecoration(
+          gradient: AppGradients.primary,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.deepBlue.withValues(alpha: 0.4),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: FloatingActionButton(
+          onPressed: () => context.go('/circles/create'),
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          child: const Icon(Icons.add_rounded, color: Colors.white, size: 28),
+        ),
+      ),
+    );
+  }
+}
+
+class _CircleCard extends StatelessWidget {
+  final CircleModel circle;
+  const _CircleCard({required this.circle});
+
+  List<Color> _gradientForName(String name) {
+    final hash = name.hashCode.abs() % 5;
+    switch (hash) {
+      case 0:
+        return [AppColors.electricAqua, AppColors.deepBlue];
+      case 1:
+        return [AppColors.deepBlue, AppColors.violetAccent];
+      case 2:
+        return [AppColors.violetAccent, const Color(0xFFEC4899)];
+      case 3:
+        return [AppColors.electricAqua, AppColors.violetAccent];
+      default:
+        return [const Color(0xFFEC4899), AppColors.electricAqua];
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = _gradientForName(circle.name);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => context.go('/circles/${circle.id}'),
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              gradient: LinearGradient(
+                colors: [
+                  colors[0].withValues(alpha: 0.08),
+                  colors[1].withValues(alpha: 0.04),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              border: Border.all(
+                color: colors[0].withValues(alpha: 0.2),
+                width: 1,
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  AvatarWidget(name: circle.name, size: 54),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          circle.name,
+                          style: const TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                            letterSpacing: -0.2,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.people_rounded,
+                              size: 14,
+                              color: colors[0].withValues(alpha: 0.7),
+                            ),
+                            const SizedBox(width: 5),
+                            Text(
+                              '${circle.memberCount} member${circle.memberCount != 1 ? 's' : ''}',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.white.withValues(alpha: 0.5),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: colors[0].withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      Icons.arrow_forward_ios_rounded,
+                      size: 14,
+                      color: colors[0].withValues(alpha: 0.6),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

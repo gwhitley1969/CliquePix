@@ -11,30 +11,58 @@ class ShellScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       body: navigationShell,
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: navigationShell.currentIndex,
-        onDestinationSelected: (index) {
-          navigationShell.goBranch(index, initialLocation: index == navigationShell.currentIndex);
-        },
-        backgroundColor: AppColors.whiteSurface,
-        indicatorColor: AppColors.deepBlue.withValues(alpha: 0.1),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.group_outlined),
-            selectedIcon: Icon(Icons.group, color: AppColors.deepBlue),
-            label: 'Circles',
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF111827),
+          border: Border(
+            top: BorderSide(
+              color: AppColors.deepBlue.withValues(alpha: 0.15),
+              width: 1,
+            ),
           ),
-          NavigationDestination(
-            icon: Icon(Icons.notifications_outlined),
-            selectedIcon: Icon(Icons.notifications, color: AppColors.deepBlue),
-            label: 'Notifications',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.person_outlined),
-            selectedIcon: Icon(Icons.person, color: AppColors.deepBlue),
-            label: 'Profile',
-          ),
-        ],
+        ),
+        child: NavigationBar(
+          selectedIndex: navigationShell.currentIndex,
+          onDestinationSelected: (index) {
+            navigationShell.goBranch(index, initialLocation: index == navigationShell.currentIndex);
+          },
+          backgroundColor: Colors.transparent,
+          surfaceTintColor: Colors.transparent,
+          indicatorColor: AppColors.deepBlue.withValues(alpha: 0.15),
+          labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+          destinations: [
+            NavigationDestination(
+              icon: Icon(Icons.group_outlined, color: Colors.white.withValues(alpha: 0.4)),
+              selectedIcon: ShaderMask(
+                shaderCallback: (bounds) => const LinearGradient(
+                  colors: [AppColors.electricAqua, AppColors.deepBlue],
+                ).createShader(bounds),
+                child: const Icon(Icons.group, color: Colors.white),
+              ),
+              label: 'Circles',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.notifications_outlined, color: Colors.white.withValues(alpha: 0.4)),
+              selectedIcon: ShaderMask(
+                shaderCallback: (bounds) => const LinearGradient(
+                  colors: [AppColors.deepBlue, AppColors.violetAccent],
+                ).createShader(bounds),
+                child: const Icon(Icons.notifications, color: Colors.white),
+              ),
+              label: 'Notifications',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.person_outlined, color: Colors.white.withValues(alpha: 0.4)),
+              selectedIcon: ShaderMask(
+                shaderCallback: (bounds) => const LinearGradient(
+                  colors: [AppColors.violetAccent, Color(0xFFEC4899)],
+                ).createShader(bounds),
+                child: const Icon(Icons.person, color: Colors.white),
+              ),
+              label: 'Profile',
+            ),
+          ],
+        ),
       ),
     );
   }
