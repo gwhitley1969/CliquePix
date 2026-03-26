@@ -44,7 +44,7 @@ async function authVerify(req: HttpRequest, context: InvocationContext): Promise
     const signingKey = await getSigningKey(kid);
     const payload = jwt.verify(token, signingKey, {
       algorithms: ['RS256'],
-      issuer: `https://cliquepix.ciamlogin.com/${TENANT_ID}/v2.0`,
+      issuer: `https://${TENANT_ID}.ciamlogin.com/${TENANT_ID}/v2.0`,
       audience: CLIENT_ID,
     }) as jwt.JwtPayload;
 

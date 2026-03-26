@@ -58,7 +58,7 @@ export async function authenticateRequest(req: HttpRequest): Promise<Authenticat
 
   const payload = jwt.verify(token, signingKey, {
     algorithms: ['RS256'],
-    issuer: `https://cliquepix.ciamlogin.com/${TENANT_ID}/v2.0`,
+    issuer: `https://${TENANT_ID}.ciamlogin.com/${TENANT_ID}/v2.0`,
     audience: CLIENT_ID,
   }) as jwt.JwtPayload;
 

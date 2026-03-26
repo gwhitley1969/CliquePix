@@ -90,7 +90,7 @@ Leave it out. A missing feature can be added later. A cluttered v1 cannot be un-
 - **Image caching:** cached_network_image
 - **Deep links:** app_links
 - **QR code generation:** qr_flutter
-- **MSAL authentication:** msal_flutter (or equivalent Entra-compatible package)
+- **MSAL authentication:** msal_auth (^3.3.0, v2 embedding, custom API scope `access_as_user`)
 
 Do not introduce dependencies not listed here without discussing the tradeoff first.
 

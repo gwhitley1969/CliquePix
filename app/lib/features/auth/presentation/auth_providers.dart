@@ -50,8 +50,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       final user = await _repository.signIn(loginHint: loginHint);
       state = AuthAuthenticated(user);
-    } catch (e) {
-      state = const AuthError('Sign in failed. Please try again.');
+    } catch (e, stack) {
+      state = AuthError('Sign in failed. Please try again.');
     }
   }
 

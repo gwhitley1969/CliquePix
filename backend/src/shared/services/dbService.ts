@@ -17,7 +17,7 @@ function getPool(): Pool {
     };
     pool = new Pool(config);
     pool.on('error', (err) => {
-      console.error('Unexpected pool error:', err.code ?? 'UNKNOWN');
+      console.error('Unexpected pool error:', (err as NodeJS.ErrnoException).code ?? 'UNKNOWN');
     });
   }
   return pool;

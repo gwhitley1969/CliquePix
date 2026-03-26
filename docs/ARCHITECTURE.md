@@ -68,7 +68,7 @@ Why Flutter for Clique Pix:
 | Image caching | cached_network_image |
 | Deep links | app_links |
 | QR code generation | qr_flutter |
-| MSAL authentication | msal_flutter (or equivalent Entra-compatible package) |
+| MSAL authentication | msal_auth (^3.3.0, Entra-compatible, v2 embedding) |
 
 ## Backend / Cloud (Azure)
 
@@ -134,8 +134,28 @@ Flutter App → GET directly from Blob Storage (SAS URL) → load thumbnail/orig
 
 Supports:
 - email-based signup with OTP / magic link
-- social providers (Google, Apple) can be added later via Entra configuration
-- no Firebase dependency
+- social providers (Google, Apple) configured via Entra identity providers
+- no Firebase dependency (FCM used for push transport only)
+
+## Token Acquisition (MSAL)
+
+The app uses `msal_auth` (^3.3.0) with a **custom API scope** to get a properly signed access token:
+
+- **Exposed API scope**: `api://7db01206-135b-4a34-a4d5-2622d1a888bf/access_as_user`
+- **MSAL scopes**: `['api://7db01206.../access_as_user']` — only the custom API scope
+- OIDC scopes (`openid`, `profile`, `email`) are added implicitly by MSAL and must NOT be requested explicitly (mixing causes `MsalDeclinedScopeException`)
+
+**Why this matters:** Without a custom API scope, MSAL returns a Microsoft Graph access token signed by Graph's keys. The backend cannot verify Graph tokens — only Microsoft Graph can. The custom API scope ensures MSAL returns an access token with `aud = clientId`, signed by the CIAM tenant's keys.
+
+## Backend JWT Validation
+
+The backend validates tokens using the CIAM tenant's OpenID configuration:
+
+- **JWKS URI**: `https://cliquepix.ciamlogin.com/{tenantId}/discovery/v2.0/keys` (tenant **name** subdomain)
+- **Expected issuer**: `https://{tenantId}.ciamlogin.com/{tenantId}/v2.0` (tenant **ID** subdomain)
+- **Expected audience**: app client ID (`7db01206-135b-4a34-a4d5-2622d1a888bf`)
+
+Note: The JWKS URI uses the tenant name as subdomain, but the issuer in tokens uses the tenant ID as subdomain. This is a CIAM quirk confirmed by the OpenID Connect discovery endpoint.
 
 ## Known Issue: 12-Hour Refresh Token Timeout
 

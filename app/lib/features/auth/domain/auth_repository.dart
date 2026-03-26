@@ -16,7 +16,9 @@ class AuthRepository {
   static const _clientId = '7db01206-135b-4a34-a4d5-2622d1a888bf';
   static const _authority =
       'https://cliquepix.ciamlogin.com/cliquepix.onmicrosoft.com/';
-  static const _scopes = <String>['openid', 'offline_access', 'profile'];
+  static const _scopes = <String>[
+    'api://7db01206-135b-4a34-a4d5-2622d1a888bf/access_as_user',
+  ];
 
   AuthRepository({
     required this.api,

@@ -12,8 +12,7 @@ class Environment {
       case 'prod':
         return 'https://api.clique-pix.com';
       default:
-        // Dev: direct to Front Door FQDN until custom domain is configured
-        return 'https://fd-cliquepix-prod.azurefd.net';
+        return 'https://api.clique-pix.com';
     }
   }
 
