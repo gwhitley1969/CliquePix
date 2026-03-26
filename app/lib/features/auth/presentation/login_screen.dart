@@ -254,7 +254,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                             'Private photo sharing\nfor your inner circle',
                             style: TextStyle(
                               fontSize: 17,
-                              color: Colors.white.withValues(alpha: 0.6),
+                              color: Colors.white.withValues(alpha: 0.9),
                               height: 1.4,
                             ),
                             textAlign: TextAlign.center,
@@ -352,9 +352,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                           const SizedBox(height: 16),
 
                           Text(
-                            'Sign in with email, Google, or Apple',
+                            'Sign in with Google, Apple, or email',
                             style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.45),
+                              color: Colors.white.withValues(alpha: 0.9),
                               fontSize: 13,
                             ),
                           ),

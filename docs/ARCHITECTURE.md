@@ -74,12 +74,12 @@ Why Flutter for Clique Pix:
 
 | Layer | Service | Purpose |
 |-------|---------|---------|
-| Entry point | **Azure Front Door** | Global load balancing, SSL termination, WAF |
+| Entry point | **Azure Front Door** (Standard) | Global load balancing, SSL termination |
 | API gateway | **Azure API Management** | Rate limiting, API versioning, policy enforcement, single published API surface |
 | Compute | **Azure Functions** (TypeScript, Node.js) | REST API endpoints, timer-triggered cleanup, thumbnail generation |
 | Database | **PostgreSQL Flexible Server** | Relational data (users, circles, events, photos, reactions) |
 | Object storage | **Azure Blob Storage** | Photo originals and thumbnails |
-| Identity (consumer) | **Microsoft Entra External ID** | User authentication (magic link / OTP) |
+| Identity (consumer) | **Microsoft Entra External ID** | User authentication (Google, Apple, email OTP) |
 | Identity (infra) | **System-assigned managed identity** | Function App access to Blob Storage, Key Vault |
 | Secrets | **Azure Key Vault** | Database connection string, push notification credentials |
 | Observability | **Application Insights** | API telemetry, error tracking, dependency monitoring |
@@ -105,7 +105,7 @@ All API traffic follows this path — no exceptions:
 Flutter App → Azure Front Door → Azure API Management → Azure Functions → PostgreSQL / Blob Storage
 ```
 
-No direct Function App URLs are exposed to the client. APIM is the single published API surface. Front Door handles SSL, WAF, and global routing.
+No direct Function App URLs are exposed to the client. APIM is the single published API surface. Front Door handles SSL and global routing. Custom domain: `api.clique-pix.com`.
 
 ## Photo Upload Flow
 

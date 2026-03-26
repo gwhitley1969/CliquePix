@@ -29,8 +29,8 @@ Clique Pix is NOT a social network. It is a **private, real-time group photo sha
 ## 3. Target Audience
 
 Primary:
-- Women aged 21–45
-- Social groups (friends, brunch, girls night, trips, birthdays)
+- People aged 21–45
+- Social groups (friends, brunch, girls night, trips, birthdays, bachelor party)
 
 Secondary:
 - Mixed groups (friends, couples, events)
@@ -40,7 +40,7 @@ Secondary:
 ## 4. Core Concepts
 
 ### 4.1 Circle
-A persistent group of people (e.g., “Girls Night Out”)
+A persistent group of people (e.g., “Girls Night Out” or bachelor party)
 
 ### 4.2 Event
 A temporary shared photo session within a Circle
@@ -52,24 +52,14 @@ A temporary shared photo session within a Circle
 ## 5. Core Features (v1.0)
 
 ### 5.1 Authentication
-- Phone number or email-based signup
-- Magic link or OTP
+- Sign in with Google, Apple, or email OTP
+- Powered by Microsoft Entra External ID (CIAM)
 - Minimal friction onboarding
+- 5-layer token refresh defense for Entra's 12-hour timeout bug
 
 ---
 
-### 5.2 Circle Management
-- Create Circle
-- Invite users via:
-  - Link
-  - SMS
-  - QR code
-- View members
-- Leave Circle
-
----
-
-### 5.3 Event Creation
+### 5.2 Event Creation
 - Create Event inside Circle
 - Fields:
   - Event name
@@ -79,7 +69,21 @@ A temporary shared photo session within a Circle
 
 ---
 
+### 5.3 Circle Management
+
+- Create Circle
+- Invite users via:
+  - Link
+  - SMS
+  - QR code
+- View members
+- Leave Circle
+- Originator of circle can "remove" members as well
+
+------
+
 ### 5.4 In-App Camera
+
 - Capture photo directly in app
 - Basic editing tools:
   - Crop
@@ -121,7 +125,7 @@ A temporary shared photo session within a Circle
 ---
 
 ### 5.9 Save & Download
-- Save individual photo to device
+- Save individual photo to device or entire "event" of pics
 - Multi-select save (future enhancement)
 
 ---
@@ -194,14 +198,28 @@ A temporary shared photo session within a Circle
 - Electric Aqua: #00C2D1
 - Deep Blue: #2563EB
 - Violet Accent: #7C3AED
+- Pink Accent: #EC4899
 
-#### Secondary Colors
-- Soft Aqua Background: #E6FBFF
-- White Surface: #FFFFFF
+#### Surface Colors
+- Dark Background: #0E1525 (primary app background)
+- Dark Surface: #111827 (bottom nav, cards)
+- Dark Card: #1A1F35 (avatar backgrounds, elevated surfaces)
+- Soft Aqua Background: #E6FBFF (light accents where needed)
+- White Surface: #FFFFFF (content surfaces)
 
 #### Text Colors
-- Primary Text: #0F172A
-- Secondary Text: #64748B
+- Primary Text (on dark): #FFFFFF at 90% opacity
+- Secondary Text (on dark): #FFFFFF at 50% opacity
+- Primary Text (on light): #0F172A
+- Secondary Text (on light): #64748B
+
+#### Semantic Colors
+- Error: #DC2626
+- Success: #16A34A
+- Warning: #F59E0B
+
+#### Design Note
+The app uses a dark theme throughout, consistent from the login screen through all main screens (Circles, Notifications, Profile). Gradient accents from the primary colors provide vibrant contrast against the dark surfaces.
 
 ---
 
@@ -221,17 +239,17 @@ Used for:
 ### 8.4 Icon Design
 
 Concept:
-- Rounded square background
-- Aqua → blue → violet gradient
-- Centered white camera icon
-- Bold, slightly thickened camera outline
-- Prominent lens with subtle glow
+- Rounded square background with aqua → blue gradient
+- Centered white camera body with subtle depth/shadow
+- Prominent glass lens with aqua-to-deep-blue gradient and specular highlight
+- Pink/magenta accent dot (top-right of camera body)
+- Viewfinder bump on top of camera
 
 Design Rules:
-- Simple
-- Recognizable at small sizes
-- Pink/magenta accent dot adds personality and aids recognition at small sizes
-- Lens is focal point
+- Simple and recognizable at small sizes
+- Lens is the focal point — draws the eye immediately
+- Pink accent dot adds personality and aids recognition at icon scale
+- Generated via `flutter_launcher_icons` from a single 1024x1024 source
 
 ---
 
