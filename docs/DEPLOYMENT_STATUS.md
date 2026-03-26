@@ -14,7 +14,7 @@ Last updated: 2026-03-25
 | Database schema (001_initial_schema.sql) | Done | 8 tables, indexes, triggers |
 | Shared models (8 files) | Done | User, Circle, Event, Photo, Reaction, Notification, PushToken |
 | Shared utils (response, errors, validators) | Done | |
-| Shared services (db, blob, sas, fcm, telemetry) | Done | Code reviewed + fixed |
+| Shared services (db, blob, sas, fcm, telemetry) | Done | Code reviewed + 49 issues fixed |
 | Auth middleware (JWT via JWKS) | Done | Uses typed errors (UnauthorizedError, NotFoundError) |
 | Error handler middleware | Done | Correlation IDs via invocationId |
 | Auth functions (verify, getMe) | Done | |
@@ -31,36 +31,55 @@ Last updated: 2026-03-25
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| Project scaffold (pubspec.yaml, analysis_options) | Done | Needs `flutter create` from Windows terminal |
+| Project scaffold (pubspec.yaml, analysis_options) | Done | Flutter 3.35.5, Dart 3.9.2 |
+| Native scaffolding (Android/iOS) | Done | `flutter create` with org `com.cliquepix`, package `com.cliquepix.clique_pix` |
 | Design system (colors, gradients, typography, theme) | Done | Uses `withValues(alpha:)` (Flutter 3.27+) |
 | Constants (endpoints, app constants, environment) | Done | Domain: `clique-pix.com` |
 | Error types (sealed AppFailure, error mapper) | Done | |
 | Routing (GoRouter with shell route) | Done | Auth guard + deep link /invite/:code |
 | API client (Dio + 3 interceptors) | Done | Auth interceptor uses parent Dio for retry |
-| Token storage service | Done | Refresh callback mechanism |
-| Storage service (save to gallery + share download) | Done | |
+| Token storage service | Done | Refresh callback mechanism wired to MSAL |
+| Storage service (save to gallery + share download) | Done | Downloads to temp file before sharing |
 | Deep link service | Done | Host: clique-pix.com |
 | Shared widgets (7 widgets) | Done | CachedNetworkImageProvider for avatars |
-| Data models (5 models) | Done | PhotoModel includes status field |
-| Auth feature (API, state, repository, providers, UI) | Done | MSAL methods are placeholders; signOut cancels background jobs |
-| 5-layer token refresh (4 services + welcome back dialog) | Done | loginHint threaded through |
+| Data models (5 models) | Done | PhotoModel includes status field, reaction IDs tracked |
+| Auth feature (MSAL integration) | Done | `msal_auth` 3.3.0, interactive + silent sign-in, token refresh |
+| 5-layer token refresh defense | Done | All layers wired; loginHint threaded through Layer 5 |
 | Circles feature (API, repository, providers, 5 screens) | Done | joinByInviteCode dedicated API method |
 | Events feature (API, repository, providers, 3 screens) | Done | |
 | Photos feature (API, repository, services, providers, 6 screens/widgets) | Done | Compression constrains max dim without upscaling; feed polls every 30s |
 | Notifications feature (API, repository, providers, 1 screen) | Done | |
 | Profile feature (1 screen) | Done | |
-| App entry point (main, app, shell) | Done | |
-| All API providers wired to ApiClient | Done | No more UnimplementedError |
-| Android manifest | Done | 5-layer permissions, App Links, FCM |
-| iOS Info.plist | Done | Camera/photo permissions, background modes |
+| App entry point (main.dart) | Done | Firebase, timezone, WorkManager, notifications initialized |
+| All API providers wired to ApiClient | Done | No UnimplementedError providers |
+| App launcher icon | Done | Clique Pix camera logo at all Android densities |
+| Login screen | Done | Dark gradient, animated glowing logo, slide-in animations |
+| Android manifest | Done | Permissions, App Links, FCM, MSAL BrowserTabActivity |
+| iOS Info.plist | Done | Camera/photo permissions, background modes, MSAL URL schemes |
+| Firebase config (Android) | Done | `google-services.json` placed in `android/app/` |
+| Firebase config (iOS) | Done | `GoogleService-Info.plist` placed in `ios/Runner/` |
 
-### Infrastructure as Code
+### Website (clique-pix.com)
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| .gitignore | Done | |
-| Well-known files (apple-app-site-association, assetlinks.json) | Done | assetlinks.json needs SHA256 fingerprint |
-| Documentation (ARCHITECTURE.md, PRD.md, ENTRA_REFRESH_TOKEN_WORKAROUND.md) | Done | Domain corrected to clique-pix.com |
+| Landing page (index.html) | Done | Brand design, feature highlights, download CTAs |
+| Privacy policy (privacy.html) | Done | Photo sharing-specific, Xtend-AI LLC, NC jurisdiction |
+| Terms of service (terms.html) | Done | 16 sections, effective March 25, 2026 |
+| Static Web App config | Done | MIME types for well-known files, security headers |
+| Well-known files | Done | apple-app-site-association + assetlinks.json (placeholders for Team ID / SHA256) |
+| Azure Static Web App | Done | `swa-cliquepix-prod`, Free tier |
+| Custom domains | Done | `clique-pix.com` (apex) + `www.clique-pix.com`, managed SSL |
+
+### Documentation
+
+| Component | Status | Notes |
+|-----------|--------|-------|
+| .gitignore | Done | Firebase admin SDK key pattern added |
+| ARCHITECTURE.md | Done | Domain corrected to clique-pix.com |
+| PRD.md | Done | |
+| CLAUDE.md | Done | Domain corrected, PostgreSQL updated to pg-cliquepixdb |
+| ENTRA_REFRESH_TOKEN_WORKAROUND.md | Done | |
 
 ---
 
@@ -68,19 +87,20 @@ Last updated: 2026-03-25
 
 ### All Resources (in `rg-cliquepix-prod`)
 
-| Resource | Name | Status |
-|----------|------|--------|
-| Resource Group | `rg-cliquepix-prod` | Ready (eastus) |
-| Log Analytics | `log-cliquepix-prod` | Ready (eastus) |
-| Application Insights | `appi-cliquepix-prod` | Ready (eastus, workspace-based) |
-| Function App | `func-cliquepix-fresh` | Ready — 26 functions deployed, health responding |
-| Storage Account | `stcliquepixprod` | Ready — `photos` container created, blob public access disabled |
-| PostgreSQL | `pg-cliquepixdb` | Ready (eastus2, v18) — `cliquepix` DB with 8 tables |
-| Key Vault | `kv-cliquepix-prod` | Ready — `pg-connection-string` stored |
-| API Management | `apim-cliquepix-002` | Ready — CliquePix API v1 imported, 5 catch-all operations |
-| Front Door | `fd-cliquepix-prod` | Ready — Standard SKU (no WAF), routing to APIM |
-| DNS Zone | `clique-pix.com` | Ready — `api` CNAME → Front Door |
-| Entra External ID | `cliquepix.onmicrosoft.com` | Exists — needs app registration + email OTP config |
+| Resource | Name | Location | Status |
+|----------|------|----------|--------|
+| Resource Group | `rg-cliquepix-prod` | eastus | Ready |
+| Log Analytics | `log-cliquepix-prod` | eastus | Ready |
+| Application Insights | `appi-cliquepix-prod` | eastus | Ready (workspace-based) |
+| Function App | `func-cliquepix-fresh` | eastus | Ready — 26 functions deployed |
+| Storage Account | `stcliquepixprod` | eastus | Ready — `photos` container, blob public access disabled |
+| PostgreSQL | `pg-cliquepixdb` | eastus2 | Ready — v18, `cliquepix` DB with 8 tables |
+| Key Vault | `kv-cliquepix-prod` | eastus | Ready — `pg-connection-string` + `fcm-credentials` stored |
+| API Management | `apim-cliquepix-002` | eastus | Ready — Developer SKU, API imported, rate limiting configured |
+| Front Door | `fd-cliquepix-prod` | global | Ready — Standard SKU (no WAF) |
+| Static Web App | `swa-cliquepix-prod` | eastus2 | Ready — clique-pix.com + www |
+| DNS Zone | `clique-pix.com` | global | Ready — api CNAME, apex ALIAS, www CNAME, TXT validation |
+| Entra External ID | `cliquepix.onmicrosoft.com` | — | Ready — app registered, 3 identity providers |
 
 ### Deleted Resources
 
@@ -106,7 +126,70 @@ Health endpoint confirmed at:
 - `https://func-cliquepix-fresh.azurewebsites.net/api/health`
 - `https://apim-cliquepix-002.azure-api.net/api/health`
 - `https://cliquepix-api-fcc6b7f4enathbac.z02.azurefd.net/api/health`
-- `https://api.clique-pix.com/api/health` (pending managed certificate propagation)
+- `https://api.clique-pix.com/api/health`
+
+### APIM Rate Limiting Policies
+
+| Scope | Limit | Operation |
+|-------|-------|-----------|
+| Global (all operations) | 60 requests/min per IP | API-level policy |
+| Upload URL | 10 requests/min per IP | `POST /events/{eventId}/photos/upload-url` |
+| Auth verify | 5 requests/min per IP | `POST /auth/verify` |
+
+### Function App Settings
+
+| Setting | Value | Source |
+|---------|-------|--------|
+| `PG_CONNECTION_STRING` | Key Vault reference | `kv-cliquepix-prod/pg-connection-string` |
+| `FCM_CREDENTIALS` | Key Vault reference | `kv-cliquepix-prod/fcm-credentials` |
+| `STORAGE_ACCOUNT_NAME` | `stcliquepixprod` | Direct |
+| `ENTRA_TENANT_ID` | `27748e01-d49f-4f0b-b78f-b97c16be69dc` | Direct (CIAM tenant) |
+| `ENTRA_CLIENT_ID` | `7db01206-135b-4a34-a4d5-2622d1a888bf` | Direct |
+| `APPLICATIONINSIGHTS_CONNECTION_STRING` | App Insights connection string | Direct |
+| `NODE_ENV` | `production` | Direct |
+
+### Entra External ID Configuration
+
+| Component | Status | Details |
+|-----------|--------|---------|
+| CIAM Tenant | `cliquepix.onmicrosoft.com` | Tenant ID: `27748e01-d49f-4f0b-b78f-b97c16be69dc` |
+| App Registration | `Clique Pix` | Client ID: `7db01206-135b-4a34-a4d5-2622d1a888bf` |
+| Redirect URI (Android debug) | Configured | `msauth://com.cliquepix.clique_pix/<signing_hash>` |
+| Email OTP | Enabled | Primary sign-in method |
+| Google Identity Provider | Configured | OAuth client via Google Cloud Console |
+| Apple Identity Provider | Configured | Service ID: `com.cliquepix.app.service`, Key ID: `4NYXZNV9VD` |
+| User Flow | `SignUpSignIn` | Email OTP + Google + Apple, Clique Pix app associated |
+
+### Firebase Configuration
+
+| Component | Status | Details |
+|-----------|--------|---------|
+| Firebase Project | `Clique Pix` | Project ID: `clique-pix-d7fde` |
+| Cloud Messaging (FCM) | Enabled | V1 API |
+| Android app | Registered | Package: `com.cliquepix.clique_pix` |
+| iOS app | Registered | Bundle ID: `com.cliquepix.app` |
+| Service account key | Stored | Key Vault: `kv-cliquepix-prod/fcm-credentials` |
+| google-services.json | Placed | `app/android/app/google-services.json` (gitignored) |
+| GoogleService-Info.plist | Placed | `app/ios/Runner/GoogleService-Info.plist` (gitignored) |
+
+### Google OAuth Configuration
+
+| Component | Status | Details |
+|-----------|--------|---------|
+| Google Cloud Project | `Clique Pix` | |
+| OAuth consent screen | Configured | External, Testing mode |
+| Authorized domains | Set | `ciamlogin.com`, `microsoftonline.com`, `clique-pix.com` |
+| OAuth client | Web application | For Entra federation (server-to-server) |
+| App domain URLs | Set | Home: `https://clique-pix.com`, Privacy: `/privacy.html`, Terms: `/terms.html` |
+
+### Apple Sign In Configuration
+
+| Component | Status | Details |
+|-----------|--------|---------|
+| App ID | `com.cliquepix.app` | Team ID: `4ML27KY869` |
+| Services ID | `com.cliquepix.app.service` | Sign In with Apple configured with CIAM domains |
+| Key | `CliquePix Sign In` | Key ID: `4NYXZNV9VD` |
+| Client secret (.p8) | Active | **Renewal required: September 2026** |
 
 ### Configuration Notes
 
@@ -118,51 +201,60 @@ Health endpoint confirmed at:
 | Function App plan | Consumption (Linux) | EastUSLinuxDynamicPlan |
 | Deployment method | Run-from-package (blob SAS) | Windows→Linux zip requires Python zipfile for forward slashes |
 | Front Door endpoint | `cliquepix-api-fcc6b7f4enathbac.z02.azurefd.net` | |
-| Custom domain | `api.clique-pix.com` | CNAME + managed certificate |
+| Custom domain (API) | `api.clique-pix.com` | CNAME → Front Door, managed certificate |
+| Custom domain (website) | `clique-pix.com` + `www.clique-pix.com` | ALIAS/CNAME → Static Web App |
+| Android package name | `com.cliquepix.clique_pix` | Generated by `flutter create --org com.cliquepix` |
+| iOS bundle ID | `com.cliquepix.app` | |
+| MSAL package | `msal_auth: ^3.3.0` | Replaced `msal_flutter` (v1 embedding incompatible with Flutter 3.35) |
+
+---
+
+## Code Review Summary (2026-03-25)
+
+49 issues found and fixed across 7 commits:
+
+| Severity | Count | Examples |
+|----------|-------|---------|
+| Critical | 13 | Blob path prefix, SAS permissions, TLS validation, telemetry init, auth wiring |
+| High | 18 | Missing telemetry events, image compression, blob upload streaming, reaction IDs |
+| Medium | 12 | Feed polling, notification dedup, error interceptor, HEIC detection |
+| Low | 5 | Health envelope, deprecated withOpacity, correlation IDs, barrel exports |
 
 ---
 
 ## Remaining Tasks
 
-### Azure Configuration (Portal / Manual)
+### In Progress
 
 | Task | Status | Notes |
 |------|--------|-------|
-| Entra: register CliquePix app | Not done | Get tenant ID + client ID |
-| Entra: configure email OTP / magic link | Not done | |
-| Update Function App `ENTRA_CLIENT_ID` setting | Not done | Currently set to placeholder |
-| Firebase: create project + enable FCM | Not done | |
-| Firebase: download google-services.json | Not done | For Android |
-| Firebase: download GoogleService-Info.plist | Not done | For iOS |
-| Key Vault: add `fcm-credentials` secret | Not done | After Firebase project created |
-| APIM: rate limiting policies | Not done | Global 60/min, uploads 10/min, auth 5/min |
+| MSAL authentication flow | Debugging | BrowserTabActivity intent filter validation error — redirect URI configuration being resolved |
+
+### Not Started
+
+| Task | Status | Notes |
+|------|--------|-------|
 | APIM: X-Azure-FDID header validation | Not done | Restrict APIM to Front Door traffic only |
-
-### Flutter Integration
-
-| Task | Status | Notes |
-|------|--------|-------|
-| Run `flutter create` from Windows terminal | Not done | Generates gradle/Xcode project files |
-| Complete MSAL integration | Not done | signIn, silentSignIn, refreshToken are placeholders |
-| Add google-services.json (Android) | Not done | After Firebase project |
-| Add GoogleService-Info.plist (iOS) | Not done | After Firebase project |
-| Build and test on real devices | Not done | |
+| Well-known files: update placeholders | Not done | Need Apple Team ID for AASA, Android signing SHA256 for assetlinks.json |
+| Login screen: social sign-in buttons | Not done | Currently single "Get Started" button opens MSAL; could add explicit Google/Apple buttons |
+| Release signing key | Not done | Needed for production APK and Play Store |
+| App Store / Play Store submission | Not done | |
 
 ### End-to-End Validation
 
 | Step | Status |
 |------|--------|
-| 1. Sign up / sign in | Not done |
-| 2. Create a Circle | Not done |
-| 3. Generate invite link/QR | Not done |
-| 4. Join Circle via invite | Not done |
-| 5. Create Event (24h/3d/7d) | Not done |
-| 6. Capture photo in-app | Not done |
-| 7. Upload photo (compress → SAS → blob → confirm) | Not done |
-| 8. See photo in feed | Not done |
-| 9. React to photo | Not done |
-| 10. Save photo to device | Not done |
-| 11. Share photo externally | Not done |
-| 12. Receive push notification | Not done |
-| 13. Auto-deletion after expiry | Not done |
-| 14. Graceful re-login (Layer 5) | Not done |
+| 1. Sign up / sign in | In progress (debugging MSAL) |
+| 2. Create a Circle | Not tested |
+| 3. Generate invite link/QR | Not tested |
+| 4. Join Circle via invite | Not tested |
+| 5. Create Event (24h/3d/7d) | Not tested |
+| 6. Capture photo in-app | Not tested |
+| 7. Upload photo (compress → SAS → blob → confirm) | Not tested |
+| 8. See photo in feed | Not tested |
+| 9. React to photo | Not tested |
+| 10. Save photo to device | Not tested |
+| 11. Share photo externally | Not tested |
+| 12. Receive push notification | Not tested |
+| 13. Auto-deletion after expiry | Not tested |
+| 14. Graceful re-login (Layer 5) | Not tested |
