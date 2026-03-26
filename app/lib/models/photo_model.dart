@@ -33,6 +33,13 @@ class PhotoModel {
     required this.expiresAt,
   });
 
+  static int? _toInt(dynamic v) {
+    if (v == null) return null;
+    if (v is num) return v.toInt();
+    if (v is String) return int.tryParse(v);
+    return null;
+  }
+
   factory PhotoModel.fromJson(Map<String, dynamic> json) {
     return PhotoModel(
       id: json['id'] as String,
@@ -42,12 +49,12 @@ class PhotoModel {
       originalUrl: json['original_url'] as String?,
       thumbnailUrl: json['thumbnail_url'] as String?,
       mimeType: json['mime_type'] as String?,
-      width: (json['width'] as num?)?.toInt(),
-      height: (json['height'] as num?)?.toInt(),
-      fileSizeBytes: (json['file_size_bytes'] as num?)?.toInt(),
+      width: _toInt(json['width']),
+      height: _toInt(json['height']),
+      fileSizeBytes: _toInt(json['file_size_bytes']),
       status: json['status'] as String? ?? 'active',
       reactionCounts: (json['reaction_counts'] as Map<String, dynamic>?)
-          ?.map((k, v) => MapEntry(k, (v as num).toInt())) ?? {},
+          ?.map((k, v) => MapEntry(k, _toInt(v) ?? 0)) ?? {},
       userReactions: (json['user_reactions'] as List<dynamic>?)
           ?.map((e) {
             if (e is String) return (id: '', type: e);

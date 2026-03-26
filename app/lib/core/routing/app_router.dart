@@ -7,6 +7,7 @@ import '../../features/circles/presentation/create_circle_screen.dart';
 import '../../features/circles/presentation/circle_detail_screen.dart';
 import '../../features/circles/presentation/invite_screen.dart';
 import '../../features/circles/presentation/join_circle_screen.dart';
+import '../../features/events/presentation/events_home_screen.dart';
 import '../../features/events/presentation/events_list_screen.dart';
 import '../../features/events/presentation/create_event_screen.dart';
 import '../../features/events/presentation/event_detail_screen.dart';
@@ -22,7 +23,7 @@ final routerProvider = Provider<GoRouter>((ref) {
   final authState = ref.watch(authStateProvider);
 
   return GoRouter(
-    initialLocation: '/circles',
+    initialLocation: '/events',
     redirect: (context, state) {
       final isAuthenticated = authState is AuthAuthenticated;
       final isLoginRoute = state.matchedLocation == '/login';
@@ -32,7 +33,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         return '/login';
       }
       if (isAuthenticated && isLoginRoute) {
-        return '/circles';
+        return '/events';
       }
       return null;
     },
@@ -52,6 +53,24 @@ final routerProvider = Provider<GoRouter>((ref) {
           navigationShell: navigationShell,
         ),
         branches: [
+          // Tab 1: Events (home)
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/events',
+                builder: (context, state) => const EventsHomeScreen(),
+                routes: [
+                  GoRoute(
+                    path: 'create',
+                    builder: (context, state) => CreateEventScreen(
+                      circleId: state.uri.queryParameters['circleId'],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          // Tab 2: Circles
           StatefulShellBranch(
             routes: [
               GoRoute(
@@ -79,14 +98,6 @@ final routerProvider = Provider<GoRouter>((ref) {
                         builder: (context, state) => EventsListScreen(
                           circleId: state.pathParameters['circleId']!,
                         ),
-                        routes: [
-                          GoRoute(
-                            path: 'create',
-                            builder: (context, state) => CreateEventScreen(
-                              circleId: state.pathParameters['circleId']!,
-                            ),
-                          ),
-                        ],
                       ),
                     ],
                   ),
@@ -94,6 +105,7 @@ final routerProvider = Provider<GoRouter>((ref) {
               ),
             ],
           ),
+          // Tab 3: Notifications
           StatefulShellBranch(
             routes: [
               GoRoute(
@@ -102,6 +114,7 @@ final routerProvider = Provider<GoRouter>((ref) {
               ),
             ],
           ),
+          // Tab 4: Profile
           StatefulShellBranch(
             routes: [
               GoRoute(
@@ -112,6 +125,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
         ],
       ),
+      // Event detail routes (outside shell for full-screen experience)
       GoRoute(
         path: '/events/:eventId',
         builder: (context, state) => EventDetailScreen(

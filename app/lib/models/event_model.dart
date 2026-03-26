@@ -7,6 +7,8 @@ class EventModel {
   final int retentionHours;
   final String status;
   final int photoCount;
+  final String? circleName;
+  final int? memberCount;
   final DateTime createdAt;
   final DateTime expiresAt;
 
@@ -19,6 +21,8 @@ class EventModel {
     required this.retentionHours,
     required this.status,
     this.photoCount = 0,
+    this.circleName,
+    this.memberCount,
     required this.createdAt,
     required this.expiresAt,
   });
@@ -37,6 +41,8 @@ class EventModel {
       retentionHours: (json['retention_hours'] as num).toInt(),
       status: json['status'] as String,
       photoCount: (json['photo_count'] as num?)?.toInt() ?? 0,
+      circleName: json['circle_name'] as String?,
+      memberCount: (json['member_count'] as num?)?.toInt(),
       createdAt: DateTime.parse(json['created_at'] as String),
       expiresAt: DateTime.parse(json['expires_at'] as String),
     );

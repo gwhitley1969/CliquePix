@@ -10,6 +10,11 @@ class EventsRepository {
     return EventModel.fromJson(data);
   }
 
+  Future<List<EventModel>> listAllEvents() async {
+    final data = await api.listAllEvents();
+    return data.map((e) => EventModel.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
   Future<List<EventModel>> listEvents(String circleId) async {
     final data = await api.listEvents(circleId);
     return data.map((e) => EventModel.fromJson(e as Map<String, dynamic>)).toList();

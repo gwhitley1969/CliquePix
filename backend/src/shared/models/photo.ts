@@ -23,4 +23,5 @@ export interface PhotoWithUrls extends Photo {
   thumbnail_url: string | null;
   reaction_counts: Record<string, number>;
   user_reactions: string[];
+  uploaded_by_name?: string;
 }

@@ -31,9 +31,8 @@ This is not a "someday" architecture. This is what we build and deploy.
 Everything in the architecture must support this loop:
 
 1. User signs in
-2. User creates or joins a Circle
-3. User creates an Event
-4. User takes or uploads a photo
+2. User creates an Event (picks or creates a Circle during creation)
+3. User takes or uploads a photo
 5. Photo is compressed on-device and uploaded directly to Blob Storage
 6. Other event members are notified via push
 7. Event feed displays the photo (thumbnail in feed, full-size on tap)
@@ -61,6 +60,7 @@ Why Flutter for Clique Pix:
 | State management | Riverpod |
 | HTTP client | Dio |
 | Image picker | image_picker |
+| Image editor | pro_image_editor (^5.1.4 — crop, draw, stickers, emoji, filters, text) |
 | Image compression | flutter_image_compress |
 | Secure token storage | flutter_secure_storage |
 | Non-sensitive flags | shared_preferences |
@@ -451,11 +451,21 @@ Both roles are required on the storage account.
 ## Client Side (Before Upload)
 
 1. User captures photo or selects from gallery
-2. Strip EXIF data (removes GPS coordinates, device info, timestamps)
-3. Resize: longest edge max 2048px, maintain aspect ratio
-4. Compress: JPEG quality 80
-5. Convert HEIC to JPEG on-device before upload
-6. Reject files over 10MB after compression (safety net)
+2. User edits photo in `pro_image_editor` (crop, draw, stickers, emoji, filters, text)
+3. Strip EXIF data (removes GPS coordinates, device info, timestamps)
+4. Resize: longest edge max 2048px, maintain aspect ratio
+5. Compress: JPEG quality 80
+6. Convert HEIC to JPEG on-device before upload
+7. Reject files over 10MB after compression (safety net)
+
+### ProImageEditor Callback Pattern (v5.x)
+
+ProImageEditor v5.x's `doneEditing()` calls `onImageEditingComplete` first (and awaits it), then **always** calls `onCloseEditor` afterward. The correct integration pattern:
+
+- **`onImageEditingComplete`**: Save edited bytes to a temp file. Do NOT call `Navigator.pop()` — ProImageEditor will call `onCloseEditor` next.
+- **`onCloseEditor`**: Call `Navigator.pop()` to dismiss the editor. If edited bytes were saved, update state to show the preview/upload screen.
+
+Calling `Navigator.pop()` in both callbacks causes a double-pop that removes both the editor and the parent screen.
 
 ### Compression Rationale
 

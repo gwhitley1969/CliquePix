@@ -108,11 +108,15 @@ class CirclesListScreen extends ConsumerWidget {
             ),
           ],
         ),
-        child: FloatingActionButton(
+        child: FloatingActionButton.extended(
           onPressed: () => context.go('/circles/create'),
           backgroundColor: Colors.transparent,
           elevation: 0,
-          child: const Icon(Icons.add_rounded, color: Colors.white, size: 28),
+          icon: const Icon(Icons.add_rounded, color: Colors.white, size: 22),
+          label: const Text(
+            'Create Circle',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15),
+          ),
         ),
       ),
     );

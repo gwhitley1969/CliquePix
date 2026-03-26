@@ -284,21 +284,25 @@ async function listPhotos(req: HttpRequest, context: InvocationContext): Promise
     // Fetch photos with cursor-based pagination
     let photos: Photo[];
     if (cursorParam) {
-      photos = await query<Photo>(
-        `SELECT * FROM photos
-         WHERE event_id = $1 AND status = 'active' AND created_at < $2
-         ORDER BY created_at DESC
+      photos = await query<Photo & { uploaded_by_name: string }>(
+        `SELECT p.*, u.display_name AS uploaded_by_name
+         FROM photos p
+         JOIN users u ON p.uploaded_by_user_id = u.id
+         WHERE p.event_id = $1 AND p.status = 'active' AND p.created_at < $2
+         ORDER BY p.created_at DESC
          LIMIT $3`,
         [eventId, cursorParam, limit],
-      );
+      ) as Photo[];
     } else {
-      photos = await query<Photo>(
-        `SELECT * FROM photos
-         WHERE event_id = $1 AND status = 'active'
-         ORDER BY created_at DESC
+      photos = await query<Photo & { uploaded_by_name: string }>(
+        `SELECT p.*, u.display_name AS uploaded_by_name
+         FROM photos p
+         JOIN users u ON p.uploaded_by_user_id = u.id
+         WHERE p.event_id = $1 AND p.status = 'active'
+         ORDER BY p.created_at DESC
          LIMIT $2`,
         [eventId, limit],
-      );
+      ) as Photo[];
     }
 
     // Batch-fetch reaction counts and user reactions for all photos

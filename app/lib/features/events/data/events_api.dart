@@ -17,6 +17,11 @@ class EventsApi {
     return response.data['data'] as Map<String, dynamic>;
   }
 
+  Future<List<dynamic>> listAllEvents() async {
+    final response = await dio.get(ApiEndpoints.events);
+    return response.data['data'] as List<dynamic>;
+  }
+
   Future<List<dynamic>> listEvents(String circleId) async {
     final response = await dio.get(ApiEndpoints.circleEvents(circleId));
     return response.data['data'] as List<dynamic>;

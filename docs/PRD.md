@@ -39,13 +39,16 @@ Secondary:
 
 ## 4. Core Concepts
 
-### 4.1 Circle
-A persistent group of people (e.g., “Girls Night Out” or bachelor party)
-
-### 4.2 Event
-A temporary shared photo session within a Circle
+### 4.1 Event
+A temporary shared photo session — the primary action in Clique Pix
 - Example: “Friday Night – Downtown”
 - Duration: 24 hours, 3 days, or 7 days (default)
+- Created first, then assigned to a Circle
+
+### 4.2 Circle
+A persistent group of people (e.g., “Girls Night Out” or bachelor party)
+- Reusable across multiple Events
+- Created during Event creation or independently
 
 ---
 
@@ -60,12 +63,13 @@ A temporary shared photo session within a Circle
 ---
 
 ### 5.2 Event Creation
-- Create Event inside Circle
+- Events are the primary action — create Event first
 - Fields:
   - Event name
   - Optional description
   - Duration (24h / 3 days / 7 days — three presets only, default 7 days)
-- Start Event button
+  - Circle picker (select existing Circle or create new one inline)
+- Create Event button
 
 ---
 
@@ -82,14 +86,17 @@ A temporary shared photo session within a Circle
 
 ------
 
-### 5.4 In-App Camera
+### 5.4 In-App Camera & Photo Editor
 
-- Capture photo directly in app
-- Basic editing tools:
-  - Crop
-  - Brightness
-  - Contrast
-  - Simple filters
+- Capture photo directly in app or select from gallery
+- Full editing suite via `pro_image_editor`:
+  - Crop & rotate
+  - Drawing / painting (freehand with color picker)
+  - Text overlays
+  - Emoji stickers
+  - Photo filters (preset)
+  - Brightness / contrast / saturation tuning
+- Flow: Pick photo → Edit → Preview with prominent "Upload to Event" button → Upload with progress
 
 ---
 
@@ -283,14 +290,13 @@ Why Flutter for Clique Pix:
 
 ## 10. Key User Flow
 
-1. User opens app
-2. Creates or joins Circle
-3. Starts Event
-4. Takes or uploads photo
-5. Shares to Event
-6. Group receives notification
-7. Members view/save/react
-8. Photos auto-delete after duration
+1. User opens app → lands on Events tab (home)
+2. Creates Event (name, duration, pick or create Circle)
+3. Takes or uploads photo
+4. Shares to Event
+5. Group receives notification
+6. Members view/save/react
+7. Photos auto-delete after duration
 
 ---
 

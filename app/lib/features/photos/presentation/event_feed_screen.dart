@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_constants.dart';
-import '../../../widgets/empty_state_widget.dart';
+import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_gradients.dart';
 import '../../../widgets/error_widget.dart';
 import '../../../widgets/loading_shimmer.dart';
 import 'photos_providers.dart';
@@ -39,20 +41,44 @@ class _EventFeedScreenState extends ConsumerState<EventFeedScreen> {
     final photosAsync = ref.watch(eventPhotosProvider(widget.eventId));
 
     return photosAsync.when(
-      loading: () => ListView.builder(
+      loading: () {
+        debugPrint('[CliquePix] EventFeed: loading photos for ${widget.eventId}');
+        return ListView.builder(
         itemCount: 3,
         itemBuilder: (_, __) => const PhotoCardShimmer(),
-      ),
-      error: (err, _) => AppErrorWidget(
+      );},
+      error: (err, _) {
+        debugPrint('[CliquePix] EventFeed: error=$err');
+        return AppErrorWidget(
         message: err.toString(),
         onRetry: () => ref.invalidate(eventPhotosProvider(widget.eventId)),
-      ),
+      );},
       data: (photos) {
+        debugPrint('[CliquePix] EventFeed: loaded ${photos.length} photos');
         if (photos.isEmpty) {
-          return const EmptyStateWidget(
-            icon: Icons.photo_camera_outlined,
-            title: 'No photos yet',
-            subtitle: 'Be the first to share a photo!',
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ShaderMask(
+                    shaderCallback: (bounds) => AppGradients.primary.createShader(bounds),
+                    child: const Icon(Icons.photo_camera_outlined, size: 56, color: Colors.white),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'No photos yet',
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: Colors.white),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Be the first to share a photo!',
+                    style: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.5)),
+                  ),
+                ],
+              ),
+            ),
           );
         }
 

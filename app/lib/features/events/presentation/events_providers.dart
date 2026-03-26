@@ -13,6 +13,23 @@ final eventsRepositoryProvider = Provider<EventsRepository>((ref) {
   return EventsRepository(ref.watch(eventsApiProvider));
 });
 
+final allEventsListProvider = AsyncNotifierProvider<AllEventsNotifier, List<EventModel>>(() {
+  return AllEventsNotifier();
+});
+
+class AllEventsNotifier extends AsyncNotifier<List<EventModel>> {
+  @override
+  Future<List<EventModel>> build() async {
+    final repo = ref.watch(eventsRepositoryProvider);
+    return repo.listAllEvents();
+  }
+
+  Future<void> refresh() async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(() => ref.read(eventsRepositoryProvider).listAllEvents());
+  }
+}
+
 final eventsListProvider = FutureProvider.family<List<EventModel>, String>((ref, circleId) async {
   final repo = ref.watch(eventsRepositoryProvider);
   return repo.listEvents(circleId);

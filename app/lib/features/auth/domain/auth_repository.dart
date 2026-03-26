@@ -112,6 +112,17 @@ class AuthRepository {
     await tokenStorage.clearAll();
   }
 
+  /// Clear MSAL cached account and force fresh PCA on next attempt.
+  /// Used to recover from corrupted/stale MSAL sessions.
+  Future<void> resetSession() async {
+    try {
+      final pca = await _getOrCreatePca();
+      await pca.signOut();
+    } catch (_) {}
+    _pca = null;
+    await tokenStorage.clearAll();
+  }
+
   /// Attempt silent token refresh via MSAL.
   /// Returns true on success, false on failure.
   Future<bool> refreshToken() async {

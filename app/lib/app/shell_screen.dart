@@ -32,10 +32,20 @@ class ShellScreen extends StatelessWidget {
           labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
           destinations: [
             NavigationDestination(
-              icon: Icon(Icons.group_outlined, color: Colors.white.withValues(alpha: 0.4)),
+              icon: Icon(Icons.camera_alt_outlined, color: Colors.white.withValues(alpha: 0.4)),
               selectedIcon: ShaderMask(
                 shaderCallback: (bounds) => const LinearGradient(
                   colors: [AppColors.electricAqua, AppColors.deepBlue],
+                ).createShader(bounds),
+                child: const Icon(Icons.camera_alt, color: Colors.white),
+              ),
+              label: 'Events',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.group_outlined, color: Colors.white.withValues(alpha: 0.4)),
+              selectedIcon: ShaderMask(
+                shaderCallback: (bounds) => const LinearGradient(
+                  colors: [AppColors.deepBlue, AppColors.violetAccent],
                 ).createShader(bounds),
                 child: const Icon(Icons.group, color: Colors.white),
               ),
@@ -45,7 +55,7 @@ class ShellScreen extends StatelessWidget {
               icon: Icon(Icons.notifications_outlined, color: Colors.white.withValues(alpha: 0.4)),
               selectedIcon: ShaderMask(
                 shaderCallback: (bounds) => const LinearGradient(
-                  colors: [AppColors.deepBlue, AppColors.violetAccent],
+                  colors: [AppColors.violetAccent, Color(0xFFEC4899)],
                 ).createShader(bounds),
                 child: const Icon(Icons.notifications, color: Colors.white),
               ),
@@ -55,7 +65,7 @@ class ShellScreen extends StatelessWidget {
               icon: Icon(Icons.person_outlined, color: Colors.white.withValues(alpha: 0.4)),
               selectedIcon: ShaderMask(
                 shaderCallback: (bounds) => const LinearGradient(
-                  colors: [AppColors.violetAccent, Color(0xFFEC4899)],
+                  colors: [Color(0xFFEC4899), AppColors.electricAqua],
                 ).createShader(bounds),
                 child: const Icon(Icons.person, color: Colors.white),
               ),

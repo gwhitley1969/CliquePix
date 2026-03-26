@@ -36,18 +36,18 @@ Last updated: 2026-03-26
 | Design system (colors, gradients, typography, theme) | Done | Dark theme throughout, uses `withValues(alpha:)` (Flutter 3.27+) |
 | Constants (endpoints, app constants, environment) | Done | Domain: `clique-pix.com` |
 | Error types (sealed AppFailure, error mapper) | Done | |
-| Routing (GoRouter with shell route) | Done | Auth guard + deep link /invite/:code |
+| Routing (GoRouter with shell route) | Done | Event-first flow, 4 tabs, auth guard + deep link /invite/:code |
 | API client (Dio + 3 interceptors) | Done | Auth interceptor uses parent Dio for retry |
 | Token storage service | Done | Refresh callback mechanism wired to MSAL |
 | Storage service (save to gallery + share download) | Done | Downloads to temp file before sharing |
 | Deep link service | Done | Host: clique-pix.com |
 | Shared widgets (7 widgets) | Done | Gradient-ringed avatars, dark-themed bottom nav with gradient icons |
-| Data models (5 models) | Done | PhotoModel includes status field, reaction IDs tracked |
-| Auth feature (MSAL integration) | Done | `msal_auth` 3.3.0, custom API scope `access_as_user`, interactive + silent sign-in, token refresh |
+| Data models (5 models) | Done | PhotoModel with resilient num/string parsing, EventModel with circleName/memberCount |
+| Auth feature (MSAL integration) | Done | `msal_auth` 3.3.0, custom API scope, auto-login on startup, MSAL error recovery, dismiss button |
 | 5-layer token refresh defense | Done | All layers wired; loginHint threaded through Layer 5 |
-| Circles feature (API, repository, providers, 5 screens) | Done | Dark theme, gradient-bordered cards, gradient-ringed avatars, joinByInviteCode |
-| Events feature (API, repository, providers, 3 screens) | Done | |
-| Photos feature (API, repository, services, providers, 6 screens/widgets) | Done | Compression constrains max dim without upscaling; feed polls every 30s |
+| Circles feature (API, repository, providers, 5 screens) | Done | Dark theme, gradient-bordered cards, gradient-ringed avatars, labeled "Create Circle" FAB |
+| Events feature (API, repository, providers, 4 screens) | Done | Event-first flow, events home screen, dark-themed event detail with hero header, labeled "Create Event" FAB, `listAllEvents` backend endpoint |
+| Photos feature (API, repository, services, providers, 6 screens/widgets) | Done | `pro_image_editor` for crop/draw/stickers/filters, prominent "Upload to Event" button, step-by-step progress overlay, `uploaded_by_name` in responses, debug logging throughout pipeline |
 | Notifications feature (API, repository, providers, 1 screen) | Done | Dark theme, colored icon badges, unread/read styling |
 | Profile feature (1 screen) | Done | Dark theme, gradient profile card, grouped settings with gradient icons |
 | App entry point (main.dart) | Done | Firebase, timezone, WorkManager, notifications initialized |
@@ -244,6 +244,19 @@ Four bugs were found and fixed in the MSAL → Backend authentication chain:
 
 ---
 
+## Photo Upload Pipeline Fix Summary (2026-03-26)
+
+The photo upload pipeline appeared completely broken — photos never appeared after capture. Root cause: a **double-pop navigation bug** in the ProImageEditor v5.1.4 integration.
+
+| Bug | Problem | Fix |
+|-----|---------|-----|
+| 1. ProImageEditor double-pop | v5.x's `doneEditing()` calls `onImageEditingComplete` then immediately calls `onCloseEditor`. Having `Navigator.pop()` in both callbacks double-popped: removed editor + CameraCaptureScreen. User never saw the preview/Upload button. | Moved `Navigator.pop()` to `onCloseEditor` only; `onImageEditingComplete` saves bytes to closure variable without popping |
+| 2. BlobUploadService Dio config | `Content-Type` set in headers map instead of `Options.contentType`; manual `Content-Length` could conflict with Dio auto-calc; no `responseType: ResponseType.bytes` for Azure XML errors | Set `contentType: 'image/jpeg'` on Options, `responseType: ResponseType.bytes`, removed manual Content-Length |
+
+**Key learning:** ProImageEditor v5.x's `doneEditing()` (main_editor.dart:1514-1566) always calls `onCloseEditor` after `onImageEditingComplete` completes. The correct pattern is: save data in `onImageEditingComplete` (no pop), then pop in `onCloseEditor`. This matches the official Firebase/Supabase example in the ProImageEditor package.
+
+---
+
 ## Remaining Tasks
 
 ### Completed
@@ -251,6 +264,17 @@ Four bugs were found and fixed in the MSAL → Backend authentication chain:
 | Task | Status | Notes |
 |------|--------|-------|
 | MSAL authentication flow | Done | End-to-end working: MSAL → custom API scope → backend JWT verification → user upsert |
+| Event-first UX flow | Done | 4 tabs (Events/Circles/Notifications/Profile), event creation with inline circle picker |
+| Dark theme across all screens | Done | Circles detail, event detail, camera capture, notifications, profile — all consistent |
+| Photo editor integration | Done | `pro_image_editor` ^5.1.4 — crop, draw, stickers, emoji, filters, text |
+| Auth error recovery | Done | Auto-login on startup, MSAL cache reset on failure, error dismiss button |
+| New app icon/logo | Done | Generated via `flutter_launcher_icons` from 1024x1024 source |
+| Backend: `listAllEvents` endpoint | Done | `GET /api/events` — returns all events across user's circles with circle name/member count |
+| Backend: `uploaded_by_name` in photos | Done | `listPhotos` JOINs users table; `PhotoWithUrls` includes uploader display name |
+| PhotoModel resilient parsing | Done | Handles PostgreSQL bigint-as-string (file_size_bytes) without type cast errors |
+| ProImageEditor double-pop fix | Done | v5.x calls `onCloseEditor` after `onImageEditingComplete`; moved `Navigator.pop()` to `onCloseEditor` only to prevent double-pop that skipped preview/upload screen |
+| BlobUploadService Dio fix | Done | Set `contentType` on Options (not in headers), `responseType: ResponseType.bytes`, removed manual Content-Length |
+| Upload pipeline debug logging | Done | `[CliquePix]` prefixed `debugPrint` at every step for `adb logcat` diagnosis |
 
 ### Not Started
 
@@ -258,8 +282,7 @@ Four bugs were found and fixed in the MSAL → Backend authentication chain:
 |------|--------|-------|
 | APIM: X-Azure-FDID header validation | Not done | Restrict APIM to Front Door traffic only |
 | Well-known files: update placeholders | Not done | Need Apple Team ID for AASA, Android signing SHA256 for assetlinks.json |
-| Google OAuth: add second redirect URI | Not done | May need tenant-ID-format URI: `https://{tenantId}.ciamlogin.com/{tenantId}/federation/oidc/accounts.google.com` |
-| Login screen: social sign-in buttons | Not done | Currently single "Get Started" button opens MSAL; could add explicit Google/Apple buttons |
+| Google OAuth: add second redirect URI | Not done | May need tenant-ID-format URI |
 | Release signing key | Not done | Needed for production APK and Play Store |
 | App Store / Play Store submission | Not done | |
 
@@ -268,13 +291,13 @@ Four bugs were found and fixed in the MSAL → Backend authentication chain:
 | Step | Status |
 |------|--------|
 | 1. Sign up / sign in | Done (2026-03-26) |
-| 2. Create a Circle | Not tested |
+| 2. Create a Circle | Done (2026-03-26) |
 | 3. Generate invite link/QR | Not tested |
 | 4. Join Circle via invite | Not tested |
-| 5. Create Event (24h/3d/7d) | Not tested |
-| 6. Capture photo in-app | Not tested |
-| 7. Upload photo (compress → SAS → blob → confirm) | Not tested |
-| 8. See photo in feed | Not tested |
+| 5. Create Event (24h/3d/7d) | Done (2026-03-26) |
+| 6. Capture photo in-app | Done (2026-03-26) — photo confirmed in database |
+| 7. Upload photo (compress → SAS → blob → confirm) | In progress — double-pop bug fixed (user never saw Upload button); Dio config fixed; needs retest |
+| 8. See photo in feed | In progress — type cast bug fixed, needs retest after upload pipeline fix |
 | 9. React to photo | Not tested |
 | 10. Save photo to device | Not tested |
 | 11. Share photo externally | Not tested |

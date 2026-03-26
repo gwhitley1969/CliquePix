@@ -266,24 +266,41 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
                   const Spacer(flex: 2),
 
-                  // Error message
+                  // Error message with dismiss
                   if (authState is AuthError)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 16),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: AppColors.error.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: AppColors.error.withValues(alpha: 0.3),
+                      child: Column(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: AppColors.error.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: AppColors.error.withValues(alpha: 0.3),
+                              ),
+                            ),
+                            child: Text(
+                              authState.message,
+                              style: const TextStyle(color: AppColors.error, fontSize: 14),
+                              textAlign: TextAlign.center,
+                            ),
                           ),
-                        ),
-                        child: Text(
-                          authState.message,
-                          style: const TextStyle(color: AppColors.error, fontSize: 14),
-                          textAlign: TextAlign.center,
-                        ),
+                          const SizedBox(height: 8),
+                          GestureDetector(
+                            onTap: () => ref.read(authStateProvider.notifier).clearError(),
+                            child: Text(
+                              'Dismiss',
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.6),
+                                fontSize: 13,
+                                decoration: TextDecoration.underline,
+                                decorationColor: Colors.white.withValues(alpha: 0.4),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
 

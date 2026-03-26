@@ -58,14 +58,16 @@
         </activity>
 
         <!-- MSAL browser redirect for Entra External ID auth -->
-        <activity android:name="com.microsoft.identity.client.BrowserTabActivity">
+        <activity
+            android:name="com.microsoft.identity.client.BrowserTabActivity"
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data
                     android:host="com.cliquepix.clique_pix"
-                    android:path="/W28%2BgAaZ9fNu1yL%2FGMRe94rK0dY%3D"
+                    android:path="/W28+gAaZ9fNu1yL/GMRe94rK0dY="
                     android:scheme="msauth" />
             </intent-filter>
         </activity>

@@ -19,9 +19,9 @@ Clique Pix is a **private, event-based photo sharing** mobile app. Users create 
 Every line of code must serve this loop:
 
 1. User signs in
-2. User creates or joins a Circle
-3. User starts an Event inside that Circle
-4. User takes or uploads a photo
+2. User creates an Event (picks or creates a Circle during creation)
+3. User takes or uploads a photo
+4. User edits the photo (crop, draw, stickers, filters)
 5. Photo is compressed on-device and uploaded directly to Blob Storage
 6. Other event members are notified via push
 7. Event feed displays the photo (thumbnail in feed, full-size on tap)
@@ -40,7 +40,7 @@ If a feature does not directly support this loop, it does not belong in v1.
 - 5-layer token refresh defense for the Entra 12-hour timeout bug
 - Circles: create, join via invite link / SMS / QR, list, view members, leave
 - Deep linking for Circle invites (Universal Links on iOS, App Links on Android)
-- Events: create inside a Circle, duration locked to three presets (24h / 3 days / 7 days default), list, expire
+- Events: create Event first (pick or create Circle during creation), duration locked to three presets (24h / 3 days / 7 days default), list, expire
 - In-app camera capture
 - Upload from camera roll
 - Client-side image compression before upload (strip EXIF, resize to max 2048px, JPEG quality 80, convert HEIC to JPEG)
@@ -59,7 +59,7 @@ If a feature does not directly support this loop, it does not belong in v1.
 - Chat, comments, or threads
 - Followers / following
 - Public feeds or discovery
-- Advanced photo editing (no stickers — crop, brightness, contrast, and simple preset filters only)
+- Custom photo editor UI (use `pro_image_editor` package — do not build editor from scratch)
 - Video capture or playback
 - AI features of any kind
 - Monetization, subscriptions, or paywalls
@@ -88,6 +88,7 @@ Leave it out. A missing feature can be added later. A cluttered v1 cannot be un-
 - **Non-sensitive flags:** shared_preferences
 - **Push notifications:** firebase_messaging (FCM transport only)
 - **Image caching:** cached_network_image
+- **Image editor:** pro_image_editor (^5.1.4 — crop, draw, stickers, filters, text). **Callback rule:** v5.x calls `onCloseEditor` after `onImageEditingComplete` completes. Only pop in `onCloseEditor`, never in `onImageEditingComplete`, or you get a double-pop.
 - **Deep links:** app_links
 - **QR code generation:** qr_flutter
 - **MSAL authentication:** msal_auth (^3.3.0, v2 embedding, custom API scope `access_as_user`)

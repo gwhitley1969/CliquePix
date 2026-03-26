@@ -29,9 +29,12 @@ final authStateProvider =
 class AuthNotifier extends StateNotifier<AuthState> {
   final AuthRepository _repository;
 
-  AuthNotifier(this._repository) : super(const AuthInitial());
+  AuthNotifier(this._repository) : super(const AuthInitial()) {
+    checkAuthStatus();
+  }
 
-  /// Layer 3 entry point: try silent sign-in on app startup / resume.
+  /// Try silent sign-in on app startup / resume (Layer 3).
+  /// On failure, sets AuthUnauthenticated (clean login) — never AuthError.
   Future<void> checkAuthStatus() async {
     state = const AuthLoading();
     try {
@@ -43,17 +46,26 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   /// Interactive sign-in via MSAL.
-  /// [loginHint] supports the Layer 5 graceful re-login UX
-  /// (pre-fills email when all background refresh mechanisms have failed).
+  /// [loginHint] supports the Layer 5 graceful re-login UX.
   Future<void> signIn({String? loginHint}) async {
     state = const AuthLoading();
     try {
       final user = await _repository.signIn(loginHint: loginHint);
       state = AuthAuthenticated(user);
-    } catch (e, stack) {
-      state = AuthError('Sign in failed. Please try again.');
+    } catch (e) {
+      final msg = e.toString();
+      // MSAL errors (cache corruption, user cancel, session expired):
+      // reset session and show clean login — not a persistent error loop.
+      if (msg.contains('Msal') || msg.contains('AADSTS')) {
+        await _repository.resetSession();
+        state = const AuthUnauthenticated();
+      } else {
+        state = AuthError('Sign in failed. Please try again.');
+      }
     }
   }
+
+  void clearError() => state = const AuthUnauthenticated();
 
   Future<void> signOut() async {
     await _repository.signOut();

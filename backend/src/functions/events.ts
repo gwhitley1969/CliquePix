@@ -12,6 +12,11 @@ interface EventWithPhotoCount extends Event {
   photo_count: number;
 }
 
+interface EventWithCircleName extends EventWithPhotoCount {
+  circle_name: string;
+  member_count: number;
+}
+
 async function checkCircleMembership(circleId: string, userId: string): Promise<void> {
   const member = await queryOne(
     'SELECT id FROM circle_members WHERE circle_id = $1 AND user_id = $2',
@@ -126,6 +131,37 @@ async function getEvent(req: HttpRequest, context: InvocationContext): Promise<H
     return handleError(error, context.invocationId);
   }
 }
+
+async function listAllEvents(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
+  try {
+    const authUser = await authenticateRequest(req);
+
+    const events = await query<EventWithCircleName>(
+      `SELECT e.*,
+              c.name AS circle_name,
+              COALESCE(COUNT(p.id), 0)::int AS photo_count,
+              (SELECT COUNT(*)::int FROM circle_members cm2 WHERE cm2.circle_id = e.circle_id) AS member_count
+       FROM events e
+       JOIN circle_members cm ON cm.circle_id = e.circle_id AND cm.user_id = $1
+       JOIN circles c ON c.id = e.circle_id
+       LEFT JOIN photos p ON p.event_id = e.id AND p.status = 'active'
+       GROUP BY e.id, c.name
+       ORDER BY e.created_at DESC`,
+      [authUser.id],
+    );
+
+    return successResponse(events);
+  } catch (error) {
+    return handleError(error, context.invocationId);
+  }
+}
+
+app.http('listAllEvents', {
+  methods: ['GET'],
+  authLevel: 'anonymous',
+  route: 'events',
+  handler: listAllEvents,
+});
 
 app.http('createEvent', {
   methods: ['POST'],

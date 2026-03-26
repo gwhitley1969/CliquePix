@@ -1,4 +1,6 @@
 {
+  "client_id": "7db01206-135b-4a34-a4d5-2622d1a888bf",
+  "redirect_uri": "msauth://com.cliquepix.clique_pix/W28%2BgAaZ9fNu1yL%2FGMRe94rK0dY%3D",
   "authorities": [
     {
       "type": "B2C",
@@ -13,9 +15,9 @@
     "read_timeout": 30000
   },
   "logging": {
-    "pii_enabled": false,
-    "log_level": "WARNING",
-    "logcat_enabled": false
+    "pii_enabled": true,
+    "log_level": "VERBOSE",
+    "logcat_enabled": true
   },
   "shared_device_mode_supported": false,
   "account_mode": "SINGLE"
