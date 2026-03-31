@@ -3,7 +3,7 @@
     "apps": [],
     "details": [
       {
-        "appIDs": ["TEAM_ID.com.cliquepix.cliquePix"],
+        "appIDs": ["4ML27KY869.com.cliquepix.cliquePix"],
         "paths": ["/invite/*"],
         "components": [
           {

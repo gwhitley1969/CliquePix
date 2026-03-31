@@ -385,7 +385,7 @@ Unique constraint on (photo_id, user_id, reaction_type).
 |--------|------|-------|
 | id | UUID | Primary key |
 | user_id | UUID | FK → users |
-| type | VARCHAR | new_photo / event_expiring / event_expired |
+| type | VARCHAR | new_photo / event_expiring / event_expired / member_joined |
 | payload_json | JSONB | Structured notification data |
 | is_read | BOOLEAN | Default false |
 | created_at | TIMESTAMPTZ | |
@@ -527,25 +527,37 @@ If thumbnail generation fails, the feed falls back to loading the original (slow
 
 Users must be notified when:
 - a new photo is added to an active event
+- someone joins one of their circles
 - an event is nearing expiration (24 hours before)
 
 ## Delivery
 
 Use direct FCM (Firebase Cloud Messaging) for push delivery to both Android and iOS. FCM is a transport mechanism only — no Firebase backend services, no Firebase Auth, no Firestore.
 
+### Notification Types
+
+| Type | Trigger | Recipients | Payload |
+|------|---------|------------|---------|
+| `new_photo` | Photo uploaded to event | Event circle members (excl. uploader) | `{ event_id, photo_id }` |
+| `member_joined` | User joins circle via invite | Existing circle members (excl. joiner) | `{ circle_id, circle_name, joined_user_name }` |
+| `event_expiring` | Timer (24h before expiry) | Event circle members | `{ event_id }` |
+| `event_expired` | Timer (after expiry) | Event circle members | `{ event_id }` |
+
 ### Flow
 
-1. User registers push token via `POST /api/push-tokens`
-2. When a photo is uploaded, the confirming Function queries event members' push tokens
-3. Function sends push notification via FCM HTTP v1 API
-4. Notification payload includes event ID and photo ID for deep navigation
+1. `PushNotificationService` initializes after user authenticates — requests notification permission, gets FCM token via `FirebaseMessaging.instance.getToken()`, registers with backend via `POST /api/push-tokens`
+2. Backend action (photo upload, circle join, timer) queries relevant members' push tokens from `push_tokens` table
+3. Function sends push via FCM HTTP v1 API using `sendToMultipleTokens()`
+4. Function creates notification records in `notifications` table for in-app notification list
+5. Client notification screen renders by type with appropriate icon, title, and navigation target
 
 ### Push Token Management
 
-- Store tokens in `push_tokens` table
-- Update on each app launch (tokens rotate)
+- `PushNotificationService` registers token after successful authentication
+- Listens to `FirebaseMessaging.instance.onTokenRefresh` for token rotation
+- Backend upserts on conflict (`ON CONFLICT (token) DO UPDATE`)
 - Remove on logout
-- Handle token expiry gracefully (failed sends remove stale tokens)
+- Handle token expiry gracefully (failed sends remove stale tokens via `DELETE FROM push_tokens WHERE token = ANY($1)`)
 
 ### Future Enhancement
 
@@ -597,11 +609,12 @@ Separate scheduled check for orphaned uploads:
 
 Do not overbuild live infrastructure. The following is sufficient to feel responsive:
 
-- Push notification on new photo → user taps to open feed
-- Refresh feed on app open / app resume / pull-to-refresh
-- Optional short polling while event feed is actively open (every 30 seconds)
+- Push notification on new photo / circle join → user taps to open relevant screen
+- Refresh on app resume via `WidgetsBindingObserver` (`didChangeAppLifecycleState`)
+- Pull-to-refresh via `RefreshIndicator` on list and detail screens
+- 30-second polling via `Timer.periodic` while circle list/detail screens are active
 
-This is enough. Most photo sharing happens in bursts (everyone at the same event, actively using the app). The push + pull-to-refresh pattern covers the offline-then-open case.
+This three-layer approach (push + app-resume + polling) covers all cases: push for immediate alerting, app-resume for returning users, polling for actively-open screens. Most photo sharing happens in bursts (everyone at the same event, actively using the app).
 
 ## Future Option
 
@@ -637,12 +650,33 @@ QR codes encode this same URL. Generate QR on the client using `qr_flutter`.
 
 ### Hosting the Well-Known Files
 
-The `.well-known` files can be served from Azure Front Door or a simple static web app. They are static JSON files that rarely change.
+Served from Azure Static Web App (`swa-cliquepix-prod`). Static JSON files with proper MIME types and caching headers configured in `staticwebapp.config.json`.
+
+- `apple-app-site-association`: Team ID `4ML27KY869`, bundle ID `com.cliquepix.cliquePix`, paths `/invite/*`
+- `assetlinks.json`: Package `com.cliquepix.clique_pix`, SHA256 fingerprint (debug keystore; update for release)
+
+### Invite Landing Page
+
+`website/invite.html` — served via SWA rewrite rule `/invite/*` → `invite.html`:
+- Extracts invite code from URL path
+- Detects platform (iOS/Android/desktop) via user agent
+- Android: Attempts `intent://` URI to open installed app; falls back to Play Store button
+- iOS: Universal Links intercept before page loads; fallback shows App Store button
+- Dark-themed, branded, with Open Graph meta tags for messaging app link previews
+
+### Client Deep Link Handling
+
+`DeepLinkService` initialized in `app.dart` — listens via `app_links` package for both cold-start and warm-start URIs. Extracts invite code from path, navigates to `/invite/:inviteCode` via GoRouter.
+
+### Auth Gate for Invite Routes
+
+Unauthenticated users hitting `/invite/{code}` are redirected to `/login?redirect=/invite/{code}`. After successful authentication, GoRouter reads the `redirect` query parameter and navigates to the invite screen. No code changes needed in the login screen — GoRouter's reactive rebuild (watching `authStateProvider`) handles the redirect automatically.
 
 ## Flow
 
-1. **App installed:** open app, route to invite acceptance screen with `inviteCode`, call `POST /api/circles/{circleId}/join`
-2. **App not installed:** open App Store / Play Store listing. Deferred deep linking (remembering the invite across install) is a post-v1 enhancement.
+1. **App installed + verified:** OS intercepts URL → app opens → `DeepLinkService` routes to `JoinCircleScreen` → auto-joins circle
+2. **App installed, not verified:** Browser loads `invite.html` → "Open in Clique Pix" button uses `intent://` (Android) → app opens
+3. **App not installed:** Browser loads `invite.html` → shows branded page with app store download buttons and invite code for manual entry
 
 ---
 

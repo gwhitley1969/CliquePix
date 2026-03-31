@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -11,16 +12,56 @@ import '../../../widgets/avatar_widget.dart';
 import '../../../models/circle_model.dart';
 import 'circles_providers.dart';
 
-class CirclesListScreen extends ConsumerWidget {
+class CirclesListScreen extends ConsumerStatefulWidget {
   const CirclesListScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<CirclesListScreen> createState() => _CirclesListScreenState();
+}
+
+class _CirclesListScreenState extends ConsumerState<CirclesListScreen>
+    with WidgetsBindingObserver {
+  Timer? _pollTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _startPolling();
+  }
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  void _startPolling() {
+    _pollTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) ref.read(circlesListProvider.notifier).refresh();
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      ref.read(circlesListProvider.notifier).refresh();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final circlesAsync = ref.watch(circlesListProvider);
 
     return Scaffold(
       backgroundColor: const Color(0xFF0E1525),
-      body: CustomScrollView(
+      body: RefreshIndicator(
+        color: AppColors.electricAqua,
+        backgroundColor: const Color(0xFF1A2035),
+        onRefresh: () => ref.read(circlesListProvider.notifier).refresh(),
+        child: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
           // Gradient header with brand personality
           SliverAppBar(
@@ -95,6 +136,7 @@ class CirclesListScreen extends ConsumerWidget {
             },
           ),
         ],
+      ),
       ),
       floatingActionButton: Container(
         decoration: BoxDecoration(

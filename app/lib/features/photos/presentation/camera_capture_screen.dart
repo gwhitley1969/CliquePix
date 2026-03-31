@@ -134,6 +134,16 @@ class _CameraCaptureScreenState extends ConsumerState<CameraCaptureScreen> {
       appBar: AppBar(
         backgroundColor: const Color(0xFF0E1525),
         foregroundColor: Colors.white,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_rounded),
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/events');
+            }
+          },
+        ),
         title: ShaderMask(
           shaderCallback: (bounds) => AppGradients.primary.createShader(bounds),
           child: const Text('Share Photo', style: TextStyle(fontWeight: FontWeight.w700, color: Colors.white)),

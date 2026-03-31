@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_gradients.dart';
 import '../../../widgets/gradient_button.dart';
 import 'circles_providers.dart';
 
@@ -50,22 +51,65 @@ class _CreateCircleScreenState extends ConsumerState<CreateCircleScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Create Circle')),
+      backgroundColor: const Color(0xFF0E1525),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF0E1525),
+        foregroundColor: Colors.white,
+        title: const Text(
+          'Create Circle',
+          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
+        ),
+        centerTitle: true,
+      ),
       body: Padding(
-        padding: const EdgeInsets.all(AppTheme.standardPadding),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 16),
+            // Section label
+            Text(
+              'Circle Name',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: Colors.white.withValues(alpha: 0.7),
+              ),
+            ),
+            const SizedBox(height: 10),
+            // Dark-themed text field
             TextField(
               controller: _nameController,
-              decoration: const InputDecoration(
-                labelText: 'Circle Name',
+              style: const TextStyle(color: Colors.white, fontSize: 16),
+              decoration: InputDecoration(
                 hintText: 'e.g., Family, College Friends, Work Team',
+                hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.3)),
+                filled: true,
+                fillColor: Colors.white.withValues(alpha: 0.06),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: const BorderSide(color: AppColors.electricAqua, width: 1.5),
+                ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                counterStyle: TextStyle(color: Colors.white.withValues(alpha: 0.3)),
               ),
               maxLength: 100,
               textCapitalization: TextCapitalization.words,
               autofocus: true,
+              cursorColor: AppColors.electricAqua,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'This is the group your friends will join to share photos',
+              style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.35)),
             ),
             const Spacer(),
             GradientButton(

@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>You're Invited — Clique Pix</title>
+    <meta name="description" content="You've been invited to join a circle on Clique Pix — private, event-based photo sharing for your crew.">
+    <meta property="og:title" content="You're Invited to Clique Pix">
+    <meta property="og:description" content="Join a private photo-sharing circle on Clique Pix. Tap to open the app or download it.">
+    <meta property="og:type" content="website">
+    <meta property="og:image" content="https://clique-pix.com/assets/icon.png">
+    <link rel="icon" type="image/png" href="/assets/icon.png">
+    <style>
+        *, *::before, *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --electric-aqua: #00C2D1;
+            --deep-blue: #2563EB;
+            --violet-accent: #7C3AED;
+            --bg: #0E1525;
+            --card-bg: rgba(255, 255, 255, 0.06);
+            --card-border: rgba(0, 194, 209, 0.15);
+            --gradient: linear-gradient(135deg, #00C2D1, #2563EB, #7C3AED);
+            --font-stack: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        body {
+            font-family: var(--font-stack);
+            background: var(--bg);
+            color: #FFFFFF;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .container {
+            max-width: 420px;
+            width: 100%;
+            text-align: center;
+        }
+
+        .logo {
+            width: 80px;
+            height: 80px;
+            border-radius: 20px;
+            margin-bottom: 32px;
+            box-shadow: 0 8px 32px rgba(0, 194, 209, 0.25);
+        }
+
+        .heading {
+            font-size: 28px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            margin-bottom: 8px;
+            background: var(--gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subtitle {
+            font-size: 16px;
+            color: rgba(255, 255, 255, 0.5);
+            margin-bottom: 32px;
+            line-height: 1.5;
+        }
+
+        .code-card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 14px;
+            padding: 20px 24px;
+            margin-bottom: 32px;
+        }
+
+        .code-label {
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: rgba(255, 255, 255, 0.4);
+            margin-bottom: 8px;
+        }
+
+        .code-value {
+            font-size: 28px;
+            font-weight: 800;
+            letter-spacing: 3px;
+            color: var(--electric-aqua);
+        }
+
+        .open-app-btn {
+            display: block;
+            width: 100%;
+            padding: 16px 28px;
+            border-radius: 14px;
+            background: var(--gradient);
+            color: #FFFFFF;
+            font-size: 17px;
+            font-weight: 700;
+            text-decoration: none;
+            text-align: center;
+            border: none;
+            cursor: pointer;
+            box-shadow: 0 4px 20px rgba(37, 99, 235, 0.35);
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-bottom: 16px;
+        }
+
+        .open-app-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 28px rgba(37, 99, 235, 0.45);
+        }
+
+        .store-buttons {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 32px;
+        }
+
+        .store-btn {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 14px 16px;
+            border-radius: 12px;
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            color: #FFFFFF;
+            font-size: 14px;
+            font-weight: 600;
+            text-decoration: none;
+            transition: background 0.2s;
+        }
+
+        .store-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .store-icon {
+            font-size: 20px;
+        }
+
+        .divider {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+            color: rgba(255, 255, 255, 0.25);
+            font-size: 13px;
+        }
+
+        .divider::before,
+        .divider::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .instructions {
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.35);
+            line-height: 1.6;
+            margin-bottom: 40px;
+        }
+
+        .footer {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            color: rgba(255, 255, 255, 0.3);
+            font-size: 13px;
+        }
+
+        .footer-logo {
+            width: 20px;
+            height: 20px;
+            border-radius: 5px;
+            opacity: 0.5;
+        }
+
+        .spinner {
+            display: none;
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top-color: #FFFFFF;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 12px;
+        }
+
+        .spinner.active {
+            display: block;
+        }
+
+        .status-text {
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.5);
+            margin-bottom: 24px;
+            display: none;
+        }
+
+        .status-text.active {
+            display: block;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 480px) {
+            .heading {
+                font-size: 24px;
+            }
+
+            .code-value {
+                font-size: 24px;
+            }
+
+            .store-buttons {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <img src="/assets/icon.png" alt="Clique Pix" class="logo">
+
+        <h1 class="heading">You're Invited!</h1>
+        <p class="subtitle">Someone wants you to join their circle on Clique Pix — private photo sharing for your crew.</p>
+
+        <div class="code-card">
+            <div class="code-label">Invite Code</div>
+            <div class="code-value" id="inviteCode">------</div>
+        </div>
+
+        <div class="spinner" id="spinner"></div>
+        <div class="status-text" id="statusText">Opening Clique Pix...</div>
+
+        <button class="open-app-btn" id="openAppBtn" onclick="openApp()">Open in Clique Pix</button>
+
+        <div class="divider">or download the app</div>
+
+        <div class="store-buttons">
+            <a href="#" class="store-btn" id="iosBtn">
+                <span class="store-icon">&#xF8FF;</span>
+                App Store
+            </a>
+            <a href="#" class="store-btn" id="androidBtn">
+                <span class="store-icon">&#9654;</span>
+                Google Play
+            </a>
+        </div>
+
+        <p class="instructions">
+            Already have Clique Pix? Tap "Open in Clique Pix" above.<br>
+            Don't have it yet? Download the app, sign in, then enter the invite code manually.
+        </p>
+
+        <div class="footer">
+            <img src="/assets/icon.png" alt="" class="footer-logo">
+            <span>Clique Pix &mdash; Private photo sharing</span>
+        </div>
+    </div>
+
+    <script>
+        (function() {
+            // Extract invite code from URL path: /invite/{code}
+            var path = window.location.pathname;
+            var parts = path.split('/invite/');
+            var inviteCode = parts.length > 1 ? parts[1].replace(/\/$/, '') : '';
+
+            // Display the invite code
+            var codeEl = document.getElementById('inviteCode');
+            if (inviteCode) {
+                codeEl.textContent = inviteCode;
+            }
+
+            // Detect platform
+            var ua = navigator.userAgent || '';
+            var isAndroid = /android/i.test(ua);
+            var isIOS = /iphone|ipad|ipod/i.test(ua);
+
+            // On Android, try to open the app automatically after a short delay
+            if (isAndroid && inviteCode) {
+                setTimeout(function() {
+                    tryOpenApp();
+                }, 500);
+            }
+
+            // Make the open button work
+            window.openApp = function() {
+                if (!inviteCode) return;
+
+                var spinner = document.getElementById('spinner');
+                var statusText = document.getElementById('statusText');
+                spinner.classList.add('active');
+                statusText.classList.add('active');
+
+                if (isAndroid) {
+                    // Android: Use intent:// URI to open the app
+                    var intentUrl = 'intent://clique-pix.com/invite/' + inviteCode +
+                        '#Intent;scheme=https;package=com.cliquepix.clique_pix;end';
+                    window.location.href = intentUrl;
+                } else {
+                    // iOS and others: Try the Universal Link directly
+                    window.location.href = 'https://clique-pix.com/invite/' + inviteCode;
+                }
+
+                // After timeout, hide spinner — if we're still on this page, the app didn't open
+                setTimeout(function() {
+                    spinner.classList.remove('active');
+                    statusText.textContent = 'App not found — download it below';
+                }, 2500);
+            };
+
+            function tryOpenApp() {
+                if (isAndroid) {
+                    var intentUrl = 'intent://clique-pix.com/invite/' + inviteCode +
+                        '#Intent;scheme=https;package=com.cliquepix.clique_pix;end';
+                    window.location.href = intentUrl;
+                }
+            }
+        })();
+    </script>
+</body>
+</html>

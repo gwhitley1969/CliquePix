@@ -106,8 +106,14 @@ class NotificationsScreen extends ConsumerWidget {
                       notification: notifications[index],
                       onTap: () {
                         ref.read(notificationsRepositoryProvider).markRead(notifications[index].id);
-                        final eventId = notifications[index].payload['event_id'] as String?;
-                        if (eventId != null) context.go('/events/$eventId');
+                        final n = notifications[index];
+                        final eventId = n.payload['event_id'] as String?;
+                        final circleId = n.payload['circle_id'] as String?;
+                        if (eventId != null) {
+                          context.push('/events/$eventId');
+                        } else if (circleId != null) {
+                          context.push('/circles/$circleId');
+                        }
                       },
                     ),
                     childCount: notifications.length,
@@ -136,6 +142,8 @@ class _NotificationTile extends StatelessWidget {
         return (Icons.timer_rounded, [AppColors.warning, const Color(0xFFEF4444)]);
       case 'event_expired':
         return (Icons.timer_off_rounded, [const Color(0xFF6B7280), const Color(0xFF374151)]);
+      case 'member_joined':
+        return (Icons.person_add_rounded, [AppColors.electricAqua, AppColors.violetAccent]);
       default:
         return (Icons.notifications_rounded, [AppColors.deepBlue, AppColors.violetAccent]);
     }
@@ -146,6 +154,7 @@ class _NotificationTile extends StatelessWidget {
       case 'new_photo': return 'New Photo';
       case 'event_expiring': return 'Event Expiring Soon';
       case 'event_expired': return 'Event Expired';
+      case 'member_joined': return 'New Member';
       default: return 'Notification';
     }
   }

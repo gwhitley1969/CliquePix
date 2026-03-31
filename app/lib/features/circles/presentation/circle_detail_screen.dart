@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -7,12 +8,51 @@ import '../../../widgets/avatar_widget.dart';
 import '../../../widgets/error_widget.dart';
 import 'circles_providers.dart';
 
-class CircleDetailScreen extends ConsumerWidget {
+class CircleDetailScreen extends ConsumerStatefulWidget {
   final String circleId;
   const CircleDetailScreen({super.key, required this.circleId});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<CircleDetailScreen> createState() => _CircleDetailScreenState();
+}
+
+class _CircleDetailScreenState extends ConsumerState<CircleDetailScreen>
+    with WidgetsBindingObserver {
+  String get circleId => widget.circleId;
+  Timer? _pollTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _pollTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) _refresh();
+    });
+  }
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      ref.invalidate(circleDetailProvider(circleId));
+      ref.invalidate(circleMembersProvider(circleId));
+    }
+  }
+
+  Future<void> _refresh() async {
+    ref.invalidate(circleDetailProvider(circleId));
+    ref.invalidate(circleMembersProvider(circleId));
+    await ref.read(circleMembersProvider(circleId).future);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final circleAsync = ref.watch(circleDetailProvider(circleId));
     final membersAsync = ref.watch(circleMembersProvider(circleId));
 
@@ -37,7 +77,12 @@ class CircleDetailScreen extends ConsumerWidget {
       body: circleAsync.when(
         loading: () => const Center(child: CircularProgressIndicator(color: AppColors.electricAqua)),
         error: (err, _) => AppErrorWidget(message: err.toString()),
-        data: (circle) => SingleChildScrollView(
+        data: (circle) => RefreshIndicator(
+          color: AppColors.electricAqua,
+          backgroundColor: const Color(0xFF1A2035),
+          onRefresh: _refresh,
+          child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -230,6 +275,7 @@ class CircleDetailScreen extends ConsumerWidget {
               ),
             ],
           ),
+        ),
         ),
       ),
     );

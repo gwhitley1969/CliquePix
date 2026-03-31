@@ -7,6 +7,7 @@ import '../../features/circles/presentation/create_circle_screen.dart';
 import '../../features/circles/presentation/circle_detail_screen.dart';
 import '../../features/circles/presentation/invite_screen.dart';
 import '../../features/circles/presentation/join_circle_screen.dart';
+import '../../features/home/presentation/home_screen.dart';
 import '../../features/events/presentation/events_home_screen.dart';
 import '../../features/events/presentation/events_list_screen.dart';
 import '../../features/events/presentation/create_event_screen.dart';
@@ -27,13 +28,17 @@ final routerProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) {
       final isAuthenticated = authState is AuthAuthenticated;
       final isLoginRoute = state.matchedLocation == '/login';
-      final isInviteRoute = state.matchedLocation.startsWith('/invite/');
 
-      if (!isAuthenticated && !isLoginRoute && !isInviteRoute) {
+      if (!isAuthenticated && !isLoginRoute) {
+        final redirect = state.matchedLocation;
+        if (redirect != '/events') {
+          return '/login?redirect=$redirect';
+        }
         return '/login';
       }
       if (isAuthenticated && isLoginRoute) {
-        return '/events';
+        final redirect = state.uri.queryParameters['redirect'];
+        return redirect ?? '/events';
       }
       return null;
     },
@@ -53,18 +58,22 @@ final routerProvider = Provider<GoRouter>((ref) {
           navigationShell: navigationShell,
         ),
         branches: [
-          // Tab 1: Events (home)
+          // Tab 1: Home (dashboard)
           StatefulShellBranch(
             routes: [
               GoRoute(
                 path: '/events',
-                builder: (context, state) => const EventsHomeScreen(),
+                builder: (context, state) => const HomeScreen(),
                 routes: [
                   GoRoute(
                     path: 'create',
                     builder: (context, state) => CreateEventScreen(
                       circleId: state.uri.queryParameters['circleId'],
                     ),
+                  ),
+                  GoRoute(
+                    path: 'all',
+                    builder: (context, state) => const EventsHomeScreen(),
                   ),
                 ],
               ),

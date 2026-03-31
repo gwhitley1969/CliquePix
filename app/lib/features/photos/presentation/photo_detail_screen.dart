@@ -24,6 +24,16 @@ class PhotoDetailScreen extends ConsumerWidget {
       appBar: AppBar(
         backgroundColor: Colors.black,
         foregroundColor: AppColors.whiteSurface,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_rounded),
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/events');
+            }
+          },
+        ),
         title: photoAsync.when(
           data: (p) => Text(AppDateUtils.formatDateTime(p.createdAt),
               style: const TextStyle(color: AppColors.whiteSurface, fontSize: 14)),

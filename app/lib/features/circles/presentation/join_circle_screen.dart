@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/app_text_styles.dart';
-import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/app_gradients.dart';
 import '../../../widgets/gradient_button.dart';
 import 'circles_providers.dart';
 
@@ -44,6 +43,8 @@ class _JoinCircleScreenState extends ConsumerState<JoinCircleScreen> {
       final repo = ref.read(circlesRepositoryProvider);
       final circle = await repo.joinByInviteCode(code);
       ref.read(circlesListProvider.notifier).refresh();
+      ref.invalidate(circleDetailProvider(circle.id));
+      ref.invalidate(circleMembersProvider(circle.id));
       if (mounted) context.go('/circles/${circle.id}');
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
@@ -55,33 +56,93 @@ class _JoinCircleScreenState extends ConsumerState<JoinCircleScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Join Circle')),
+      backgroundColor: const Color(0xFF0E1525),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF0E1525),
+        foregroundColor: Colors.white,
+        title: const Text(
+          'Join Circle',
+          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
+        ),
+        centerTitle: true,
+      ),
       body: Padding(
-        padding: const EdgeInsets.all(AppTheme.standardPadding),
+        padding: const EdgeInsets.all(20),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.group_add, size: 80, color: AppColors.deepBlue),
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: AppGradients.primary.scale(0.25),
+              ),
+              child: const Icon(Icons.group_add_rounded, size: 40, color: AppColors.electricAqua),
+            ),
             const SizedBox(height: 24),
-            Text('Join a Circle', style: AppTextStyles.heading1),
+            ShaderMask(
+              shaderCallback: (bounds) => AppGradients.primary.createShader(bounds),
+              child: const Text(
+                'Join a Circle',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white,
+                  letterSpacing: -0.3,
+                ),
+              ),
+            ),
             const SizedBox(height: 8),
             Text(
               'Enter the invite code to join',
-              style: AppTextStyles.body.copyWith(color: AppColors.secondaryText),
+              style: TextStyle(fontSize: 15, color: Colors.white.withValues(alpha: 0.5)),
             ),
             const SizedBox(height: 32),
             TextField(
               controller: _codeController,
-              decoration: const InputDecoration(
-                labelText: 'Invite Code',
-                hintText: 'Enter 8-character code',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 3,
+              ),
+              textAlign: TextAlign.center,
+              decoration: InputDecoration(
+                hintText: 'Enter code',
+                hintStyle: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.3),
+                  letterSpacing: 1,
+                  fontWeight: FontWeight.w400,
+                ),
+                filled: true,
+                fillColor: Colors.white.withValues(alpha: 0.06),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: const BorderSide(color: AppColors.electricAqua, width: 1.5),
+                ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                counterStyle: TextStyle(color: Colors.white.withValues(alpha: 0.3)),
               ),
               textCapitalization: TextCapitalization.characters,
               maxLength: 8,
+              cursorColor: AppColors.electricAqua,
             ),
             if (_error != null) ...[
               const SizedBox(height: 8),
-              Text(_error!, style: AppTextStyles.caption.copyWith(color: AppColors.error)),
+              Text(
+                _error!,
+                style: const TextStyle(fontSize: 13, color: AppColors.error),
+                textAlign: TextAlign.center,
+              ),
             ],
             const SizedBox(height: 24),
             GradientButton(

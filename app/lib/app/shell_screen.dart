@@ -32,14 +32,14 @@ class ShellScreen extends StatelessWidget {
           labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
           destinations: [
             NavigationDestination(
-              icon: Icon(Icons.camera_alt_outlined, color: Colors.white.withValues(alpha: 0.4)),
+              icon: Icon(Icons.home_outlined, color: Colors.white.withValues(alpha: 0.4)),
               selectedIcon: ShaderMask(
                 shaderCallback: (bounds) => const LinearGradient(
                   colors: [AppColors.electricAqua, AppColors.deepBlue],
                 ).createShader(bounds),
-                child: const Icon(Icons.camera_alt, color: Colors.white),
+                child: const Icon(Icons.home_rounded, color: Colors.white),
               ),
-              label: 'Events',
+              label: 'Home',
             ),
             NavigationDestination(
               icon: Icon(Icons.group_outlined, color: Colors.white.withValues(alpha: 0.4)),

@@ -56,7 +56,7 @@ class PhotoCardWidget extends StatelessWidget {
             ),
             // Photo
             GestureDetector(
-              onTap: () => context.go('/events/$eventId/photos/${photo.id}'),
+              onTap: () => context.push('/events/$eventId/photos/${photo.id}'),
               child: Hero(
                 tag: 'photo_${photo.id}',
                 child: CachedNetworkImage(

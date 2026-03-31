@@ -74,7 +74,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       // Refresh events list
       ref.read(allEventsListProvider.notifier).refresh();
 
-      if (mounted) context.go('/events/${event.id}');
+      if (mounted) context.push('/events/${event.id}');
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));

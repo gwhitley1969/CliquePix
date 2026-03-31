@@ -331,7 +331,7 @@ Use consistent error codes. Never return raw exception messages or stack traces 
 
 **push_tokens**: id (UUID PK), user_id (FK), platform (ios/android), token (FCM registration token), created_at, updated_at
 
-**notifications**: id (UUID PK), user_id (FK), type (new_photo/event_expiring/event_expired), payload_json (JSONB), is_read (boolean, default false), created_at
+**notifications**: id (UUID PK), user_id (FK), type (new_photo/event_expiring/event_expired/member_joined), payload_json (JSONB), is_read (boolean, default false), created_at
 
 ### Photo Status Flow
 
@@ -606,19 +606,30 @@ Device-saved copies remain untouched. Only cloud-managed copies are deleted. Use
 
 FCM (Firebase Cloud Messaging) for push delivery to both Android and iOS. FCM is a transport mechanism only — no Firebase backend services, no Firebase Auth, no Firestore.
 
+### Push Triggers
+
+| Trigger | Notification Type | Recipients | Payload |
+|---------|------------------|------------|---------|
+| Photo uploaded to event | `new_photo` | All event circle members except uploader | `{ event_id, photo_id }` |
+| Someone joins a circle | `member_joined` | All existing circle members except joiner | `{ circle_id, circle_name, joined_user_name }` |
+| Event expiring in 24h | `event_expiring` | All event circle members | `{ event_id }` |
+| Event expired | `event_expired` | All event circle members | `{ event_id }` |
+
 ### Flow
 
-1. User registers push token via `POST /api/push-tokens`
-2. Photo confirmation Function queries event members' push tokens
-3. Function sends push via FCM HTTP v1 API
-4. Payload includes event ID and photo ID for deep navigation
+1. `PushNotificationService` initializes after authentication — requests permission, gets FCM token, sends to `POST /api/push-tokens`
+2. Backend action (photo upload, circle join, timer) queries relevant members' push tokens
+3. Function sends push via FCM HTTP v1 API using `sendToMultipleTokens()`
+4. Function creates notification records in `notifications` table for in-app display
+5. Failed token sends trigger stale token cleanup
 
 ### Token Management
 
-- Store in `push_tokens` table
-- Update on each app launch (tokens rotate)
+- `PushNotificationService` registers token after auth via `POST /api/push-tokens`
+- Listens to `FirebaseMessaging.instance.onTokenRefresh` and re-registers when tokens rotate
+- Backend upserts on conflict (same token → update timestamp)
 - Remove on logout
-- Failed sends remove stale tokens
+- Failed sends remove stale tokens via `DELETE FROM push_tokens WHERE token = ANY($1)`
 
 ---
 
@@ -626,9 +637,11 @@ FCM (Firebase Cloud Messaging) for push delivery to both Android and iOS. FCM is
 
 ### v1 Approach
 
-- Push notification on new photo → user taps to open feed
-- Refresh feed on app open / app resume / pull-to-refresh
-- Optional short polling while event feed is actively open (every 30 seconds)
+- Push notification on new photo / circle join → user taps to open relevant screen
+- Refresh on app resume via `WidgetsBindingObserver` (`didChangeAppLifecycleState`)
+- Pull-to-refresh via `RefreshIndicator` on all list/detail screens
+- 30-second polling via `Timer.periodic` while circle list/detail screens are active
+- This pattern applies to: event feed, circles list, circle detail (members)
 
 This is sufficient. Most photo sharing happens in bursts during active events. Do not introduce SignalR, Web PubSub, or event streaming for v1.
 
@@ -699,7 +712,7 @@ Configure Dio with:
 5. **Photo upload** pipeline (capture → compress → upload-url → blob upload → confirm)
 6. **Event feed** with thumbnails and real-time-ish updates
 7. **Reactions** and **save/download**
-8. **Push notifications** (FCM registration, new photo alerts, expiration alerts)
+8. **Push notifications** (FCM token registration, new photo alerts, circle join alerts, expiration alerts)
 9. **Auto-deletion** cleanup job and orphan cleanup
 10. **Polish** UI, transitions, error states, empty states
 

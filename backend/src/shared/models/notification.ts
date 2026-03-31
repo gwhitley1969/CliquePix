@@ -1,4 +1,4 @@
-export type NotificationType = 'new_photo' | 'event_expiring' | 'event_expired';
+export type NotificationType = 'new_photo' | 'event_expiring' | 'event_expired' | 'member_joined';
 
 export interface Notification {
   id: string;

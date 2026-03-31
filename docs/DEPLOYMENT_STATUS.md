@@ -1,6 +1,6 @@
 # DEPLOYMENT_STATUS.md — Clique Pix v1
 
-Last updated: 2026-03-26
+Last updated: 2026-03-31
 
 ---
 
@@ -12,13 +12,14 @@ Last updated: 2026-03-26
 |-----------|--------|-------|
 | Project scaffold (package.json, tsconfig, host.json) | Done | |
 | Database schema (001_initial_schema.sql) | Done | 8 tables, indexes, triggers |
+| Migration (002_member_joined_notification.sql) | Done | Added `member_joined` to notifications type CHECK constraint (run 2026-03-31) |
 | Shared models (8 files) | Done | User, Circle, Event, Photo, Reaction, Notification, PushToken |
 | Shared utils (response, errors, validators) | Done | |
 | Shared services (db, blob, sas, fcm, telemetry) | Done | Code reviewed + 49 issues fixed |
 | Auth middleware (JWT via JWKS) | Done | Uses typed errors (UnauthorizedError, NotFoundError) |
 | Error handler middleware | Done | Correlation IDs via invocationId |
 | Auth functions (verify, getMe) | Done | |
-| Circles functions (7 endpoints) | Done | |
+| Circles functions (7 endpoints) | Done | joinCircle sends FCM push to existing members (`member_joined`) |
 | Events functions (3 endpoints) | Done | |
 | Photos functions (5 endpoints) | Done | Validates via blob properties, async thumbnail gen |
 | Reactions functions (2 endpoints) | Done | Static imports, consistent telemetry keys |
@@ -36,25 +37,27 @@ Last updated: 2026-03-26
 | Design system (colors, gradients, typography, theme) | Done | Dark theme throughout, uses `withValues(alpha:)` (Flutter 3.27+) |
 | Constants (endpoints, app constants, environment) | Done | Domain: `clique-pix.com` |
 | Error types (sealed AppFailure, error mapper) | Done | |
-| Routing (GoRouter with shell route) | Done | Event-first flow, 4 tabs, auth guard + deep link /invite/:code |
+| Routing (GoRouter with shell route) | Done | Event-first flow, 4 tabs (Home/Circles/Notifications/Profile), auth guard with redirect preservation for invite deep links |
 | API client (Dio + 3 interceptors) | Done | Auth interceptor uses parent Dio for retry |
 | Token storage service | Done | Refresh callback mechanism wired to MSAL |
 | Storage service (save to gallery + share download) | Done | Downloads to temp file before sharing |
-| Deep link service | Done | Host: clique-pix.com |
+| Deep link service | Done | Host: clique-pix.com, initialized in app.dart via ConsumerStatefulWidget |
+| Push notification service | Done | Requests FCM permission, registers token with backend, listens for token refresh; initialized after authentication |
 | Shared widgets (7 widgets) | Done | Gradient-ringed avatars, dark-themed bottom nav with gradient icons |
 | Data models (5 models) | Done | PhotoModel with resilient num/string parsing, EventModel with circleName/memberCount |
 | Auth feature (MSAL integration) | Done | `msal_auth` 3.3.0, custom API scope, auto-login on startup, MSAL error recovery, dismiss button |
 | 5-layer token refresh defense | Done | All layers wired; loginHint threaded through Layer 5 |
-| Circles feature (API, repository, providers, 5 screens) | Done | Dark theme, gradient-bordered cards, gradient-ringed avatars, labeled "Create Circle" FAB |
+| Circles feature (API, repository, providers, 6 screens) | Done | Dark theme, gradient-bordered cards, gradient-ringed avatars, labeled "Create Circle" FAB, pull-to-refresh + 30s polling on list and detail screens, JoinCircleScreen with dark theme |
 | Events feature (API, repository, providers, 4 screens) | Done | Event-first flow, events home screen, dark-themed event detail with hero header, labeled "Create Event" FAB, `listAllEvents` backend endpoint |
 | Photos feature (API, repository, services, providers, 6 screens/widgets) | Done | `pro_image_editor` for crop/draw/stickers/filters, prominent "Upload to Event" button, step-by-step progress overlay, `uploaded_by_name` in responses, debug logging throughout pipeline |
-| Notifications feature (API, repository, providers, 1 screen) | Done | Dark theme, colored icon badges, unread/read styling |
+| Notifications feature (API, repository, providers, 1 screen) | Done | Dark theme, colored icon badges, unread/read styling, `member_joined` type with circle navigation |
 | Profile feature (1 screen) | Done | Dark theme, gradient profile card, grouped settings with gradient icons |
 | App entry point (main.dart) | Done | Firebase, timezone, WorkManager, notifications initialized |
 | All API providers wired to ApiClient | Done | No UnimplementedError providers |
 | App launcher icon | Done | Clique Pix camera logo at all Android densities |
 | Login screen | Done | Dark gradient, animated glowing logo, slide-in animations |
-| App-wide dark theme | Done | All screens use consistent dark (#0E1525) background with gradient accents |
+| App-wide dark theme | Done | `AppTheme.dark` applied globally in app.dart; all screens use consistent dark (#0E1525) background with gradient accents |
+| Home screen dashboard | Done | State-aware: brand new, has circles, active events, expired events; How It Works card, circle quick-start chips, active event cards with countdown timers |
 | Android manifest | Done | Permissions, App Links, FCM, MSAL BrowserTabActivity |
 | iOS Info.plist | Done | Camera/photo permissions, background modes, MSAL URL schemes |
 | Firebase config (Android) | Done | `google-services.json` placed in `android/app/` |
@@ -67,9 +70,10 @@ Last updated: 2026-03-26
 | Landing page (index.html) | Done | Brand design, feature highlights, download CTAs |
 | Privacy policy (privacy.html) | Done | Photo sharing-specific, Xtend-AI LLC, NC jurisdiction |
 | Terms of service (terms.html) | Done | 16 sections, effective March 25, 2026 |
-| Static Web App config | Done | MIME types for well-known files, security headers |
-| Well-known files | Done | apple-app-site-association + assetlinks.json (placeholders for Team ID / SHA256) |
-| Azure Static Web App | Done | `swa-cliquepix-prod`, Free tier |
+| Invite landing page (invite.html) | Done | Dark-themed, platform detection, intent:// for Android, app store buttons, OG meta tags |
+| Static Web App config | Done | MIME types for well-known files, security headers, `/invite/*` rewrite to invite.html |
+| Well-known files | Done | apple-app-site-association (Team ID: `4ML27KY869`) + assetlinks.json (debug SHA256 fingerprint) |
+| Azure Static Web App | Done | `swa-cliquepix-prod`, Free tier, redeployed 2026-03-31 |
 | Custom domains | Done | `clique-pix.com` (apex) + `www.clique-pix.com`, managed SSL |
 
 ### Documentation
@@ -257,6 +261,48 @@ The photo upload pipeline appeared completely broken — photos never appeared a
 
 ---
 
+## QR Invite Flow Fix + Circle Join Notifications (2026-03-31)
+
+### Problem 1: QR Code invite returns 404
+
+Scanning a circle invite QR code navigated to `https://clique-pix.com/invite/{code}` which returned a 404 from Azure because the Static Web App had no route or page for `/invite/*` paths.
+
+**Root causes and fixes:**
+
+| Issue | Fix |
+|-------|-----|
+| No web page for `/invite/*` paths | Created `website/invite.html` — branded dark-themed landing page with platform detection, `intent://` URI for Android, app store buttons |
+| No SWA rewrite rule | Added `/invite/*` → `invite.html` rewrite in `staticwebapp.config.json` (must come before `.well-known` routes) |
+| `DeepLinkService` never initialized | Converted `app.dart` to `ConsumerStatefulWidget`, call `initialize(router)` in `initState` |
+| Invite route bypassed auth check | Removed `isInviteRoute` exemption from GoRouter redirect; added `?redirect=` query param to preserve invite URL through login flow |
+| `.well-known` placeholders | Replaced `TEAM_ID` → `4ML27KY869` in AASA; replaced SHA256 placeholder with debug keystore fingerprint in assetlinks.json |
+| `JoinCircleScreen` light theme | Restyled with dark background, gradient heading, aqua accents, dark TextField |
+
+**Website redeployed** to `swa-cliquepix-prod` via SWA CLI. Invite URLs now return 200 with branded page.
+
+### Problem 2: Owner not notified when someone joins circle
+
+| Issue | Fix |
+|-------|-----|
+| No `member_joined` notification type | Created migration `002_member_joined_notification.sql` — ALTERed CHECK constraint on `notifications.type` |
+| Backend didn't send push on join | Added FCM push + notification record creation to `joinCircle()` in `circles.ts`; replicates exact pattern from `photos.ts` |
+| `NotificationType` model missing type | Added `'member_joined'` to union type in `notification.ts` |
+| Client didn't render `member_joined` | Added icon/color case (person_add + aqua/violet), title case ("New Member"), and circle navigation in `_NotificationTile.onTap` |
+| No FCM token registration | Created `PushNotificationService` — requests permission, gets FCM token, sends to `POST /api/push-tokens`, listens for token refresh |
+| No auto-refresh on circle screens | Added `WidgetsBindingObserver` + `RefreshIndicator` + `Timer.periodic(30s)` polling to both `CirclesListScreen` and `CircleDetailScreen` |
+
+**Backend redeployed** to `func-cliquepix-fresh`. Migration run against `pg-cliquepixdb`.
+
+**Known issue:** Push notifications not yet confirmed working end-to-end on device. FCM token registration and backend push logic are implemented but need further debugging.
+
+### Problem 3: Global light theme overriding dark screens
+
+`app.dart` used `AppTheme.light` — a Material 3 light theme that overrode per-widget dark styling on some screens (notably `CreateCircleScreen`).
+
+**Fix:** Created `AppTheme.dark` in `app_theme.dart` with dark defaults matching the app's visual design (dark scaffold, dark AppBar, dark InputDecoration, aqua accents). Switched `app.dart` to `theme: AppTheme.dark`.
+
+---
+
 ## Remaining Tasks
 
 ### Completed
@@ -276,15 +322,34 @@ The photo upload pipeline appeared completely broken — photos never appeared a
 | BlobUploadService Dio fix | Done | Set `contentType` on Options (not in headers), `responseType: ResponseType.bytes`, removed manual Content-Length |
 | Upload pipeline debug logging | Done | `[CliquePix]` prefixed `debugPrint` at every step for `adb logcat` diagnosis |
 
+### Recently Completed (2026-03-31)
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Well-known files: real values | Done | Apple Team ID `4ML27KY869` in AASA, debug SHA256 in assetlinks.json |
+| Invite landing page | Done | `website/invite.html` with SWA rewrite rule, deployed to `swa-cliquepix-prod` |
+| Deep link service initialization | Done | `DeepLinkService.initialize(router)` called in `app.dart` |
+| Auth gate for invite routes | Done | Unauthenticated invite URLs redirect to login with `?redirect=` preservation |
+| Global dark theme | Done | Created `AppTheme.dark`, switched `app.dart` from `AppTheme.light` |
+| Home screen dashboard | Done | 4-state contextual dashboard, How It Works card, circle chips, active event cards |
+| Back buttons on full-screen routes | Done | Event detail, camera capture, photo detail all have explicit back navigation |
+| Circle join push notification (backend) | Done | `joinCircle()` sends FCM to existing members, creates `member_joined` notification records |
+| DB migration: member_joined type | Done | `002_member_joined_notification.sql` run against `pg-cliquepixdb` |
+| FCM token registration (client) | Done | `PushNotificationService` gets token, registers with backend, listens for refresh |
+| Circle screens refresh | Done | Pull-to-refresh + app-resume + 30s polling on CirclesListScreen and CircleDetailScreen |
+| JoinCircleScreen dark theme | Done | Gradient heading, aqua accents, dark TextField |
+| Dark theme consistency | Done | EventsListScreen, CreateCircleScreen, InviteScreen all restyled |
+
 ### Not Started
 
 | Task | Status | Notes |
 |------|--------|-------|
 | APIM: X-Azure-FDID header validation | Not done | Restrict APIM to Front Door traffic only |
-| Well-known files: update placeholders | Not done | Need Apple Team ID for AASA, Android signing SHA256 for assetlinks.json |
 | Google OAuth: add second redirect URI | Not done | May need tenant-ID-format URI |
-| Release signing key | Not done | Needed for production APK and Play Store |
+| Release signing key | Not done | Needed for production APK and Play Store; assetlinks.json must be updated with release SHA256 |
 | App Store / Play Store submission | Not done | |
+| iOS Associated Domains entitlement | Not done | Requires Xcode on Mac: Signing & Capabilities → `applinks:clique-pix.com` |
+| Push notification end-to-end verification | Not done | FCM token registration implemented, backend sends push on circle join, but end-to-end not yet confirmed working |
 
 ### End-to-End Validation
 
@@ -292,8 +357,8 @@ The photo upload pipeline appeared completely broken — photos never appeared a
 |------|--------|
 | 1. Sign up / sign in | Done (2026-03-26) |
 | 2. Create a Circle | Done (2026-03-26) |
-| 3. Generate invite link/QR | Not tested |
-| 4. Join Circle via invite | Not tested |
+| 3. Generate invite link/QR | Done (2026-03-31) — QR code encodes `https://clique-pix.com/invite/{code}` |
+| 4. Join Circle via invite (QR scan) | Done (2026-03-31) — invite landing page loads (no more 404), join succeeds, joiner appears in circle |
 | 5. Create Event (24h/3d/7d) | Done (2026-03-26) |
 | 6. Capture photo in-app | Done (2026-03-26) — photo confirmed in database |
 | 7. Upload photo (compress → SAS → blob → confirm) | In progress — double-pop bug fixed (user never saw Upload button); Dio config fixed; needs retest |
@@ -301,6 +366,7 @@ The photo upload pipeline appeared completely broken — photos never appeared a
 | 9. React to photo | Not tested |
 | 10. Save photo to device | Not tested |
 | 11. Share photo externally | Not tested |
-| 12. Receive push notification | Not tested |
+| 12. Receive push notification (circle join) | Not working — backend sends FCM on join, client registers token, but push not received on owner device. Needs debugging. |
 | 13. Auto-deletion after expiry | Not tested |
 | 14. Graceful re-login (Layer 5) | Not tested |
+| 15. Owner sees new member (auto-refresh) | Partial — pull-to-refresh works, 30s polling implemented, but auto-refresh not confirmed working on device |

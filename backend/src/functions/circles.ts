@@ -8,6 +8,7 @@ import { validateRequiredString } from '../shared/utils/validators';
 import { isValidUUID } from '../shared/utils/validators';
 import { NotFoundError, ForbiddenError, ConflictError, ValidationError } from '../shared/utils/errors';
 import { Circle, CircleMember, CircleWithMemberCount } from '../shared/models/circle';
+import { sendToMultipleTokens } from '../shared/services/fcmService';
 import * as crypto from 'crypto';
 
 function generateInviteCode(): string {
@@ -177,6 +178,40 @@ async function joinCircle(req: HttpRequest, context: InvocationContext): Promise
       WHERE c.id = $1`,
       [circle.id],
     );
+
+    // Send push notifications to existing circle members
+    const tokens = await query<{ token: string }>(
+      `SELECT pt.token FROM push_tokens pt
+       JOIN circle_members cm ON cm.user_id = pt.user_id
+       WHERE cm.circle_id = $1 AND pt.user_id != $2`,
+      [circle.id, authUser.id],
+    );
+
+    if (tokens.length > 0) {
+      const failedTokens = await sendToMultipleTokens(
+        tokens.map(t => t.token),
+        'New Member!',
+        `${authUser.displayName} joined ${circle.name}`,
+        { circle_id: circle.id },
+      );
+
+      await execute(
+        `INSERT INTO notifications (id, user_id, type, payload_json)
+         SELECT gen_random_uuid(), cm.user_id, 'member_joined', $1::jsonb
+         FROM circle_members cm
+         WHERE cm.circle_id = $2 AND cm.user_id != $3`,
+        [JSON.stringify({ circle_id: circle.id, circle_name: circle.name, joined_user_name: authUser.displayName }), circle.id, authUser.id],
+      );
+
+      if (failedTokens.length > 0) {
+        await execute('DELETE FROM push_tokens WHERE token = ANY($1)', [failedTokens]);
+      }
+
+      const successCount = tokens.length - failedTokens.length;
+      if (successCount > 0) {
+        trackEvent('notification_sent', { circleId: circle.id, type: 'member_joined', count: String(successCount) });
+      }
+    }
 
     trackEvent('circle_joined', { circleId: circle.id, userId: authUser.id });
 

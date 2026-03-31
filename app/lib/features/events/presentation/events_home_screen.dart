@@ -244,7 +244,7 @@ class _EventCard extends StatelessWidget {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: () => context.go('/events/${event.id}'),
+          onTap: () => context.push('/events/${event.id}'),
           borderRadius: BorderRadius.circular(16),
           child: Container(
             decoration: BoxDecoration(

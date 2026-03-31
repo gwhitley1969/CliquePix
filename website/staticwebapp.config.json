@@ -1,6 +1,10 @@
 {
   "routes": [
     {
+      "route": "/invite/*",
+      "rewrite": "/invite.html"
+    },
+    {
       "route": "/.well-known/apple-app-site-association",
       "headers": {
         "Content-Type": "application/json",

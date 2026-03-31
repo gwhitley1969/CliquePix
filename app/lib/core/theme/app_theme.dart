@@ -9,6 +9,9 @@ class AppTheme {
   static const double standardPadding = 16.0;
   static const double minTapTarget = 48.0;
 
+  static const _darkBg = Color(0xFF0E1525);
+  static const _darkCard = Color(0xFF162033);
+
   static ThemeData get light => ThemeData(
     useMaterial3: true,
     brightness: Brightness.light,
@@ -69,5 +72,86 @@ class AppTheme {
       unselectedItemColor: AppColors.secondaryText,
       type: BottomNavigationBarType.fixed,
     ),
+  );
+
+  static ThemeData get dark => ThemeData(
+    useMaterial3: true,
+    brightness: Brightness.dark,
+    colorScheme: ColorScheme.dark(
+      primary: AppColors.electricAqua,
+      secondary: AppColors.deepBlue,
+      tertiary: AppColors.violetAccent,
+      surface: _darkBg,
+      error: AppColors.error,
+    ),
+    scaffoldBackgroundColor: _darkBg,
+    cardTheme: CardThemeData(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(cardRadius),
+      ),
+      color: _darkCard,
+    ),
+    appBarTheme: const AppBarTheme(
+      backgroundColor: _darkBg,
+      foregroundColor: Colors.white,
+      elevation: 0,
+      centerTitle: true,
+      surfaceTintColor: Colors.transparent,
+      titleTextStyle: TextStyle(
+        color: Colors.white,
+        fontWeight: FontWeight.w700,
+        fontSize: 18,
+      ),
+    ),
+    elevatedButtonTheme: ElevatedButtonThemeData(
+      style: ElevatedButton.styleFrom(
+        minimumSize: const Size(double.infinity, minTapTarget),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(cardRadius),
+        ),
+        textStyle: const TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: Colors.white.withValues(alpha: 0.06),
+      hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.3)),
+      labelStyle: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
+      floatingLabelStyle: const TextStyle(color: AppColors.electricAqua),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: const BorderSide(color: AppColors.electricAqua, width: 1.5),
+      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      counterStyle: TextStyle(color: Colors.white.withValues(alpha: 0.3)),
+    ),
+    bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+      backgroundColor: _darkBg,
+      selectedItemColor: AppColors.electricAqua,
+      unselectedItemColor: Colors.white54,
+      type: BottomNavigationBarType.fixed,
+    ),
+    textTheme: const TextTheme(
+      bodyLarge: TextStyle(color: Colors.white),
+      bodyMedium: TextStyle(color: Colors.white),
+      bodySmall: TextStyle(color: Colors.white70),
+      titleLarge: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+      titleMedium: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+      labelLarge: TextStyle(color: Colors.white),
+    ),
+    iconTheme: const IconThemeData(color: Colors.white),
+    dividerColor: Colors.white12,
   );
 }

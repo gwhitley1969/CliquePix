@@ -58,6 +58,16 @@ class _EventDetailBody extends StatelessWidget {
           backgroundColor: const Color(0xFF0E1525),
           foregroundColor: Colors.white,
           pinned: true,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_rounded),
+            onPressed: () {
+              if (context.canPop()) {
+                context.pop();
+              } else {
+                context.go('/events');
+              }
+            },
+          ),
           title: Text(
             event.name,
             style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
@@ -158,7 +168,7 @@ class _EventDetailBody extends StatelessWidget {
                     child: Material(
                       color: Colors.transparent,
                       child: InkWell(
-                        onTap: () => context.go('/events/$eventId/capture'),
+                        onTap: () => context.push('/events/$eventId/capture'),
                         borderRadius: BorderRadius.circular(14),
                         child: const Row(
                           mainAxisAlignment: MainAxisAlignment.center,
