@@ -315,6 +315,59 @@ async function leaveCircle(req: HttpRequest, context: InvocationContext): Promis
   }
 }
 
+// DELETE /api/circles/{circleId}/members/{userId}
+async function removeMember(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
+  try {
+    const authUser = await authenticateRequest(req);
+
+    const circleId = req.params.circleId;
+    const userId = req.params.userId;
+    if (!circleId || !isValidUUID(circleId)) {
+      throw new ValidationError('A valid circle ID is required.');
+    }
+    if (!userId || !isValidUUID(userId)) {
+      throw new ValidationError('A valid user ID is required.');
+    }
+
+    // Verify the requester is the circle owner
+    const ownerMembership = await queryOne<CircleMember>(
+      'SELECT * FROM circle_members WHERE circle_id = $1 AND user_id = $2',
+      [circleId, authUser.id],
+    );
+
+    if (!ownerMembership || ownerMembership.role !== 'owner') {
+      throw new ForbiddenError('Only the circle owner can remove members.');
+    }
+
+    // Prevent owner from removing themselves via this endpoint
+    if (userId === authUser.id) {
+      throw new ValidationError('Use the leave endpoint to remove yourself.');
+    }
+
+    // Verify the target user is a member
+    const targetMembership = await queryOne<CircleMember>(
+      'SELECT * FROM circle_members WHERE circle_id = $1 AND user_id = $2',
+      [circleId, userId],
+    );
+
+    if (!targetMembership) {
+      throw new NotFoundError('member');
+    }
+
+    // Remove the member
+    await execute(
+      'DELETE FROM circle_members WHERE circle_id = $1 AND user_id = $2',
+      [circleId, userId],
+    );
+
+    trackEvent('member_removed', { circleId, removedUserId: userId, removedBy: authUser.id });
+
+    return successResponse({ message: 'Member removed.' });
+  } catch (error) {
+    return handleError(error, context.invocationId);
+  }
+}
+
 // Register all endpoints
 app.http('createCircle', {
   methods: ['POST'],
@@ -363,4 +416,11 @@ app.http('leaveCircle', {
   authLevel: 'anonymous',
   route: 'circles/{circleId}/members/me',
   handler: leaveCircle,
+});
+
+app.http('removeMember', {
+  methods: ['DELETE'],
+  authLevel: 'anonymous',
+  route: 'circles/{circleId}/members/{userId}',
+  handler: removeMember,
 });

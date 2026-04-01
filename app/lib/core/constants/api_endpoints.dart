@@ -12,6 +12,7 @@ class ApiEndpoints {
   static String circleJoin(String id) => '/api/circles/$id/join';
   static String circleMembers(String id) => '/api/circles/$id/members';
   static String circleLeave(String id) => '/api/circles/$id/members/me';
+  static String circleMember(String circleId, String userId) => '/api/circles/$circleId/members/$userId';
 
   // Events
   static const events = '/api/events';

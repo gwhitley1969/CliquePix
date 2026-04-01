@@ -1,6 +1,6 @@
 # DEPLOYMENT_STATUS.md — Clique Pix v1
 
-Last updated: 2026-03-31
+Last updated: 2026-04-01
 
 ---
 
@@ -19,7 +19,7 @@ Last updated: 2026-03-31
 | Auth middleware (JWT via JWKS) | Done | Uses typed errors (UnauthorizedError, NotFoundError) |
 | Error handler middleware | Done | Correlation IDs via invocationId |
 | Auth functions (verify, getMe) | Done | |
-| Circles functions (7 endpoints) | Done | joinCircle sends FCM push to existing members (`member_joined`) |
+| Circles functions (8 endpoints) | Done | joinCircle sends FCM push; `removeMember` endpoint for owner to remove members |
 | Events functions (3 endpoints) | Done | |
 | Photos functions (5 endpoints) | Done | Validates via blob properties, async thumbnail gen |
 | Reactions functions (2 endpoints) | Done | Static imports, consistent telemetry keys |
@@ -42,7 +42,7 @@ Last updated: 2026-03-31
 | Token storage service | Done | Refresh callback mechanism wired to MSAL |
 | Storage service (save to gallery + share download) | Done | Downloads to temp file before sharing |
 | Deep link service | Done | Host: clique-pix.com, initialized in app.dart via ConsumerStatefulWidget |
-| Push notification service | Done | Requests FCM permission, registers token with backend, listens for token refresh; initialized after authentication |
+| Push notification service | Done | FCM token registration + refresh; foreground display via `flutter_local_notifications`; background/terminated tap navigation; static callback for local notification taps |
 | Shared widgets (7 widgets) | Done | Gradient-ringed avatars, dark-themed bottom nav with gradient icons |
 | Data models (5 models) | Done | PhotoModel with resilient num/string parsing, EventModel with circleName/memberCount |
 | Auth feature (MSAL integration) | Done | `msal_auth` 3.3.0, custom API scope, auto-login on startup, MSAL error recovery, dismiss button |
@@ -52,7 +52,7 @@ Last updated: 2026-03-31
 | Photos feature (API, repository, services, providers, 6 screens/widgets) | Done | `pro_image_editor` for crop/draw/stickers/filters, prominent "Upload to Event" button, step-by-step progress overlay, `uploaded_by_name` in responses, debug logging throughout pipeline |
 | Notifications feature (API, repository, providers, 1 screen) | Done | Dark theme, colored icon badges, unread/read styling, `member_joined` type with circle navigation |
 | Profile feature (1 screen) | Done | Dark theme, gradient profile card, grouped settings with gradient icons |
-| App entry point (main.dart) | Done | Firebase, timezone, WorkManager, notifications initialized |
+| App entry point (main.dart) | Done | Firebase, timezone, WorkManager, local notifications plugin (top-level), `cliquepix_default` channel creation, Android 13+ permission request, FCM `onMessage` foreground listener, background message handler |
 | All API providers wired to ApiClient | Done | No UnimplementedError providers |
 | App launcher icon | Done | Clique Pix camera logo at all Android densities |
 | Login screen | Done | Dark gradient, animated glowing logo, slide-in animations |
@@ -97,7 +97,7 @@ Last updated: 2026-03-31
 | Resource Group | `rg-cliquepix-prod` | eastus | Ready |
 | Log Analytics | `log-cliquepix-prod` | eastus | Ready |
 | Application Insights | `appi-cliquepix-prod` | eastus | Ready (workspace-based) |
-| Function App | `func-cliquepix-fresh` | eastus | Ready — 26 functions deployed |
+| Function App | `func-cliquepix-fresh` | eastus | Ready — 27 functions deployed (incl. `removeMember`) |
 | Storage Account | `stcliquepixprod` | eastus | Ready — `photos` container, blob public access disabled |
 | PostgreSQL | `pg-cliquepixdb` | eastus2 | Ready — v18, `cliquepix` DB with 8 tables |
 | Key Vault | `kv-cliquepix-prod` | eastus | Ready — `pg-connection-string` + `fcm-credentials` stored |
@@ -340,6 +340,25 @@ Scanning a circle invite QR code navigated to `https://clique-pix.com/invite/{co
 | JoinCircleScreen dark theme | Done | Gradient heading, aqua accents, dark TextField |
 | Dark theme consistency | Done | EventsListScreen, CreateCircleScreen, InviteScreen all restyled |
 
+### Recently Completed (2026-04-01)
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Circle member management: owner remove | Done | `DELETE /api/circles/{circleId}/members/{userId}` — owner-only, validates role, prevents self-removal |
+| Circle member management: leave/delete UI | Done | "Leave Circle" button (members), "Delete Circle" button (sole owner), confirmation dialogs |
+| Circle member management: tappable removal | Done | Owner sees remove icon on non-owner members; tap shows confirmation dialog |
+| Graceful 404 on member removal | Done | When removed user's screen refreshes, detects 404 DioException and navigates to `/circles` with SnackBar instead of showing error |
+| State invalidation: member count | Done | Uses `membersAsync.valueOrNull?.length` for live count; avoids full-screen loading flash |
+| Frontend API: `removeMember` | Done | Endpoint constant, CirclesApi method, CirclesRepository method |
+| Push notification: foreground display | Done | `onMessage` listener in `main.dart` shows heads-up banner via `flutter_local_notifications.show()` |
+| Push notification: channel creation | Done | `cliquepix_default` channel with `Importance.high` created in `main.dart` at startup |
+| Push notification: Android 13+ permission | Done | `requestNotificationsPermission()` via Android-specific plugin API |
+| Push notification: background tap | Done | `onMessageOpenedApp` → navigates to circle/event via GoRouter |
+| Push notification: terminated tap | Done | `getInitialMessage()` → delayed navigation after router init |
+| Push notification: local tap routing | Done | Static callback bridges `main.dart` `onDidReceiveNotificationResponse` → `PushNotificationService.onNotificationTap` → GoRouter |
+| Push notification: in-app list refresh | Done | `onMessage` invalidates `notificationsListProvider` for immediate update |
+| Backend redeployed | Done | `func azure functionapp publish func-cliquepix-fresh` — 27 functions |
+
 ### Not Started
 
 | Task | Status | Notes |
@@ -349,7 +368,7 @@ Scanning a circle invite QR code navigated to `https://clique-pix.com/invite/{co
 | Release signing key | Not done | Needed for production APK and Play Store; assetlinks.json must be updated with release SHA256 |
 | App Store / Play Store submission | Not done | |
 | iOS Associated Domains entitlement | Not done | Requires Xcode on Mac: Signing & Capabilities → `applinks:clique-pix.com` |
-| Push notification end-to-end verification | Not done | FCM token registration implemented, backend sends push on circle join, but end-to-end not yet confirmed working |
+| Push notification end-to-end verification | In progress | Full pipeline implemented (backend FCM send confirmed via App Insights, client foreground/background/terminated handlers, channel creation, Android 13+ permission). Needs on-device verification. |
 
 ### End-to-End Validation
 
@@ -366,7 +385,10 @@ Scanning a circle invite QR code navigated to `https://clique-pix.com/invite/{co
 | 9. React to photo | Not tested |
 | 10. Save photo to device | Not tested |
 | 11. Share photo externally | Not tested |
-| 12. Receive push notification (circle join) | Not working — backend sends FCM on join, client registers token, but push not received on owner device. Needs debugging. |
+| 12. Receive push notification (circle join) | In progress — backend sends FCM successfully (confirmed via App Insights telemetry), client has foreground/background/terminated handlers + notification channel + Android 13+ permission. Needs on-device verification. |
 | 13. Auto-deletion after expiry | Not tested |
 | 14. Graceful re-login (Layer 5) | Not tested |
 | 15. Owner sees new member (auto-refresh) | Partial — pull-to-refresh works, 30s polling implemented, but auto-refresh not confirmed working on device |
+| 16. Owner removes member from circle | Done (2026-04-01) — owner taps member → confirm dialog → member removed → list refreshes |
+| 17. Member leaves circle | Done (2026-04-01) — member taps "Leave Circle" → confirm → navigates to circles list |
+| 18. Removed member graceful redirect | Done (2026-04-01) — 404 detection auto-navigates removed user back to circles list with SnackBar |

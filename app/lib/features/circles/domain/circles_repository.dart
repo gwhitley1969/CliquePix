@@ -41,4 +41,8 @@ class CirclesRepository {
   Future<void> leaveCircle(String circleId) async {
     await api.leaveCircle(circleId);
   }
+
+  Future<void> removeMember(String circleId, String userId) async {
+    await api.removeMember(circleId, userId);
+  }
 }

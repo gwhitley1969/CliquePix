@@ -50,4 +50,8 @@ class CirclesApi {
   Future<void> leaveCircle(String circleId) async {
     await dio.delete(ApiEndpoints.circleLeave(circleId));
   }
+
+  Future<void> removeMember(String circleId, String userId) async {
+    await dio.delete(ApiEndpoints.circleMember(circleId, userId));
+  }
 }

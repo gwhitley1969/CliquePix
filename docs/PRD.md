@@ -153,9 +153,16 @@ A persistent group of people (e.g., “Girls Night Out” or bachelor party)
 ---
 
 ### 5.12 Notifications
-- New photo alerts
-- Event reminders
-- Expiration reminders
+- Push notifications via FCM (Firebase Cloud Messaging)
+- Notification types:
+  - New photo added to event ("New Photo!")
+  - Someone joins a circle ("New Member!")
+  - Event expiring in 24 hours
+  - Event expired
+- Foreground: heads-up banner slides down from top of screen
+- Background/terminated: standard system notification; tap navigates to relevant screen
+- In-app notification list with read/unread state, type-specific icons
+- No notifications sent for member removals or departures
 
 ---
 

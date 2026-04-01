@@ -230,7 +230,13 @@ POST   /api/circles/{circleId}/invite
 POST   /api/circles/{circleId}/join
 GET    /api/circles/{circleId}/members
 DELETE /api/circles/{circleId}/members/me
+DELETE /api/circles/{circleId}/members/{userId}
 ```
+
+**Member management:**
+- `DELETE .../members/me` — member leaves circle (or sole owner deletes circle)
+- `DELETE .../members/{userId}` — owner removes a specific member (owner-only, returns 403 for non-owners)
+- Azure Functions route matching: literal `me` segment takes priority over parameterized `{userId}`, so no route conflict
 
 ### Events
 ```
@@ -532,7 +538,7 @@ Users must be notified when:
 
 ## Delivery
 
-Use direct FCM (Firebase Cloud Messaging) for push delivery to both Android and iOS. FCM is a transport mechanism only — no Firebase backend services, no Firebase Auth, no Firestore.
+FCM (Firebase Cloud Messaging) for push delivery to both Android and iOS. FCM is a transport mechanism only — no Firebase backend services, no Firebase Auth, no Firestore. Messages use both `notification` (for OS-level display) and `data` (for app navigation) payloads via FCM HTTP v1 API.
 
 ### Notification Types
 
@@ -543,21 +549,58 @@ Use direct FCM (Firebase Cloud Messaging) for push delivery to both Android and 
 | `event_expiring` | Timer (24h before expiry) | Event circle members | `{ event_id }` |
 | `event_expired` | Timer (after expiry) | Event circle members | `{ event_id }` |
 
-### Flow
+**No notifications sent** for member removals or voluntary departures — the member simply disappears from the list.
 
-1. `PushNotificationService` initializes after user authenticates — requests notification permission, gets FCM token via `FirebaseMessaging.instance.getToken()`, registers with backend via `POST /api/push-tokens`
-2. Backend action (photo upload, circle join, timer) queries relevant members' push tokens from `push_tokens` table
-3. Function sends push via FCM HTTP v1 API using `sendToMultipleTokens()`
-4. Function creates notification records in `notifications` table for in-app notification list
-5. Client notification screen renders by type with appropriate icon, title, and navigation target
+### Push Notification Pipeline
+
+**Backend (Azure Functions):**
+1. Backend action (photo upload, circle join, timer) queries relevant members' push tokens from `push_tokens` table
+2. Function sends push via FCM HTTP v1 API (`sendToMultipleTokens()`) with `notification` + `data` payloads
+3. Function creates notification records in `notifications` table for in-app display
+4. Failed token sends trigger stale token cleanup (`DELETE FROM push_tokens WHERE token = ANY($1)`)
+
+**Client (Flutter) — three notification states:**
+
+| App State | Handler | Display Mechanism |
+|-----------|---------|-------------------|
+| **Foreground** | `FirebaseMessaging.onMessage` in `main.dart` | `flutter_local_notifications.show()` — manually displays heads-up banner |
+| **Background** | Android auto-displays from FCM `notification` payload | `FirebaseMessaging.onMessageOpenedApp` handles tap → navigates to circle/event |
+| **Terminated** | Android auto-displays from FCM `notification` payload | `FirebaseMessaging.getInitialMessage()` handles cold-start tap → navigates |
+
+**Key design:** The `onMessage` listener is set up in `main.dart` immediately after `flutter_local_notifications` plugin initialization — not in a separate service class. This ensures the plugin is always ready when `show()` is called.
+
+### Notification Channel
+
+Android 8.0+ requires notification channels. Created programmatically in `main.dart` at app startup:
+
+```
+Channel ID: cliquepix_default
+Name: Clique Pix
+Description: Photo sharing notifications
+Importance: HIGH (heads-up banners)
+```
+
+Referenced in AndroidManifest as `com.google.firebase.messaging.default_notification_channel_id`.
+
+### Android 13+ Permission
+
+`POST_NOTIFICATIONS` runtime permission requested via `AndroidFlutterLocalNotificationsPlugin.requestNotificationsPermission()` during app startup. Declared in AndroidManifest: `<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />`.
 
 ### Push Token Management
 
-- `PushNotificationService` registers token after successful authentication
+- `PushNotificationService` registers FCM token after successful authentication via `POST /api/push-tokens`
 - Listens to `FirebaseMessaging.instance.onTokenRefresh` for token rotation
 - Backend upserts on conflict (`ON CONFLICT (token) DO UPDATE`)
-- Remove on logout
-- Handle token expiry gracefully (failed sends remove stale tokens via `DELETE FROM push_tokens WHERE token = ANY($1)`)
+- Token removed on logout
+- Failed sends remove stale tokens
+
+### Notification Tap Navigation
+
+All notification taps (foreground local notification, background FCM, terminated cold-start) navigate via GoRouter:
+- `data.event_id` → `router.push('/events/$eventId')`
+- `data.circle_id` → `router.push('/circles/$circleId')`
+
+Foreground taps use a static callback pattern: `main.dart`'s `onDidReceiveNotificationResponse` → `PushNotificationService.onNotificationTap` → GoRouter navigation.
 
 ### Future Enhancement
 
