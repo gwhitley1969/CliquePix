@@ -1,6 +1,6 @@
 # DEPLOYMENT_STATUS.md — Clique Pix v1
 
-Last updated: 2026-04-01
+Last updated: 2026-04-03
 
 ---
 
@@ -20,7 +20,7 @@ Last updated: 2026-04-01
 | Error handler middleware | Done | Correlation IDs via invocationId |
 | Auth functions (verify, getMe) | Done | |
 | Circles functions (8 endpoints) | Done | joinCircle sends FCM push; `removeMember` endpoint for owner to remove members |
-| Events functions (3 endpoints) | Done | |
+| Events functions (4 endpoints) | Done | Includes `deleteEvent` for organizer-initiated deletion |
 | Photos functions (5 endpoints) | Done | Validates via blob properties, async thumbnail gen |
 | Reactions functions (2 endpoints) | Done | Static imports, consistent telemetry keys |
 | Notifications functions (3 endpoints) | Done | |
@@ -40,7 +40,7 @@ Last updated: 2026-04-01
 | Routing (GoRouter with shell route) | Done | Event-first flow, 4 tabs (Home/Circles/Notifications/Profile), auth guard with redirect preservation for invite deep links |
 | API client (Dio + 3 interceptors) | Done | Auth interceptor uses parent Dio for retry |
 | Token storage service | Done | Refresh callback mechanism wired to MSAL |
-| Storage service (save to gallery + share download) | Done | Downloads to temp file before sharing |
+| Storage service (save to gallery + share + batch download) | Done | Single save, batch save with progress, share via temp file |
 | Deep link service | Done | Host: clique-pix.com, initialized in app.dart via ConsumerStatefulWidget |
 | Push notification service | Done | FCM token registration + refresh; foreground display via `flutter_local_notifications`; background/terminated tap navigation; static callback for local notification taps |
 | Shared widgets (7 widgets) | Done | Gradient-ringed avatars, dark-themed bottom nav with gradient icons |
@@ -49,7 +49,7 @@ Last updated: 2026-04-01
 | 5-layer token refresh defense | Done | All layers wired; loginHint threaded through Layer 5 |
 | Circles feature (API, repository, providers, 6 screens) | Done | Dark theme, gradient-bordered cards, gradient-ringed avatars, labeled "Create Circle" FAB, pull-to-refresh + 30s polling on list and detail screens, JoinCircleScreen with dark theme |
 | Events feature (API, repository, providers, 4 screens) | Done | Event-first flow, events home screen, dark-themed event detail with hero header, labeled "Create Event" FAB, `listAllEvents` backend endpoint |
-| Photos feature (API, repository, services, providers, 6 screens/widgets) | Done | `pro_image_editor` for crop/draw/stickers/filters, prominent "Upload to Event" button, step-by-step progress overlay, `uploaded_by_name` in responses, debug logging throughout pipeline |
+| Photos feature (API, repository, services, providers, 6 screens/widgets) | Done | `pro_image_editor` for crop/draw/stickers/filters, prominent "Upload to Event" button, step-by-step progress overlay, `uploaded_by_name` in responses, multi-select photo download with progress, debug logging throughout pipeline |
 | Notifications feature (API, repository, providers, 1 screen) | Done | Dark theme, colored icon badges, unread/read styling, `member_joined` type with circle navigation |
 | Profile feature (1 screen) | Done | Dark theme, gradient profile card, grouped settings with gradient icons |
 | App entry point (main.dart) | Done | Firebase, timezone, WorkManager, local notifications plugin (top-level), `cliquepix_default` channel creation, Android 13+ permission request, FCM `onMessage` foreground listener, background message handler |
@@ -97,7 +97,7 @@ Last updated: 2026-04-01
 | Resource Group | `rg-cliquepix-prod` | eastus | Ready |
 | Log Analytics | `log-cliquepix-prod` | eastus | Ready |
 | Application Insights | `appi-cliquepix-prod` | eastus | Ready (workspace-based) |
-| Function App | `func-cliquepix-fresh` | eastus | Ready — 27 functions deployed (incl. `removeMember`) |
+| Function App | `func-cliquepix-fresh` | eastus | Ready — 28 functions deployed (incl. `removeMember`, `deleteEvent`) |
 | Storage Account | `stcliquepixprod` | eastus | Ready — `photos` container, blob public access disabled |
 | PostgreSQL | `pg-cliquepixdb` | eastus2 | Ready — v18, `cliquepix` DB with 8 tables |
 | Key Vault | `kv-cliquepix-prod` | eastus | Ready — `pg-connection-string` + `fcm-credentials` stored |
@@ -359,6 +359,20 @@ Scanning a circle invite QR code navigated to `https://clique-pix.com/invite/{co
 | Push notification: in-app list refresh | Done | `onMessage` invalidates `notificationsListProvider` for immediate update |
 | Backend redeployed | Done | `func azure functionapp publish func-cliquepix-fresh` — 27 functions |
 
+### Recently Completed (2026-04-03)
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Event deletion: backend endpoint | Done | `DELETE /api/events/{eventId}` — creator-only auth, blob cleanup before cascade DB delete, push + in-app notification to circle members |
+| Event deletion: frontend UI | Done | Delete icon in AppBar (organizer only), dark-themed confirmation dialog, post-delete navigation to events list with SnackBar |
+| Event deletion: API/repository layer | Done | `deleteEvent()` method in EventsApi and EventsRepository |
+| Photo card name readability fix | Done | Uploader name and timestamp text overridden to white for dark card background (#162033) — was invisible dark navy (#0F172A) |
+| Multi-select photo download: selection state | Done | `PhotoSelectionNotifier` + `photoSelectionProvider` (family by eventId) in photos_providers.dart |
+| Multi-select photo download: card UI | Done | Circular checkbox overlay on photo cards (aqua when selected), aqua border on selected cards, tap toggles selection in selection mode |
+| Multi-select photo download: feed UI | Done | Selection toolbar with Select All / Deselect All + Cancel; download action bar with progress indicator at bottom |
+| Multi-select photo download: batch save | Done | `savePhotosToGallery()` in StorageService — sequential download with progress callback, continues past individual failures |
+| Backend redeployed | Done | `func azure functionapp publish func-cliquepix-fresh` — 28 functions |
+
 ### Not Started
 
 | Task | Status | Notes |
@@ -392,3 +406,7 @@ Scanning a circle invite QR code navigated to `https://clique-pix.com/invite/{co
 | 16. Owner removes member from circle | Done (2026-04-01) — owner taps member → confirm dialog → member removed → list refreshes |
 | 17. Member leaves circle | Done (2026-04-01) — member taps "Leave Circle" → confirm → navigates to circles list |
 | 18. Removed member graceful redirect | Done (2026-04-01) — 404 detection auto-navigates removed user back to circles list with SnackBar |
+| 19. Event organizer deletes event | Not tested — delete icon visible to creator, confirmation dialog, blob cleanup + cascade delete |
+| 20. Non-organizer cannot delete event | Not tested — delete icon should not appear for non-creators |
+| 21. Multi-select photo download | Not tested — enter selection mode, select photos, download with progress bar |
+| 22. Photo card uploader name readable | Not tested — white text on dark card background |

@@ -62,7 +62,7 @@ A persistent group of people (e.g., “Girls Night Out” or bachelor party)
 
 ---
 
-### 5.2 Event Creation
+### 5.2 Event Creation & Management
 - Events are the primary action — create Event first
 - Fields:
   - Event name
@@ -70,6 +70,10 @@ A persistent group of people (e.g., “Girls Night Out” or bachelor party)
   - Duration (24h / 3 days / 7 days — three presets only, default 7 days)
   - Circle picker (select existing Circle or create new one inline)
 - Create Event button
+- Event organizer (creator) can manually delete an event at any time
+  - Confirmation dialog warns that deletion is permanent
+  - All photos are removed from cloud storage
+  - Circle members are notified via push notification
 
 ---
 
@@ -132,8 +136,9 @@ A persistent group of people (e.g., “Girls Night Out” or bachelor party)
 ---
 
 ### 5.9 Save & Download
-- Save individual photo to device or entire "event" of pics
-- Multi-select save (future enhancement)
+- Save individual photo to device from photo detail screen
+- Multi-select download: enter selection mode in event feed, tap photos to select, Select All / Deselect All, download selected photos to device with progress indicator
+- Batch download saves full-resolution originals (falls back to thumbnail if unavailable)
 
 ---
 
@@ -159,6 +164,7 @@ A persistent group of people (e.g., “Girls Night Out” or bachelor party)
   - Someone joins a circle ("New Member!")
   - Event expiring in 24 hours
   - Event expired
+  - Event deleted by organizer
 - Foreground: heads-up banner slides down from top of screen
 - Background/terminated: standard system notification; tap navigates to relevant screen
 - In-app notification list with read/unread state, type-specific icons
@@ -329,7 +335,7 @@ Why Flutter for Clique Pix:
 
 - Printed albums
 - AI highlights / recap
-- Multi-photo download
+- ~~Multi-photo download~~ (implemented in v1)
 - Video support
 - Premium subscription tier
 

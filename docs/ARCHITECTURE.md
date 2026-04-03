@@ -243,7 +243,14 @@ DELETE /api/circles/{circleId}/members/{userId}
 POST   /api/circles/{circleId}/events
 GET    /api/circles/{circleId}/events
 GET    /api/events/{eventId}
+DELETE /api/events/{eventId}
 ```
+
+**Event deletion:**
+- `DELETE /api/events/{eventId}` — only the event creator (organizer) can delete
+- Deletes all photo blobs from Azure Storage before cascading the database delete (photos + reactions)
+- Sends push notification and in-app notification to circle members
+- Hard delete — permanent, not recoverable
 
 ### Photos
 ```
@@ -391,7 +398,7 @@ Unique constraint on (photo_id, user_id, reaction_type).
 |--------|------|-------|
 | id | UUID | Primary key |
 | user_id | UUID | FK → users |
-| type | VARCHAR | new_photo / event_expiring / event_expired / member_joined |
+| type | VARCHAR | new_photo / event_expiring / event_expired / member_joined / event_deleted |
 | payload_json | JSONB | Structured notification data |
 | is_read | BOOLEAN | Default false |
 | created_at | TIMESTAMPTZ | |
@@ -548,6 +555,7 @@ FCM (Firebase Cloud Messaging) for push delivery to both Android and iOS. FCM is
 | `member_joined` | User joins circle via invite | Existing circle members (excl. joiner) | `{ circle_id, circle_name, joined_user_name }` |
 | `event_expiring` | Timer (24h before expiry) | Event circle members | `{ event_id }` |
 | `event_expired` | Timer (after expiry) | Event circle members | `{ event_id }` |
+| `event_deleted` | Event organizer deletes event | Circle members (excl. deleter) | `{ event_id, event_name }` |
 
 **No notifications sent** for member removals or voluntary departures — the member simply disappears from the list.
 
@@ -912,7 +920,7 @@ Function App system-assigned managed identity requires:
 Track these custom telemetry events:
 
 - `circle_created`, `circle_joined`, `circle_left`
-- `event_created`, `event_expired`
+- `event_created`, `event_expired`, `event_deleted`
 - `photo_upload_started`, `photo_upload_completed`, `photo_upload_failed`
 - `photo_saved_to_device`
 - `reaction_added`, `reaction_removed`
@@ -935,7 +943,7 @@ Log enough to troubleshoot, not enough to leak:
 
 - Premium subscription tier
 - Printed albums
-- Multi-photo bulk save / download
+- ~~Multi-photo bulk save / download~~ (implemented in v1)
 - Video support
 - Event recap / AI-assisted highlights
 - Silent push for iOS token refresh reliability

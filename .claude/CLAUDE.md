@@ -40,14 +40,14 @@ If a feature does not directly support this loop, it does not belong in v1.
 - 5-layer token refresh defense for the Entra 12-hour timeout bug
 - Circles: create, join via invite link / SMS / QR, list, view members, leave
 - Deep linking for Circle invites (Universal Links on iOS, App Links on Android)
-- Events: create Event first (pick or create Circle during creation), duration locked to three presets (24h / 3 days / 7 days default), list, expire
+- Events: create Event first (pick or create Circle during creation), duration locked to three presets (24h / 3 days / 7 days default), list, expire, manual deletion by event organizer (with confirmation dialog)
 - In-app camera capture
 - Upload from camera roll
 - Client-side image compression before upload (strip EXIF, resize to max 2048px, JPEG quality 80, convert HEIC to JPEG)
 - Photo upload via User Delegation SAS (two-phase: get upload URL, then confirm)
 - Event feed: vertical scroll, large photo cards, user attribution, timestamp, thumbnails
 - Lightweight reactions: ❤️ 😂 🔥 😮 (unique constraint per user per photo per type)
-- Save individual photo to device
+- Save individual photo to device, multi-select batch download with progress
 - External share via native OS share sheet (no direct third-party API integrations)
 - Auto-deletion: timer-triggered cloud cleanup when event duration expires
 - Orphan cleanup: pending uploads not confirmed within 10 minutes
@@ -242,6 +242,7 @@ DELETE /api/circles/{circleId}/members/{userId}
 POST   /api/circles/{circleId}/events
 GET    /api/circles/{circleId}/events
 GET    /api/events/{eventId}
+DELETE /api/events/{eventId}
 
 POST   /api/events/{eventId}/photos/upload-url
 POST   /api/events/{eventId}/photos
@@ -332,7 +333,7 @@ Use consistent error codes. Never return raw exception messages or stack traces 
 
 **push_tokens**: id (UUID PK), user_id (FK), platform (ios/android), token (FCM registration token), created_at, updated_at
 
-**notifications**: id (UUID PK), user_id (FK), type (new_photo/event_expiring/event_expired/member_joined), payload_json (JSONB), is_read (boolean, default false), created_at
+**notifications**: id (UUID PK), user_id (FK), type (new_photo/event_expiring/event_expired/member_joined/event_deleted), payload_json (JSONB), is_read (boolean, default false), created_at
 
 ### Photo Status Flow
 
@@ -615,6 +616,7 @@ FCM (Firebase Cloud Messaging) for push delivery to both Android and iOS. FCM is
 | Someone joins a circle | `member_joined` | All existing circle members except joiner | `{ circle_id, circle_name, joined_user_name }` |
 | Event expiring in 24h | `event_expiring` | All event circle members | `{ event_id }` |
 | Event expired | `event_expired` | All event circle members | `{ event_id }` |
+| Event deleted by organizer | `event_deleted` | All circle members except deleter | `{ event_id, event_name }` |
 
 **No notifications sent** for member removals or voluntary departures.
 
@@ -704,7 +706,7 @@ This is sufficient. Most photo sharing happens in bursts during active events. D
 ### Application Insights Telemetry Events
 
 - `circle_created`, `circle_joined`, `circle_left`
-- `event_created`, `event_expired`
+- `event_created`, `event_expired`, `event_deleted`
 - `photo_upload_started`, `photo_upload_completed`, `photo_upload_failed`
 - `photo_saved_to_device`
 - `reaction_added`, `reaction_removed`
