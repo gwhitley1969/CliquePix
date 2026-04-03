@@ -33,3 +33,44 @@ final photoDetailProvider = FutureProvider.family<PhotoModel, String>((ref, phot
   final repo = ref.watch(photosRepositoryProvider);
   return repo.getPhoto(photoId);
 });
+
+// Photo selection state for multi-select download
+class PhotoSelectionState {
+  final bool isSelecting;
+  final Set<String> selectedIds;
+  const PhotoSelectionState({this.isSelecting = false, this.selectedIds = const {}});
+}
+
+class PhotoSelectionNotifier extends StateNotifier<PhotoSelectionState> {
+  PhotoSelectionNotifier() : super(const PhotoSelectionState());
+
+  void enterSelectionMode() {
+    state = const PhotoSelectionState(isSelecting: true);
+  }
+
+  void exitSelectionMode() {
+    state = const PhotoSelectionState();
+  }
+
+  void togglePhoto(String id) {
+    final updated = Set<String>.from(state.selectedIds);
+    if (updated.contains(id)) {
+      updated.remove(id);
+    } else {
+      updated.add(id);
+    }
+    state = PhotoSelectionState(isSelecting: true, selectedIds: updated);
+  }
+
+  void selectAll(List<String> ids) {
+    state = PhotoSelectionState(isSelecting: true, selectedIds: Set<String>.from(ids));
+  }
+
+  void deselectAll() {
+    state = const PhotoSelectionState(isSelecting: true);
+  }
+}
+
+final photoSelectionProvider = StateNotifierProvider.family<PhotoSelectionNotifier, PhotoSelectionState, String>(
+  (ref, eventId) => PhotoSelectionNotifier(),
+);

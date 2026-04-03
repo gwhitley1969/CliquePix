@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_gradients.dart';
+import '../../../services/storage_service.dart';
 import '../../../widgets/error_widget.dart';
 import '../../../widgets/loading_shimmer.dart';
 import 'photos_providers.dart';
@@ -20,6 +21,9 @@ class EventFeedScreen extends ConsumerStatefulWidget {
 
 class _EventFeedScreenState extends ConsumerState<EventFeedScreen> {
   Timer? _pollTimer;
+  bool _isDownloading = false;
+  int _downloadProgress = 0;
+  int _downloadTotal = 0;
 
   @override
   void initState() {
@@ -36,9 +40,44 @@ class _EventFeedScreenState extends ConsumerState<EventFeedScreen> {
     super.dispose();
   }
 
+  Future<void> _downloadSelected(List<({String url, String photoId})> photos) async {
+    setState(() {
+      _isDownloading = true;
+      _downloadProgress = 0;
+      _downloadTotal = photos.length;
+    });
+
+    final storageService = ref.read(storageServiceProvider);
+    final saved = await storageService.savePhotosToGallery(
+      photos,
+      (completed, total) {
+        if (mounted) {
+          setState(() {
+            _downloadProgress = completed;
+            _downloadTotal = total;
+          });
+        }
+      },
+    );
+
+    if (mounted) {
+      setState(() => _isDownloading = false);
+      ref.read(photoSelectionProvider(widget.eventId).notifier).exitSelectionMode();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Saved $saved of ${photos.length} photos to gallery'),
+          backgroundColor: const Color(0xFF1A2035),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final photosAsync = ref.watch(eventPhotosProvider(widget.eventId));
+    final selectionState = ref.watch(photoSelectionProvider(widget.eventId));
+    final isSelecting = selectionState.isSelecting;
+    final selectedIds = selectionState.selectedIds;
 
     return photosAsync.when(
       loading: () {
@@ -82,18 +121,247 @@ class _EventFeedScreenState extends ConsumerState<EventFeedScreen> {
           );
         }
 
-        return RefreshIndicator(
-          onRefresh: () async => ref.invalidate(eventPhotosProvider(widget.eventId)),
-          child: ListView.builder(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            itemCount: photos.length,
-            itemBuilder: (context, index) => PhotoCardWidget(
-              photo: photos[index],
-              eventId: widget.eventId,
+        return Column(
+          children: [
+            // Selection toolbar
+            _SelectionToolbar(
+              isSelecting: isSelecting,
+              selectedCount: selectedIds.length,
+              totalCount: photos.length,
+              allSelected: selectedIds.length == photos.length,
+              onEnterSelection: () {
+                ref.read(photoSelectionProvider(widget.eventId).notifier).enterSelectionMode();
+              },
+              onSelectAll: () {
+                ref.read(photoSelectionProvider(widget.eventId).notifier)
+                    .selectAll(photos.map((p) => p.id).toList());
+              },
+              onDeselectAll: () {
+                ref.read(photoSelectionProvider(widget.eventId).notifier).deselectAll();
+              },
+              onCancel: () {
+                ref.read(photoSelectionProvider(widget.eventId).notifier).exitSelectionMode();
+              },
             ),
-          ),
+
+            // Photo feed
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: () async => ref.invalidate(eventPhotosProvider(widget.eventId)),
+                child: ListView.builder(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  itemCount: photos.length,
+                  itemBuilder: (context, index) {
+                    final photo = photos[index];
+                    return PhotoCardWidget(
+                      photo: photo,
+                      eventId: widget.eventId,
+                      isSelecting: isSelecting,
+                      isSelected: selectedIds.contains(photo.id),
+                      onSelectionToggle: () {
+                        ref.read(photoSelectionProvider(widget.eventId).notifier)
+                            .togglePhoto(photo.id);
+                      },
+                    );
+                  },
+                ),
+              ),
+            ),
+
+            // Download action bar
+            if (isSelecting && selectedIds.isNotEmpty)
+              _DownloadActionBar(
+                selectedCount: selectedIds.length,
+                isDownloading: _isDownloading,
+                progress: _downloadTotal > 0 ? _downloadProgress / _downloadTotal : 0,
+                onDownload: _isDownloading
+                    ? null
+                    : () {
+                        final selected = photos
+                            .where((p) => selectedIds.contains(p.id))
+                            .map((p) => (
+                                  url: p.originalUrl ?? p.thumbnailUrl ?? '',
+                                  photoId: p.id,
+                                ))
+                            .where((p) => p.url.isNotEmpty)
+                            .toList();
+                        _downloadSelected(selected);
+                      },
+              ),
+          ],
         );
       },
+    );
+  }
+}
+
+class _SelectionToolbar extends StatelessWidget {
+  final bool isSelecting;
+  final int selectedCount;
+  final int totalCount;
+  final bool allSelected;
+  final VoidCallback onEnterSelection;
+  final VoidCallback onSelectAll;
+  final VoidCallback onDeselectAll;
+  final VoidCallback onCancel;
+
+  const _SelectionToolbar({
+    required this.isSelecting,
+    required this.selectedCount,
+    required this.totalCount,
+    required this.allSelected,
+    required this.onEnterSelection,
+    required this.onSelectAll,
+    required this.onDeselectAll,
+    required this.onCancel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (!isSelecting) {
+      // Show a subtle "Select" button when not in selection mode
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            TextButton.icon(
+              onPressed: onEnterSelection,
+              icon: Icon(Icons.checklist_rounded, size: 18, color: Colors.white.withValues(alpha: 0.6)),
+              label: Text('Select', style: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.6))),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Selection mode toolbar
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF162033),
+        border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.08))),
+      ),
+      child: Row(
+        children: [
+          TextButton.icon(
+            onPressed: allSelected ? onDeselectAll : onSelectAll,
+            icon: Icon(
+              allSelected ? Icons.deselect : Icons.select_all,
+              size: 18,
+              color: AppColors.electricAqua,
+            ),
+            label: Text(
+              allSelected ? 'Deselect All' : 'Select All',
+              style: const TextStyle(fontSize: 13, color: AppColors.electricAqua),
+            ),
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+          ),
+          const Spacer(),
+          if (selectedCount > 0)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: Text(
+                '$selectedCount selected',
+                style: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.6)),
+              ),
+            ),
+          TextButton(
+            onPressed: onCancel,
+            child: Text('Cancel', style: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.5))),
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DownloadActionBar extends StatelessWidget {
+  final int selectedCount;
+  final bool isDownloading;
+  final double progress;
+  final VoidCallback? onDownload;
+
+  const _DownloadActionBar({
+    required this.selectedCount,
+    required this.isDownloading,
+    required this.progress,
+    required this.onDownload,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF162033),
+        border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.08))),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (isDownloading)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: progress,
+                    backgroundColor: Colors.white.withValues(alpha: 0.1),
+                    valueColor: const AlwaysStoppedAnimation<Color>(AppColors.electricAqua),
+                    minHeight: 4,
+                  ),
+                ),
+              ),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: ElevatedButton.icon(
+                onPressed: onDownload,
+                icon: isDownloading
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.download_rounded, size: 20),
+                label: Text(
+                  isDownloading
+                      ? 'Downloading...'
+                      : 'Download $selectedCount Photo${selectedCount == 1 ? '' : 's'}',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.electricAqua,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -31,4 +31,21 @@ class StorageService {
     await dio.download(url, filePath);
     return filePath;
   }
+
+  Future<int> savePhotosToGallery(
+    List<({String url, String photoId})> photos,
+    void Function(int completed, int total)? onProgress,
+  ) async {
+    int saved = 0;
+    for (final photo in photos) {
+      try {
+        await savePhotoToGallery(photo.url, photo.photoId);
+        saved++;
+        onProgress?.call(saved, photos.length);
+      } catch (_) {
+        // Continue with remaining photos on failure
+      }
+    }
+    return saved;
+  }
 }
