@@ -4,6 +4,7 @@ class EventModel {
   final String name;
   final String? description;
   final String createdByUserId;
+  final String? createdByName;
   final int retentionHours;
   final String status;
   final int photoCount;
@@ -18,6 +19,7 @@ class EventModel {
     required this.name,
     this.description,
     required this.createdByUserId,
+    this.createdByName,
     required this.retentionHours,
     required this.status,
     this.photoCount = 0,
@@ -38,6 +40,7 @@ class EventModel {
       name: json['name'] as String,
       description: json['description'] as String?,
       createdByUserId: json['created_by_user_id'] as String,
+      createdByName: json['created_by_name'] as String?,
       retentionHours: (json['retention_hours'] as num).toInt(),
       status: json['status'] as String,
       photoCount: (json['photo_count'] as num?)?.toInt() ?? 0,

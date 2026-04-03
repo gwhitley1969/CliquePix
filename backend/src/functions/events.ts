@@ -12,6 +12,7 @@ import { Event } from '../shared/models/event';
 
 interface EventWithPhotoCount extends Event {
   photo_count: number;
+  created_by_name: string;
 }
 
 interface EventWithCircleName extends EventWithPhotoCount {
@@ -89,11 +90,13 @@ async function listEvents(req: HttpRequest, context: InvocationContext): Promise
     await checkCircleMembership(circleId, authUser.id);
 
     const events = await query<EventWithPhotoCount>(
-      `SELECT e.*, COALESCE(COUNT(p.id), 0)::int AS photo_count
+      `SELECT e.*, u.display_name AS created_by_name,
+              COALESCE(COUNT(p.id), 0)::int AS photo_count
        FROM events e
+       JOIN users u ON u.id = e.created_by_user_id
        LEFT JOIN photos p ON p.event_id = e.id AND p.status = 'active'
        WHERE e.circle_id = $1
-       GROUP BY e.id
+       GROUP BY e.id, u.display_name
        ORDER BY e.created_at DESC`,
       [circleId],
     );
@@ -114,11 +117,13 @@ async function getEvent(req: HttpRequest, context: InvocationContext): Promise<H
     }
 
     const event = await queryOne<EventWithPhotoCount>(
-      `SELECT e.*, COALESCE(COUNT(p.id), 0)::int AS photo_count
+      `SELECT e.*, u.display_name AS created_by_name,
+              COALESCE(COUNT(p.id), 0)::int AS photo_count
        FROM events e
+       JOIN users u ON u.id = e.created_by_user_id
        LEFT JOIN photos p ON p.event_id = e.id AND p.status = 'active'
        WHERE e.id = $1
-       GROUP BY e.id`,
+       GROUP BY e.id, u.display_name`,
       [eventId],
     );
 
@@ -141,13 +146,15 @@ async function listAllEvents(req: HttpRequest, context: InvocationContext): Prom
     const events = await query<EventWithCircleName>(
       `SELECT e.*,
               c.name AS circle_name,
+              u.display_name AS created_by_name,
               COALESCE(COUNT(p.id), 0)::int AS photo_count,
               (SELECT COUNT(*)::int FROM circle_members cm2 WHERE cm2.circle_id = e.circle_id) AS member_count
        FROM events e
        JOIN circle_members cm ON cm.circle_id = e.circle_id AND cm.user_id = $1
        JOIN circles c ON c.id = e.circle_id
+       JOIN users u ON u.id = e.created_by_user_id
        LEFT JOIN photos p ON p.event_id = e.id AND p.status = 'active'
-       GROUP BY e.id, c.name
+       GROUP BY e.id, c.name, u.display_name
        ORDER BY e.created_at DESC`,
       [authUser.id],
     );

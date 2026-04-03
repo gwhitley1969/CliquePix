@@ -373,6 +373,11 @@ Scanning a circle invite QR code navigated to `https://clique-pix.com/invite/{co
 | Multi-select photo download: batch save | Done | `savePhotosToGallery()` in StorageService — sequential download with progress callback, continues past individual failures |
 | Backend redeployed | Done | `func azure functionapp publish func-cliquepix-fresh` — 28 functions |
 | Circle screens: refresh button | Done | Refresh icon in AppBar on both CircleDetailScreen and CirclesListScreen — calls existing `_refresh()` / `circlesListProvider.notifier.refresh()` |
+| DB migration: `event_deleted` notification type | Done | Migration `003_event_deleted_notification.sql` — added `event_deleted` to notifications CHECK constraint |
+| Event creator name: backend queries | Done | `getEvent`, `listEvents`, `listAllEvents` now JOIN `users` table, return `created_by_name` |
+| Event creator name: frontend model | Done | Added `createdByName` optional field to `EventModel`, parsed from `created_by_name` |
+| Event creator name: UI display | Done | "Created by {name}" row with person icon in event detail hero header |
+| Backend redeployed (2nd) | Done | `func azure functionapp publish func-cliquepix-fresh` — 28 functions |
 
 ### Not Started
 
@@ -411,3 +416,4 @@ Scanning a circle invite QR code navigated to `https://clique-pix.com/invite/{co
 | 20. Non-organizer cannot delete event | Not tested — delete icon should not appear for non-creators |
 | 21. Multi-select photo download | Not tested — enter selection mode, select photos, download with progress bar |
 | 22. Photo card uploader name readable | Not tested — white text on dark card background |
+| 23. Event creator name displayed | Not tested — "Created by {name}" visible on event detail screen |

@@ -188,7 +188,23 @@ class _EventDetailBodyState extends ConsumerState<_EventDetailBody> {
                     textAlign: TextAlign.center,
                   ),
                 ],
-                const SizedBox(height: 8),
+                // Creator name
+                if (event.createdByName != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6, bottom: 4),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.person_rounded, size: 14, color: colors[0].withValues(alpha: 0.6)),
+                        const SizedBox(width: 5),
+                        Text(
+                          'Created by ${event.createdByName}',
+                          style: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.5)),
+                        ),
+                      ],
+                    ),
+                  ),
+                const SizedBox(height: 4),
 
                 // Circle name
                 if (event.circleName != null)
