@@ -12,6 +12,47 @@ import 'notifications_providers.dart';
 class NotificationsScreen extends ConsumerWidget {
   const NotificationsScreen({super.key});
 
+  Future<void> _showClearAllDialog(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A2035),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Clear All Notifications?',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+        ),
+        content: Text(
+          'This will remove all notifications. This action cannot be undone.',
+          style: TextStyle(color: Colors.white.withValues(alpha: 0.7)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Cancel', style: TextStyle(color: Colors.white.withValues(alpha: 0.5))),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Clear', style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && context.mounted) {
+      try {
+        await ref.read(notificationsRepositoryProvider).clearAll();
+        ref.invalidate(notificationsListProvider);
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to clear notifications: $e'), backgroundColor: const Color(0xFFEF4444)),
+          );
+        }
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final notificationsAsync = ref.watch(notificationsListProvider);
@@ -25,6 +66,14 @@ class NotificationsScreen extends ConsumerWidget {
             floating: false,
             pinned: true,
             backgroundColor: const Color(0xFF0E1525),
+            actions: [
+              if (notificationsAsync.valueOrNull?.isNotEmpty ?? false)
+                IconButton(
+                  icon: const Icon(Icons.delete_sweep_rounded),
+                  tooltip: 'Clear All',
+                  onPressed: () => _showClearAllDialog(context, ref),
+                ),
+            ],
             flexibleSpace: FlexibleSpaceBar(
               title: ShaderMask(
                 shaderCallback: (bounds) => const LinearGradient(
@@ -102,20 +151,40 @@ class NotificationsScreen extends ConsumerWidget {
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
                 sliver: SliverList(
                   delegate: SliverChildBuilderDelegate(
-                    (context, index) => _NotificationTile(
-                      notification: notifications[index],
-                      onTap: () {
-                        ref.read(notificationsRepositoryProvider).markRead(notifications[index].id);
-                        final n = notifications[index];
-                        final eventId = n.payload['event_id'] as String?;
-                        final circleId = n.payload['circle_id'] as String?;
-                        if (eventId != null) {
-                          context.push('/events/$eventId');
-                        } else if (circleId != null) {
-                          context.push('/circles/$circleId');
-                        }
-                      },
-                    ),
+                    (context, index) {
+                      final n = notifications[index];
+                      return Dismissible(
+                        key: Key(n.id),
+                        direction: DismissDirection.endToStart,
+                        background: Container(
+                          alignment: Alignment.centerRight,
+                          padding: const EdgeInsets.only(right: 20),
+                          margin: const EdgeInsets.only(bottom: 10),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(14),
+                            color: const Color(0xFFEF4444),
+                          ),
+                          child: const Icon(Icons.delete_rounded, color: Colors.white),
+                        ),
+                        onDismissed: (_) {
+                          ref.read(notificationsRepositoryProvider).deleteNotification(n.id);
+                          ref.invalidate(notificationsListProvider);
+                        },
+                        child: _NotificationTile(
+                          notification: n,
+                          onTap: () {
+                            ref.read(notificationsRepositoryProvider).markRead(n.id);
+                            final eventId = n.payload['event_id'] as String?;
+                            final circleId = n.payload['circle_id'] as String?;
+                            if (eventId != null) {
+                              context.push('/events/$eventId');
+                            } else if (circleId != null) {
+                              context.push('/circles/$circleId');
+                            }
+                          },
+                        ),
+                      );
+                    },
                     childCount: notifications.length,
                   ),
                 ),

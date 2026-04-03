@@ -23,7 +23,7 @@ Last updated: 2026-04-03
 | Events functions (4 endpoints) | Done | Includes `deleteEvent` for organizer-initiated deletion |
 | Photos functions (5 endpoints) | Done | Validates via blob properties, async thumbnail gen |
 | Reactions functions (2 endpoints) | Done | Static imports, consistent telemetry keys |
-| Notifications functions (3 endpoints) | Done | |
+| Notifications functions (5 endpoints) | Done | Includes `deleteNotification` and `clearNotifications` |
 | Timer functions (3 timers) | Done | Deduplication on expiring notifications |
 | Health endpoint | Done | Standard response envelope |
 | npm dependencies installed | Done | |
@@ -97,7 +97,7 @@ Last updated: 2026-04-03
 | Resource Group | `rg-cliquepix-prod` | eastus | Ready |
 | Log Analytics | `log-cliquepix-prod` | eastus | Ready |
 | Application Insights | `appi-cliquepix-prod` | eastus | Ready (workspace-based) |
-| Function App | `func-cliquepix-fresh` | eastus | Ready — 28 functions deployed (incl. `removeMember`, `deleteEvent`) |
+| Function App | `func-cliquepix-fresh` | eastus | Ready — 31 functions deployed (incl. `removeMember`, `deleteEvent`, `deleteNotification`, `clearNotifications`) |
 | Storage Account | `stcliquepixprod` | eastus | Ready — `photos` container, blob public access disabled |
 | PostgreSQL | `pg-cliquepixdb` | eastus2 | Ready — v18, `cliquepix` DB with 8 tables |
 | Key Vault | `kv-cliquepix-prod` | eastus | Ready — `pg-connection-string` + `fcm-credentials` stored |
@@ -378,6 +378,10 @@ Scanning a circle invite QR code navigated to `https://clique-pix.com/invite/{co
 | Event creator name: frontend model | Done | Added `createdByName` optional field to `EventModel`, parsed from `created_by_name` |
 | Event creator name: UI display | Done | "Created by {name}" row with person icon in event detail hero header |
 | Backend redeployed (2nd) | Done | `func azure functionapp publish func-cliquepix-fresh` — 28 functions |
+| Notification clear/delete: backend endpoints | Done | `DELETE /api/notifications/{id}` (single) + `DELETE /api/notifications` (clear all) with ownership verification |
+| Notification clear/delete: API/repository | Done | `deleteNotification()` + `clearAll()` in notifications_api.dart and notifications_repository.dart |
+| Notification clear/delete: UI | Done | Clear All icon in AppBar with confirmation dialog; swipe-to-dismiss (Dismissible) on each notification tile |
+| Backend redeployed (3rd) | Done | `func azure functionapp publish func-cliquepix-fresh --force` — 31 functions |
 
 ### Not Started
 
@@ -417,3 +421,5 @@ Scanning a circle invite QR code navigated to `https://clique-pix.com/invite/{co
 | 21. Multi-select photo download | Not tested — enter selection mode, select photos, download with progress bar |
 | 22. Photo card uploader name readable | Not tested — white text on dark card background |
 | 23. Event creator name displayed | Not tested — "Created by {name}" visible on event detail screen |
+| 24. Clear all notifications | Not tested — tap trash sweep icon in AppBar → confirm → all notifications cleared |
+| 25. Swipe to dismiss notification | Not tested — swipe left on individual notification → red background → deleted |

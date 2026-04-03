@@ -81,6 +81,38 @@ async function registerPushToken(req: HttpRequest, context: InvocationContext): 
   }
 }
 
+async function deleteNotification(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
+  try {
+    const authUser = await authenticateRequest(req);
+    const notificationId = req.params.notificationId;
+    if (!notificationId || !isValidUUID(notificationId)) {
+      throw new ValidationError('Invalid notification ID.');
+    }
+
+    const notification = await queryOne<any>(
+      'SELECT * FROM notifications WHERE id = $1',
+      [notificationId],
+    );
+    if (!notification) throw new NotFoundError('notification');
+    if (notification.user_id !== authUser.id) throw new ForbiddenError();
+
+    await execute('DELETE FROM notifications WHERE id = $1', [notificationId]);
+    return successResponse({ message: 'Notification deleted.' });
+  } catch (error) {
+    return handleError(error, context.invocationId);
+  }
+}
+
+async function clearNotifications(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
+  try {
+    const authUser = await authenticateRequest(req);
+    const deleted = await execute('DELETE FROM notifications WHERE user_id = $1', [authUser.id]);
+    return successResponse({ message: 'All notifications cleared.', count: deleted });
+  } catch (error) {
+    return handleError(error, context.invocationId);
+  }
+}
+
 app.http('listNotifications', {
   methods: ['GET'],
   authLevel: 'anonymous',
@@ -100,4 +132,18 @@ app.http('registerPushToken', {
   authLevel: 'anonymous',
   route: 'push-tokens',
   handler: registerPushToken,
+});
+
+app.http('deleteNotification', {
+  methods: ['DELETE'],
+  authLevel: 'anonymous',
+  route: 'notifications/{notificationId}',
+  handler: deleteNotification,
+});
+
+app.http('clearNotifications', {
+  methods: ['DELETE'],
+  authLevel: 'anonymous',
+  route: 'notifications',
+  handler: clearNotifications,
 });

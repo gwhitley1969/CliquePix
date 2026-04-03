@@ -20,6 +20,14 @@ class NotificationsRepository {
     await api.markRead(notificationId);
   }
 
+  Future<void> deleteNotification(String notificationId) async {
+    await api.deleteNotification(notificationId);
+  }
+
+  Future<void> clearAll() async {
+    await api.clearAll();
+  }
+
   Future<void> registerPushToken(String platform, String token) async {
     await api.registerPushToken(platform, token);
   }

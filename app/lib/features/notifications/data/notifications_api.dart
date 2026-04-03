@@ -16,6 +16,14 @@ class NotificationsApi {
     await dio.patch(ApiEndpoints.notificationRead(notificationId));
   }
 
+  Future<void> deleteNotification(String notificationId) async {
+    await dio.delete('${ApiEndpoints.notifications}/$notificationId');
+  }
+
+  Future<void> clearAll() async {
+    await dio.delete(ApiEndpoints.notifications);
+  }
+
   Future<void> registerPushToken(String platform, String token) async {
     await dio.post(ApiEndpoints.pushTokens, data: {'platform': platform, 'token': token});
   }
