@@ -307,6 +307,15 @@ async function leaveCircle(req: HttpRequest, context: InvocationContext): Promis
       [circleId, authUser.id],
     );
 
+    // Mark DM threads involving leaving user as read-only
+    await execute(
+      `UPDATE event_dm_threads SET status = 'read_only'
+       WHERE event_id IN (SELECT id FROM events WHERE circle_id = $1)
+       AND (user_a_id = $2 OR user_b_id = $2)
+       AND status = 'active'`,
+      [circleId, authUser.id],
+    );
+
     trackEvent('circle_left', { circleId, userId: authUser.id });
 
     return successResponse({ message: 'You have left the circle.' });
@@ -357,6 +366,15 @@ async function removeMember(req: HttpRequest, context: InvocationContext): Promi
     // Remove the member
     await execute(
       'DELETE FROM circle_members WHERE circle_id = $1 AND user_id = $2',
+      [circleId, userId],
+    );
+
+    // Mark DM threads involving removed user as read-only
+    await execute(
+      `UPDATE event_dm_threads SET status = 'read_only'
+       WHERE event_id IN (SELECT id FROM events WHERE circle_id = $1)
+       AND (user_a_id = $2 OR user_b_id = $2)
+       AND status = 'active'`,
       [circleId, userId],
     );
 

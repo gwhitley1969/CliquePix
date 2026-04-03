@@ -93,7 +93,11 @@ class PushNotificationService {
       final router = _ref.read(routerProvider);
       final eventId = data['event_id'] as String?;
       final circleId = data['circle_id'] as String?;
-      if (eventId != null) {
+      final threadId = data['thread_id'] as String?;
+      final type = data['type'] as String?;
+      if (type == 'dm_message' && threadId != null && eventId != null) {
+        router.push('/events/$eventId/dm/$threadId');
+      } else if (eventId != null) {
         router.push('/events/$eventId');
       } else if (circleId != null) {
         router.push('/circles/$circleId');
