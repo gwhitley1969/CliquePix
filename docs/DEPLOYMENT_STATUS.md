@@ -372,6 +372,7 @@ Scanning a circle invite QR code navigated to `https://clique-pix.com/invite/{co
 | Multi-select photo download: feed UI | Done | Selection toolbar with Select All / Deselect All + Cancel; download action bar with progress indicator at bottom |
 | Multi-select photo download: batch save | Done | `savePhotosToGallery()` in StorageService — sequential download with progress callback, continues past individual failures |
 | Backend redeployed | Done | `func azure functionapp publish func-cliquepix-fresh` — 28 functions |
+| Circle screens: refresh button | Done | Refresh icon in AppBar on both CircleDetailScreen and CirclesListScreen — calls existing `_refresh()` / `circlesListProvider.notifier.refresh()` |
 
 ### Not Started
 

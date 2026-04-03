@@ -197,6 +197,11 @@ class _CircleDetailScreenState extends ConsumerState<CircleDetailScreen>
         centerTitle: true,
         actions: [
           IconButton(
+            icon: const Icon(Icons.refresh_rounded),
+            tooltip: 'Refresh',
+            onPressed: _refresh,
+          ),
+          IconButton(
             icon: const Icon(Icons.share_rounded),
             onPressed: () => context.go('/circles/$circleId/invite'),
           ),

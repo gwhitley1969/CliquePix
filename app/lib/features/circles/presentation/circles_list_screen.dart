@@ -69,6 +69,13 @@ class _CirclesListScreenState extends ConsumerState<CirclesListScreen>
             floating: false,
             pinned: true,
             backgroundColor: const Color(0xFF0E1525),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.refresh_rounded),
+                tooltip: 'Refresh',
+                onPressed: () => ref.read(circlesListProvider.notifier).refresh(),
+              ),
+            ],
             flexibleSpace: FlexibleSpaceBar(
               title: ShaderMask(
                 shaderCallback: (bounds) => AppGradients.primary.createShader(bounds),
