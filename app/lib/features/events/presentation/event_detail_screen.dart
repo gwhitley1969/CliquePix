@@ -282,6 +282,37 @@ class _EventDetailBodyState extends ConsumerState<_EventDetailBody> {
                     ),
                   ),
 
+                // Messages button
+                if (event.isActive) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    width: double.infinity,
+                    height: 50,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: AppColors.electricAqua.withValues(alpha: 0.4)),
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () => context.push('/events/$eventId/dm-threads'),
+                        borderRadius: BorderRadius.circular(14),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.message_rounded, color: AppColors.electricAqua, size: 20),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Messages',
+                              style: TextStyle(color: AppColors.electricAqua, fontWeight: FontWeight.w700, fontSize: 16),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+
                 const SizedBox(height: 8),
 
                 // Divider

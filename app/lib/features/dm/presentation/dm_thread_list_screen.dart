@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -27,9 +28,16 @@ class DmThreadListScreen extends ConsumerWidget {
         centerTitle: true,
       ),
       body: threadsAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator(color: AppColors.electricAqua)),
-        error: (err, _) => AppErrorWidget(message: err.toString()),
+        loading: () {
+          debugPrint('[CliquePix DM] ThreadList: loading for eventId=$eventId');
+          return const Center(child: CircularProgressIndicator(color: AppColors.electricAqua));
+        },
+        error: (err, _) {
+          debugPrint('[CliquePix DM] ThreadList: error=$err');
+          return AppErrorWidget(message: err.toString());
+        },
         data: (threads) {
+          debugPrint('[CliquePix DM] ThreadList: loaded ${threads.length} threads for eventId=$eventId');
           if (threads.isEmpty) {
             return Center(
               child: Padding(

@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import '../../../core/constants/api_endpoints.dart';
 
 class DmApi {
@@ -14,7 +15,9 @@ class DmApi {
   }
 
   Future<List<dynamic>> listThreads(String eventId) async {
+    debugPrint('[CliquePix DM] listThreads eventId=$eventId url=${ApiEndpoints.eventDmThreads(eventId)}');
     final response = await dio.get(ApiEndpoints.eventDmThreads(eventId));
+    debugPrint('[CliquePix DM] listThreads response status=${response.statusCode} data=${response.data}');
     return response.data['data'] as List<dynamic>;
   }
 
