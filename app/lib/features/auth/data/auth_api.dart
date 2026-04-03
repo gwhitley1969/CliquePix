@@ -14,4 +14,8 @@ class AuthApi {
     final response = await dio.get(ApiEndpoints.usersMe);
     return response.data['data'] as Map<String, dynamic>;
   }
+
+  Future<void> deleteAccount() async {
+    await dio.delete(ApiEndpoints.usersMe);
+  }
 }

@@ -71,4 +71,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
     await _repository.signOut();
     state = const AuthUnauthenticated();
   }
+
+  Future<void> deleteAccount() async {
+    await _repository.deleteAccount();
+    state = const AuthUnauthenticated();
+  }
 }

@@ -219,6 +219,7 @@ RESTful JSON APIs over HTTPS. No GraphQL. No event-driven backend patterns in v1
 ```
 POST   /api/auth/verify
 GET    /api/users/me
+DELETE /api/users/me
 ```
 
 ### Circles
@@ -326,7 +327,7 @@ Relational model fits the circles/events/memberships domain cleanly. Predictable
 | id | UUID | Primary key |
 | name | VARCHAR | |
 | invite_code | VARCHAR | Unique, for invite links and QR codes |
-| created_by_user_id | UUID | FK → users |
+| created_by_user_id | UUID | Nullable, FK → users (ON DELETE SET NULL) |
 | created_at | TIMESTAMPTZ | |
 | updated_at | TIMESTAMPTZ | |
 
@@ -348,7 +349,7 @@ Unique constraint on (circle_id, user_id).
 | circle_id | UUID | FK → circles |
 | name | VARCHAR | |
 | description | VARCHAR | Nullable |
-| created_by_user_id | UUID | FK → users |
+| created_by_user_id | UUID | Nullable, FK → users (ON DELETE SET NULL) |
 | retention_hours | INTEGER | 24, 72, or 168 (three presets only) |
 | status | VARCHAR | active / expired |
 | created_at | TIMESTAMPTZ | |
@@ -359,7 +360,7 @@ Unique constraint on (circle_id, user_id).
 |--------|------|-------|
 | id | UUID | Primary key, generated server-side at upload-url step |
 | event_id | UUID | FK → events |
-| uploaded_by_user_id | UUID | FK → users |
+| uploaded_by_user_id | UUID | Nullable, FK → users (ON DELETE SET NULL) |
 | blob_path | VARCHAR | e.g., photos/{circleId}/{eventId}/{photoId}/original.jpg |
 | thumbnail_blob_path | VARCHAR | Nullable until thumbnail generated |
 | original_filename | VARCHAR | |

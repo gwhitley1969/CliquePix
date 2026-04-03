@@ -229,6 +229,7 @@ RESTful JSON APIs over HTTPS. No GraphQL. No event-driven patterns in v1.
 ```
 POST   /api/auth/verify
 GET    /api/users/me
+DELETE /api/users/me
 
 POST   /api/circles
 GET    /api/circles
@@ -716,6 +717,7 @@ This is sufficient. Most photo sharing happens in bursts during active events. D
 - `expired_photos_deleted` (include count)
 - `orphaned_uploads_cleaned` (include count)
 - `token_refresh_success`, `token_refresh_failed` (include layer that triggered it)
+- `account_deleted`
 
 ### Logging Rules
 - Always log: correlation IDs, error codes, function execution duration

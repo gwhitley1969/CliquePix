@@ -147,12 +147,36 @@ class NotificationsScreen extends ConsumerWidget {
                 );
               }
 
+              // +1 for the "Clear All" row at the top
               return SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
                 sliver: SliverList(
                   delegate: SliverChildBuilderDelegate(
                     (context, index) {
-                      final n = notifications[index];
+                      // First item: Clear All button row
+                      if (index == 0) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              TextButton.icon(
+                                onPressed: () => _showClearAllDialog(context, ref),
+                                icon: Icon(Icons.delete_sweep_rounded, size: 18, color: Colors.white.withValues(alpha: 0.6)),
+                                label: Text('Clear All', style: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.6))),
+                                style: TextButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+
+                      // Notification tiles (offset by 1 for the Clear All row)
+                      final n = notifications[index - 1];
                       return Dismissible(
                         key: Key(n.id),
                         direction: DismissDirection.endToStart,
@@ -185,7 +209,7 @@ class NotificationsScreen extends ConsumerWidget {
                         ),
                       );
                     },
-                    childCount: notifications.length,
+                    childCount: notifications.length + 1, // +1 for Clear All row
                   ),
                 ),
               );

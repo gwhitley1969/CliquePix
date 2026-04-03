@@ -179,6 +179,7 @@ A persistent group of people (e.g., “Girls Night Out” or bachelor party)
   - Leave event
   - Remove own photos
   - Mute notifications
+  - **Delete account** — permanently removes user account, photos, and circle memberships. Shared circles/events are preserved for other members (creator set to null). Required by Apple App Store Review Guideline 5.1.1(v).
 
 ---
 

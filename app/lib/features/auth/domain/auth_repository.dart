@@ -112,6 +112,18 @@ class AuthRepository {
     await tokenStorage.clearAll();
   }
 
+  Future<void> deleteAccount() async {
+    await api.deleteAccount();
+    // Same cleanup as signOut
+    try {
+      final pca = await _getOrCreatePca();
+      await pca.signOut();
+    } catch (_) {}
+    await alarmRefreshService?.cancelRefresh();
+    await backgroundTokenService?.cancel();
+    await tokenStorage.clearAll();
+  }
+
   /// Clear MSAL cached account and force fresh PCA on next attempt.
   /// Used to recover from corrupted/stale MSAL sessions.
   Future<void> resetSession() async {

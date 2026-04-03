@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_gradients.dart';
@@ -96,6 +97,31 @@ class ProfileScreen extends ConsumerWidget {
                             ),
                           ),
                           const SizedBox(height: 4),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                authState.user.id,
+                                style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.35)),
+                              ),
+                              const SizedBox(width: 6),
+                              GestureDetector(
+                                onTap: () {
+                                  Clipboard.setData(ClipboardData(text: authState.user.id));
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: const Text('ID copied!'),
+                                      backgroundColor: AppColors.deepBlue,
+                                      behavior: SnackBarBehavior.floating,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                    ),
+                                  );
+                                },
+                                child: Icon(Icons.copy_rounded, size: 14, color: Colors.white.withValues(alpha: 0.35)),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
                           Text(
                             authState.user.emailOrPhone,
                             style: TextStyle(
@@ -174,6 +200,54 @@ class ProfileScreen extends ConsumerWidget {
                           );
                           if (confirm == true) {
                             ref.read(authStateProvider.notifier).signOut();
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  // Delete Account
+                  _SettingsGroup(
+                    children: [
+                      _SettingsTile(
+                        icon: Icons.delete_forever_rounded,
+                        iconColors: [const Color(0xFFEF4444), const Color(0xFFDC2626)],
+                        title: 'Delete Account',
+                        titleColor: const Color(0xFFEF4444),
+                        showDivider: false,
+                        onTap: () async {
+                          final confirm = await showDialog<bool>(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              backgroundColor: const Color(0xFF1A2035),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                              title: const Text('Delete Account?', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                              content: Text(
+                                'This will permanently delete your account, remove you from all circles, and delete all your photos. This action cannot be undone.',
+                                style: TextStyle(color: Colors.white.withValues(alpha: 0.7)),
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(ctx, false),
+                                  child: Text('Cancel', style: TextStyle(color: Colors.white.withValues(alpha: 0.6))),
+                                ),
+                                TextButton(
+                                  onPressed: () => Navigator.pop(ctx, true),
+                                  child: const Text('Delete My Account', style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.w600)),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (confirm == true) {
+                            try {
+                              await ref.read(authStateProvider.notifier).deleteAccount();
+                            } catch (e) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Failed to delete account: $e'), backgroundColor: const Color(0xFFEF4444)),
+                                );
+                              }
+                            }
                           }
                         },
                       ),

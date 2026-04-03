@@ -1,7 +1,8 @@
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
 import * as jwt from 'jsonwebtoken';
 import jwksRsa from 'jwks-rsa';
-import { queryOne } from '../shared/services/dbService';
+import { query, queryOne, execute } from '../shared/services/dbService';
+import { deleteBlob } from '../shared/services/blobService';
 import { handleError } from '../shared/middleware/errorHandler';
 import { authenticateRequest } from '../shared/middleware/authMiddleware';
 import { successResponse, errorResponse } from '../shared/utils/response';
@@ -111,6 +112,56 @@ async function getMe(req: HttpRequest, context: InvocationContext): Promise<Http
   }
 }
 
+async function deleteMe(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
+  try {
+    const authUser = await authenticateRequest(req);
+
+    // 1. Find circles where user is the sole owner (only member)
+    const soleOwnerCircles = await query<{ id: string }>(
+      `SELECT c.id FROM circles c
+       WHERE c.created_by_user_id = $1
+       AND (SELECT COUNT(*) FROM circle_members cm WHERE cm.circle_id = c.id) = 1`,
+      [authUser.id],
+    );
+
+    // 2. For sole-owner circles: delete all photo blobs, then delete circle (CASCADE)
+    for (const circle of soleOwnerCircles) {
+      const circlePhotos = await query<{ blob_path: string; thumbnail_blob_path: string | null }>(
+        `SELECT p.blob_path, p.thumbnail_blob_path FROM photos p
+         JOIN events e ON e.id = p.event_id
+         WHERE e.circle_id = $1`,
+        [circle.id],
+      );
+      for (const photo of circlePhotos) {
+        await deleteBlob(photo.blob_path);
+        if (photo.thumbnail_blob_path) await deleteBlob(photo.thumbnail_blob_path);
+      }
+      await execute('DELETE FROM circles WHERE id = $1', [circle.id]);
+    }
+
+    // 3. Delete remaining photos uploaded by user (in other circles)
+    const userPhotos = await query<{ blob_path: string; thumbnail_blob_path: string | null }>(
+      'SELECT blob_path, thumbnail_blob_path FROM photos WHERE uploaded_by_user_id = $1',
+      [authUser.id],
+    );
+    for (const photo of userPhotos) {
+      await deleteBlob(photo.blob_path);
+      if (photo.thumbnail_blob_path) await deleteBlob(photo.thumbnail_blob_path);
+    }
+    await execute('DELETE FROM photos WHERE uploaded_by_user_id = $1', [authUser.id]);
+
+    // 4. Delete user record (CASCADE: circle_members, reactions, push_tokens, notifications)
+    // (SET NULL via migration 004: circles.created_by_user_id, events.created_by_user_id)
+    await execute('DELETE FROM users WHERE id = $1', [authUser.id]);
+
+    trackEvent('account_deleted', { userId: authUser.id });
+
+    return successResponse({ message: 'Account deleted.' });
+  } catch (error) {
+    return handleError(error, context.invocationId);
+  }
+}
+
 app.http('authVerify', {
   methods: ['POST'],
   authLevel: 'anonymous',
@@ -123,4 +174,11 @@ app.http('getMe', {
   authLevel: 'anonymous',
   route: 'users/me',
   handler: getMe,
+});
+
+app.http('deleteMe', {
+  methods: ['DELETE'],
+  authLevel: 'anonymous',
+  route: 'users/me',
+  handler: deleteMe,
 });

@@ -13,12 +13,14 @@ Last updated: 2026-04-03
 | Project scaffold (package.json, tsconfig, host.json) | Done | |
 | Database schema (001_initial_schema.sql) | Done | 8 tables, indexes, triggers |
 | Migration (002_member_joined_notification.sql) | Done | Added `member_joined` to notifications type CHECK constraint (run 2026-03-31) |
+| Migration (003_event_deleted_notification.sql) | Done | Added `event_deleted` to notifications type CHECK constraint (run 2026-04-03) |
+| Migration (004_user_delete_set_null.sql) | Done | Made `created_by_user_id` / `uploaded_by_user_id` nullable with ON DELETE SET NULL (run 2026-04-03) |
 | Shared models (8 files) | Done | User, Circle, Event, Photo, Reaction, Notification, PushToken |
 | Shared utils (response, errors, validators) | Done | |
 | Shared services (db, blob, sas, fcm, telemetry) | Done | Code reviewed + 49 issues fixed |
 | Auth middleware (JWT via JWKS) | Done | Uses typed errors (UnauthorizedError, NotFoundError) |
 | Error handler middleware | Done | Correlation IDs via invocationId |
-| Auth functions (verify, getMe) | Done | |
+| Auth functions (verify, getMe, deleteMe) | Done | `deleteMe` cleans up blobs, sole-owner circles, user record |
 | Circles functions (8 endpoints) | Done | joinCircle sends FCM push; `removeMember` endpoint for owner to remove members |
 | Events functions (4 endpoints) | Done | Includes `deleteEvent` for organizer-initiated deletion |
 | Photos functions (5 endpoints) | Done | Validates via blob properties, async thumbnail gen |
@@ -97,7 +99,7 @@ Last updated: 2026-04-03
 | Resource Group | `rg-cliquepix-prod` | eastus | Ready |
 | Log Analytics | `log-cliquepix-prod` | eastus | Ready |
 | Application Insights | `appi-cliquepix-prod` | eastus | Ready (workspace-based) |
-| Function App | `func-cliquepix-fresh` | eastus | Ready — 31 functions deployed (incl. `removeMember`, `deleteEvent`, `deleteNotification`, `clearNotifications`) |
+| Function App | `func-cliquepix-fresh` | eastus | Ready — 32 functions deployed (incl. `removeMember`, `deleteEvent`, `deleteNotification`, `clearNotifications`, `deleteMe`) |
 | Storage Account | `stcliquepixprod` | eastus | Ready — `photos` container, blob public access disabled |
 | PostgreSQL | `pg-cliquepixdb` | eastus2 | Ready — v18, `cliquepix` DB with 8 tables |
 | Key Vault | `kv-cliquepix-prod` | eastus | Ready — `pg-connection-string` + `fcm-credentials` stored |
@@ -382,6 +384,12 @@ Scanning a circle invite QR code navigated to `https://clique-pix.com/invite/{co
 | Notification clear/delete: API/repository | Done | `deleteNotification()` + `clearAll()` in notifications_api.dart and notifications_repository.dart |
 | Notification clear/delete: UI | Done | Clear All icon in AppBar with confirmation dialog; swipe-to-dismiss (Dismissible) on each notification tile |
 | Backend redeployed (3rd) | Done | `func azure functionapp publish func-cliquepix-fresh --force` — 31 functions |
+| Copy user ID button | Done | User ID displayed on profile card with copy icon, copies to clipboard with SnackBar |
+| Delete account: backend endpoint | Done | `DELETE /api/users/me` — cleans up sole-owner circles + blobs, deletes user photos + blobs, deletes user record |
+| Delete account: DB migration 004 | Done | `created_by_user_id` and `uploaded_by_user_id` made nullable with ON DELETE SET NULL on circles, events, photos |
+| Delete account: auth layer | Done | `deleteAccount()` threaded through AuthApi → AuthRepository → AuthNotifier with local cleanup |
+| Delete account: profile UI | Done | Red "Delete Account" tile with confirmation dialog; GoRouter auto-redirects to login on success |
+| Backend redeployed (4th) | Done | `func azure functionapp publish func-cliquepix-fresh --force` — 32 functions |
 
 ### Not Started
 
@@ -423,3 +431,5 @@ Scanning a circle invite QR code navigated to `https://clique-pix.com/invite/{co
 | 23. Event creator name displayed | Not tested — "Created by {name}" visible on event detail screen |
 | 24. Clear all notifications | Not tested — tap trash sweep icon in AppBar → confirm → all notifications cleared |
 | 25. Swipe to dismiss notification | Not tested — swipe left on individual notification → red background → deleted |
+| 26. Copy user ID from profile | Not tested — tap copy icon next to UUID → clipboard |
+| 27. Delete account | Not tested — tap Delete Account → confirm → account removed → redirected to login |
