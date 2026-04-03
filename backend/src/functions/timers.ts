@@ -51,6 +51,16 @@ async function cleanupExpired(myTimer: Timer, context: InvocationContext): Promi
     trackEvent('event_expired', { count: String(expiredEventRows.length) });
   }
 
+  // Mark DM threads as read_only for expired events
+  const dmReadOnlyCount = await execute(
+    `UPDATE event_dm_threads SET status = 'read_only'
+     WHERE status = 'active'
+     AND event_id IN (SELECT id FROM events WHERE status = 'expired')`,
+  );
+  if (dmReadOnlyCount > 0) {
+    trackEvent('dm_thread_marked_read_only', { count: String(dmReadOnlyCount) });
+  }
+
   trackEvent('expired_photos_deleted', { count: String(deletedCount) });
   context.log(`Cleaned up ${deletedCount} expired photos`);
 }

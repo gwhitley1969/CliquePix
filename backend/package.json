@@ -17,6 +17,7 @@
     "@azure/functions": "^4.5.0",
     "@azure/identity": "^4.2.0",
     "@azure/storage-blob": "^12.17.0",
+    "@azure/web-pubsub": "^1.2.0",
     "applicationinsights": "^2.9.5",
     "googleapis": "^140.0.0",
     "jsonwebtoken": "^9.0.2",
