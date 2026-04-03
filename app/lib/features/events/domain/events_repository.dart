@@ -24,4 +24,8 @@ class EventsRepository {
     final data = await api.getEvent(eventId);
     return EventModel.fromJson(data);
   }
+
+  Future<void> deleteEvent(String eventId) async {
+    await api.deleteEvent(eventId);
+  }
 }

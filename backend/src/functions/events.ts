@@ -2,10 +2,12 @@ import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/fu
 import { authenticateRequest } from '../shared/middleware/authMiddleware';
 import { handleError } from '../shared/middleware/errorHandler';
 import { successResponse } from '../shared/utils/response';
-import { query, queryOne } from '../shared/services/dbService';
+import { query, queryOne, execute } from '../shared/services/dbService';
 import { trackEvent } from '../shared/services/telemetryService';
 import { validateRequiredString, validateOptionalString, validateRetentionHours, isValidUUID } from '../shared/utils/validators';
 import { NotFoundError, ForbiddenError, ValidationError } from '../shared/utils/errors';
+import { deleteBlob } from '../shared/services/blobService';
+import { sendToMultipleTokens } from '../shared/services/fcmService';
 import { Event } from '../shared/models/event';
 
 interface EventWithPhotoCount extends Event {
@@ -156,6 +158,88 @@ async function listAllEvents(req: HttpRequest, context: InvocationContext): Prom
   }
 }
 
+async function deleteEvent(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
+  try {
+    const authUser = await authenticateRequest(req);
+    const eventId = req.params.eventId;
+
+    if (!eventId || !isValidUUID(eventId)) {
+      throw new ValidationError('A valid event ID is required.');
+    }
+
+    const event = await queryOne<Event>(
+      'SELECT * FROM events WHERE id = $1',
+      [eventId],
+    );
+    if (!event) {
+      throw new NotFoundError('event');
+    }
+
+    if (event.created_by_user_id !== authUser.id) {
+      throw new ForbiddenError('Only the event organizer can delete this event.');
+    }
+
+    await checkCircleMembership(event.circle_id, authUser.id);
+
+    // Delete blobs BEFORE cascade DB delete (blobs are not auto-deleted)
+    const photos = await query<{ blob_path: string; thumbnail_blob_path: string | null }>(
+      `SELECT blob_path, thumbnail_blob_path FROM photos WHERE event_id = $1 AND status IN ('active', 'pending')`,
+      [eventId],
+    );
+
+    for (const photo of photos) {
+      await deleteBlob(photo.blob_path);
+      if (photo.thumbnail_blob_path) {
+        await deleteBlob(photo.thumbnail_blob_path);
+      }
+    }
+
+    // CASCADE deletes photos and reactions
+    await execute('DELETE FROM events WHERE id = $1', [eventId]);
+
+    // Notify circle members (except the deleter)
+    const tokens = await query<{ token: string }>(
+      `SELECT pt.token FROM push_tokens pt
+       JOIN circle_members cm ON cm.user_id = pt.user_id
+       WHERE cm.circle_id = $1 AND pt.user_id != $2`,
+      [event.circle_id, authUser.id],
+    );
+
+    if (tokens.length > 0) {
+      const failedTokens = await sendToMultipleTokens(
+        tokens.map(t => t.token),
+        'Event Deleted',
+        `"${event.name}" was deleted by ${authUser.displayName}`,
+        { event_id: eventId },
+      );
+
+      // Create in-app notification records
+      await execute(
+        `INSERT INTO notifications (id, user_id, type, payload_json)
+         SELECT gen_random_uuid(), cm.user_id, 'event_deleted', $1::jsonb
+         FROM circle_members cm
+         WHERE cm.circle_id = $2 AND cm.user_id != $3`,
+        [JSON.stringify({ event_id: eventId, event_name: event.name }), event.circle_id, authUser.id],
+      );
+
+      if (failedTokens.length > 0) {
+        await execute('DELETE FROM push_tokens WHERE token = ANY($1)', [failedTokens]);
+      }
+    }
+
+    trackEvent('event_deleted', {
+      eventId,
+      circleId: event.circle_id,
+      userId: authUser.id,
+      photoCount: String(photos.length),
+    });
+
+    return successResponse({ message: 'Event deleted.' });
+  } catch (error) {
+    return handleError(error, context.invocationId);
+  }
+}
+
 app.http('listAllEvents', {
   methods: ['GET'],
   authLevel: 'anonymous',
@@ -182,4 +266,11 @@ app.http('getEvent', {
   authLevel: 'anonymous',
   route: 'events/{eventId}',
   handler: getEvent,
+});
+
+app.http('deleteEvent', {
+  methods: ['DELETE'],
+  authLevel: 'anonymous',
+  route: 'events/{eventId}',
+  handler: deleteEvent,
 });

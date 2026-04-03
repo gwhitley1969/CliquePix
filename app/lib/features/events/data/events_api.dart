@@ -31,4 +31,8 @@ class EventsApi {
     final response = await dio.get(ApiEndpoints.event(eventId));
     return response.data['data'] as Map<String, dynamic>;
   }
+
+  Future<void> deleteEvent(String eventId) async {
+    await dio.delete(ApiEndpoints.event(eventId));
+  }
 }

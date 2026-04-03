@@ -6,6 +6,8 @@ import '../../../core/theme/app_gradients.dart';
 import '../../../core/utils/date_utils.dart';
 import '../../../widgets/error_widget.dart';
 import '../../../models/event_model.dart';
+import '../../auth/presentation/auth_providers.dart';
+import '../../auth/domain/auth_state.dart';
 import '../../photos/presentation/event_feed_screen.dart';
 import 'events_providers.dart';
 
@@ -28,10 +30,18 @@ class EventDetailScreen extends ConsumerWidget {
   }
 }
 
-class _EventDetailBody extends StatelessWidget {
+class _EventDetailBody extends ConsumerStatefulWidget {
   final EventModel event;
   final String eventId;
   const _EventDetailBody({required this.event, required this.eventId});
+
+  @override
+  ConsumerState<_EventDetailBody> createState() => _EventDetailBodyState();
+}
+
+class _EventDetailBodyState extends ConsumerState<_EventDetailBody> {
+  EventModel get event => widget.event;
+  String get eventId => widget.eventId;
 
   String get _timeRemaining {
     if (event.isExpired) return 'Expired';
@@ -47,9 +57,66 @@ class _EventDetailBody extends StatelessWidget {
     return [AppColors.electricAqua, AppColors.deepBlue];
   }
 
+  Future<void> _showDeleteEventDialog() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A2035),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Delete Event?',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+        ),
+        content: Text(
+          'Are you sure you want to delete "${event.name}"? All photos in this event will be permanently deleted and cannot be recovered.',
+          style: TextStyle(color: Colors.white.withValues(alpha: 0.7)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Cancel', style: TextStyle(color: Colors.white.withValues(alpha: 0.5))),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete', style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      try {
+        await ref.read(eventsRepositoryProvider).deleteEvent(eventId);
+        ref.invalidate(allEventsListProvider);
+        ref.invalidate(eventsListProvider(event.circleId));
+        if (mounted) {
+          context.go('/events');
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('"${event.name}" has been deleted.'),
+              backgroundColor: const Color(0xFF1A2035),
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to delete event: $e'),
+              backgroundColor: const Color(0xFFEF4444),
+            ),
+          );
+        }
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = _statusColors;
+    final authState = ref.watch(authStateProvider);
+    final currentUserId = authState is AuthAuthenticated ? authState.user.id : null;
+    final isOrganizer = event.createdByUserId == currentUserId;
 
     return CustomScrollView(
       slivers: [
@@ -73,6 +140,14 @@ class _EventDetailBody extends StatelessWidget {
             style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
           ),
           centerTitle: true,
+          actions: [
+            if (isOrganizer)
+              IconButton(
+                icon: const Icon(Icons.delete_outline_rounded),
+                tooltip: 'Delete Event',
+                onPressed: _showDeleteEventDialog,
+              ),
+          ],
         ),
 
         // Hero header
