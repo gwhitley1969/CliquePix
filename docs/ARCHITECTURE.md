@@ -83,13 +83,14 @@ Why Flutter for Clique Pix:
 | Identity (infra) | **System-assigned managed identity** | Function App access to Blob Storage, Key Vault |
 | Secrets | **Azure Key Vault** | Database connection string, push notification credentials |
 | Observability | **Application Insights** | API telemetry, error tracking, dependency monitoring |
+| Realtime messaging | **Azure Web PubSub** | Real-time DM delivery via WebSocket (Standard S1) |
 
 ### What Is Not In v1
 
 | Service | Why deferred |
 |---------|-------------|
 | Azure Cache for Redis | Not needed at v1 scale |
-| Azure SignalR / Web PubSub | Push notifications + pull-to-refresh is sufficient for v1 |
+| Azure SignalR Service | Web PubSub used instead for DMs |
 | Azure Service Bus | No async workflow complexity needed yet |
 | Azure Notification Hubs | Direct FCM/APNs is simpler; add Hubs if multi-platform orchestration grows |
 
@@ -268,6 +269,24 @@ POST   /api/photos/{photoId}/reactions
 DELETE /api/photos/{photoId}/reactions/{reactionId}
 ```
 
+### Direct Messages (Event-Centric DMs)
+```
+POST   /api/events/{eventId}/dm-threads
+GET    /api/events/{eventId}/dm-threads
+GET    /api/dm-threads/{threadId}
+GET    /api/dm-threads/{threadId}/messages
+POST   /api/dm-threads/{threadId}/messages
+PATCH  /api/dm-threads/{threadId}/read
+POST   /api/realtime/dm/negotiate
+```
+
+**DM model:**
+- 1:1 only, text-only, event-centric, ephemeral
+- Threads tied to a specific event — same two users get a separate thread per event
+- Threads become read-only when event expires, CASCADE-deleted when event is purged
+- Real-time delivery via Azure Web PubSub; FCM push for background/terminated app
+- Rate limited: max 10 messages per minute per sender per thread
+
 ### Notifications
 ```
 GET    /api/notifications
@@ -404,6 +423,30 @@ Unique constraint on (photo_id, user_id, reaction_type).
 | type | VARCHAR | new_photo / event_expiring / event_expired / member_joined / event_deleted |
 | payload_json | JSONB | Structured notification data |
 | is_read | BOOLEAN | Default false |
+| created_at | TIMESTAMPTZ | |
+
+### event_dm_threads
+| Column | Type | Notes |
+|--------|------|-------|
+| id | UUID | Primary key |
+| event_id | UUID | FK → events (ON DELETE CASCADE) |
+| user_a_id | UUID | FK → users (ON DELETE CASCADE), always < user_b_id |
+| user_b_id | UUID | FK → users (ON DELETE CASCADE), always > user_a_id |
+| status | VARCHAR | active / read_only |
+| user_a_last_read_message_id | UUID | Nullable, FK → event_dm_messages |
+| user_b_last_read_message_id | UUID | Nullable, FK → event_dm_messages |
+| last_message_at | TIMESTAMPTZ | Nullable, updated on each new message |
+| created_at | TIMESTAMPTZ | |
+
+Unique constraint on (event_id, user_a_id, user_b_id). CHECK constraint ensures user_a_id < user_b_id to prevent duplicate threads.
+
+### event_dm_messages
+| Column | Type | Notes |
+|--------|------|-------|
+| id | UUID | Primary key |
+| thread_id | UUID | FK → event_dm_threads (ON DELETE CASCADE) |
+| sender_user_id | UUID | Nullable, FK → users (ON DELETE SET NULL) |
+| body | TEXT | Max 2000 chars, non-empty enforced by CHECK |
 | created_at | TIMESTAMPTZ | |
 
 ---
@@ -903,6 +946,7 @@ All resources for a given environment:
 | Key Vault | `kv-cliquepix-{env}` |
 | Front Door | `fd-cliquepix-{env}` |
 | API Management | `apim-cliquepix-{env}` |
+| Web PubSub | `wps-cliquepix-{env}` |
 
 ### Managed Identity Role Assignments
 
@@ -931,6 +975,8 @@ Track these custom telemetry events:
 - `expired_photos_deleted` (include count)
 - `orphaned_uploads_cleaned` (include count)
 - `token_refresh_success`, `token_refresh_failed` (include layer that triggered it)
+- `dm_thread_created`, `dm_message_sent`, `dm_message_send_failed`
+- `dm_push_sent`, `dm_thread_marked_read_only`
 
 ## Logging Rules
 
@@ -956,7 +1002,7 @@ Log enough to troubleshoot, not enough to leak:
 The v1 architecture leaves room to add:
 - Azure Service Bus (for async workflow orchestration)
 - Azure Cache for Redis (if feed performance demands it)
-- Azure SignalR / Web PubSub (if real-time feed updates are needed)
+- ~~Azure Web PubSub~~ (added in v1 for event DMs)
 - Azure Notification Hubs (if push orchestration grows complex)
 - Richer thumbnail pipeline (multiple sizes, lazy generation)
 

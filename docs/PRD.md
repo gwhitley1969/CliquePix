@@ -157,7 +157,21 @@ A persistent group of people (e.g., “Girls Night Out” or bachelor party)
 
 ---
 
-### 5.12 Notifications
+### 5.12 Direct Messages (Event-Centric DMs)
+- 1:1 text-only direct messaging within the context of a specific event
+- Event-centric: a DM thread is tied to a single event; same two users get separate threads per event
+- Ephemeral: threads become read-only when the event expires and are deleted with the event
+- Real-time delivery via Azure Web PubSub (instant when both users are online)
+- FCM push notifications for background/terminated app
+- Accessible via "Messages" button on event detail screen
+- Member picker to start new DMs with event circle members
+- Rate limited: max 10 messages per minute per sender per thread
+- Not a global messaging inbox — DMs exist only within events
+- No attachments, no group chat, no typing indicators, no read receipts UI
+
+---
+
+### 5.13 Notifications
 - Push notifications via FCM (Firebase Cloud Messaging)
 - Notification types:
   - New photo added to event ("New Photo!")
@@ -172,7 +186,7 @@ A persistent group of people (e.g., “Girls Night Out” or bachelor party)
 
 ---
 
-### 5.13 Privacy & Controls
+### 5.14 Privacy & Controls
 - Private by default
 - No public feed
 - Controls:

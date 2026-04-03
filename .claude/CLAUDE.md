@@ -56,7 +56,7 @@ If a feature does not directly support this loop, it does not belong in v1.
 
 ### Do Not Build
 
-- Chat, comments, or threads
+- ~~Chat, comments, or threads~~ (event-centric 1:1 DMs implemented — no group chat, no global inbox, no attachments)
 - Followers / following
 - Public feeds or discovery
 - Custom photo editor UI (use `pro_image_editor` package — do not build editor from scratch)
@@ -68,7 +68,7 @@ If a feature does not directly support this loop, it does not belong in v1.
 - Read receipts or typing indicators
 - Stories or ephemeral content beyond the event model
 - Firebase backend services (Auth, Firestore, etc.) — FCM is used for push transport only
-- Redis, SignalR, Web PubSub, Service Bus, Notification Hubs
+- Redis, SignalR, Service Bus, Notification Hubs (Web PubSub is now used for DMs)
 
 ### When In Doubt
 
@@ -108,6 +108,7 @@ Do not introduce dependencies not listed here without discussing the tradeoff fi
 | Identity (infra) | System-assigned managed identity | Function App → Blob Storage, Key Vault |
 | Secrets | Azure Key Vault | DB connection string, FCM credentials |
 | Observability | Application Insights | Telemetry, errors, dependencies |
+| Realtime messaging | Azure Web PubSub | Real-time DM delivery via WebSocket |
 
 ### Architecture Pattern
 
@@ -259,6 +260,14 @@ PATCH  /api/notifications/{notificationId}/read
 DELETE /api/notifications/{notificationId}
 DELETE /api/notifications
 POST   /api/push-tokens
+
+POST   /api/events/{eventId}/dm-threads
+GET    /api/events/{eventId}/dm-threads
+GET    /api/dm-threads/{threadId}
+GET    /api/dm-threads/{threadId}/messages
+POST   /api/dm-threads/{threadId}/messages
+PATCH  /api/dm-threads/{threadId}/read
+POST   /api/realtime/dm/negotiate
 ```
 
 ### Upload Flow
@@ -718,6 +727,8 @@ This is sufficient. Most photo sharing happens in bursts during active events. D
 - `orphaned_uploads_cleaned` (include count)
 - `token_refresh_success`, `token_refresh_failed` (include layer that triggered it)
 - `account_deleted`
+- `dm_thread_created`, `dm_message_sent`, `dm_message_send_failed`
+- `dm_push_sent`, `dm_thread_marked_read_only`
 
 ### Logging Rules
 - Always log: correlation IDs, error codes, function execution duration

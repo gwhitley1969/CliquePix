@@ -99,14 +99,15 @@ Last updated: 2026-04-03
 | Resource Group | `rg-cliquepix-prod` | eastus | Ready |
 | Log Analytics | `log-cliquepix-prod` | eastus | Ready |
 | Application Insights | `appi-cliquepix-prod` | eastus | Ready (workspace-based) |
-| Function App | `func-cliquepix-fresh` | eastus | Ready — 32 functions deployed (incl. `removeMember`, `deleteEvent`, `deleteNotification`, `clearNotifications`, `deleteMe`) |
+| Function App | `func-cliquepix-fresh` | eastus | Ready — 39 functions deployed (incl. 7 DM endpoints) |
 | Storage Account | `stcliquepixprod` | eastus | Ready — `photos` container, blob public access disabled |
-| PostgreSQL | `pg-cliquepixdb` | eastus2 | Ready — v18, `cliquepix` DB with 8 tables |
-| Key Vault | `kv-cliquepix-prod` | eastus | Ready — `pg-connection-string` + `fcm-credentials` stored |
+| PostgreSQL | `pg-cliquepixdb` | eastus2 | Ready — v18, `cliquepix` DB with 10 tables (incl. `event_dm_threads`, `event_dm_messages`) |
+| Key Vault | `kv-cliquepix-prod` | eastus | Ready — `pg-connection-string` + `fcm-credentials` + `web-pubsub-connection-string` stored |
 | API Management | `apim-cliquepix-002` | eastus | Ready — Developer SKU, API imported, rate limiting configured |
 | Front Door | `fd-cliquepix-prod` | global | Ready — Standard SKU (no WAF) |
 | Static Web App | `swa-cliquepix-prod` | eastus2 | Ready — clique-pix.com + www |
 | DNS Zone | `clique-pix.com` | global | Ready — api CNAME, apex ALIAS, www CNAME, TXT validation |
+| Web PubSub | `wps-cliquepix-prod` | eastus | Ready — Standard S1, hub: `cliquepix` |
 | Entra External ID | `cliquepix.onmicrosoft.com` | — | Ready — app registered, 3 identity providers |
 
 ### Deleted Resources
@@ -390,6 +391,24 @@ Scanning a circle invite QR code navigated to `https://clique-pix.com/invite/{co
 | Delete account: auth layer | Done | `deleteAccount()` threaded through AuthApi → AuthRepository → AuthNotifier with local cleanup |
 | Delete account: profile UI | Done | Red "Delete Account" tile with confirmation dialog; GoRouter auto-redirects to login on success |
 | Backend redeployed (4th) | Done | `func azure functionapp publish func-cliquepix-fresh --force` — 32 functions |
+| DM: Azure Web PubSub provisioned | Done | `wps-cliquepix-prod` Standard S1, connection string in Key Vault, Function App setting configured |
+| DM: database migration 005 | Done | `event_dm_threads` + `event_dm_messages` tables with indexes, CHECK constraints, CASCADE from events |
+| DM: Web PubSub service | Done | `webPubSubService.ts` — token negotiation, group publish, user group management |
+| DM: backend endpoints (7) | Done | createOrGetThread, listThreads, getThread, listMessages, sendMessage (rate limited), markRead, negotiate |
+| DM: backend models | Done | `dmThread.ts` — DmThread + DmMessage TypeScript interfaces |
+| DM: timer integration | Done | DM threads marked read-only in existing `cleanupExpired` timer for expired events |
+| DM: circle removal integration | Done | `removeMember` + `leaveCircle` mark affected DM threads as read-only |
+| DM: Flutter models | Done | `DmThreadModel` + `DmMessageModel` with fromJson factories |
+| DM: Flutter API + repository | Done | `dm_api.dart` + `dm_repository.dart` — 7 methods matching backend |
+| DM: Flutter realtime service | Done | `dm_realtime_service.dart` — WebSocket connection with auto-reconnect (exponential backoff) |
+| DM: Flutter providers + routing | Done | Riverpod providers, 3 routes under `/events/:eventId/` (dm-threads, dm/new, dm/:threadId) |
+| DM: thread list screen | Done | Dark-themed list with unread indicators, "New Message" FAB, empty state |
+| DM: chat screen | Done | Message bubbles (gradient for sent, dark for received), composer, read-only banner |
+| DM: member picker screen | Done | Lists circle members for starting new DMs |
+| DM: event detail entry points | Done | Messages icon in AppBar + prominent "Messages" button below "Add Photo" |
+| DM: FCM push tap routing | Done | `dm_message` type navigates to `/events/{eventId}/dm/{threadId}` |
+| DM: debug logging | Done | `[CliquePix DM]` logs for eventId, API response, thread count |
+| Backend redeployed (5th) | Done | `func azure functionapp publish func-cliquepix-fresh --force` — 39 functions |
 
 ### Not Started
 
