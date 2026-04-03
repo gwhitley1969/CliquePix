@@ -54,6 +54,9 @@ dependencies:
   path_provider: ^2.1.3
   gal: ^2.3.0
 
+  # Realtime
+  web_socket_channel: ^2.4.0
+
   # UI
   shimmer: ^3.0.0
 

@@ -141,6 +141,12 @@ class _EventDetailBodyState extends ConsumerState<_EventDetailBody> {
           ),
           centerTitle: true,
           actions: [
+            if (event.isActive)
+              IconButton(
+                icon: const Icon(Icons.message_rounded),
+                tooltip: 'Messages',
+                onPressed: () => context.push('/events/$eventId/dm-threads'),
+              ),
             if (isOrganizer)
               IconButton(
                 icon: const Icon(Icons.delete_outline_rounded),

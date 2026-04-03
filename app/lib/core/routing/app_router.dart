@@ -16,6 +16,9 @@ import '../../features/photos/presentation/camera_capture_screen.dart';
 import '../../features/photos/presentation/photo_detail_screen.dart';
 import '../../features/notifications/presentation/notifications_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
+import '../../features/dm/presentation/dm_thread_list_screen.dart';
+import '../../features/dm/presentation/dm_chat_screen.dart';
+import '../../features/dm/presentation/dm_member_picker.dart';
 import '../../app/shell_screen.dart';
 import '../../features/auth/domain/auth_state.dart';
 import '../../features/auth/presentation/auth_providers.dart';
@@ -151,6 +154,26 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: 'photos/:photoId',
             builder: (context, state) => PhotoDetailScreen(
               photoId: state.pathParameters['photoId']!,
+            ),
+          ),
+          GoRoute(
+            path: 'dm-threads',
+            builder: (context, state) => DmThreadListScreen(
+              eventId: state.pathParameters['eventId']!,
+            ),
+          ),
+          GoRoute(
+            path: 'dm/new',
+            builder: (context, state) => DmMemberPickerScreen(
+              eventId: state.pathParameters['eventId']!,
+              circleId: state.uri.queryParameters['circleId'] ?? '',
+            ),
+          ),
+          GoRoute(
+            path: 'dm/:threadId',
+            builder: (context, state) => DmChatScreen(
+              threadId: state.pathParameters['threadId']!,
+              eventId: state.pathParameters['eventId']!,
             ),
           ),
         ],

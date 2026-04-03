@@ -29,6 +29,13 @@ class ApiEndpoints {
   static String reaction(String photoId, String reactionId) =>
       '/api/photos/$photoId/reactions/$reactionId';
 
+  // DMs
+  static String eventDmThreads(String eventId) => '/api/events/$eventId/dm-threads';
+  static String dmThread(String threadId) => '/api/dm-threads/$threadId';
+  static String dmMessages(String threadId) => '/api/dm-threads/$threadId/messages';
+  static String dmRead(String threadId) => '/api/dm-threads/$threadId/read';
+  static const dmNegotiate = '/api/realtime/dm/negotiate';
+
   // Notifications
   static const notifications = '/api/notifications';
   static String notificationRead(String id) => '/api/notifications/$id/read';
