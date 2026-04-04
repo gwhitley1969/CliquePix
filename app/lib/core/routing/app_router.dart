@@ -137,12 +137,30 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
         ],
       ),
+      // Top-level routes (outside shell for clean back-navigation)
+      GoRoute(
+        path: '/view-circle/:circleId',
+        builder: (context, state) => CircleDetailScreen(
+          circleId: state.pathParameters['circleId']!,
+        ),
+      ),
+      GoRoute(
+        path: '/invite-to-circle/:circleId',
+        builder: (context, state) => InviteScreen(
+          circleId: state.pathParameters['circleId']!,
+        ),
+      ),
       // Event detail routes (outside shell for full-screen experience)
       GoRoute(
         path: '/events/:eventId',
-        builder: (context, state) => EventDetailScreen(
-          eventId: state.pathParameters['eventId']!,
-        ),
+        builder: (context, state) {
+          final extra = state.extra as Map<String, String>?;
+          return EventDetailScreen(
+            eventId: state.pathParameters['eventId']!,
+            promptInviteCircleId: extra?['circleId'],
+            promptInviteCircleName: extra?['circleName'],
+          );
+        },
         routes: [
           GoRoute(
             path: 'capture',

@@ -881,6 +881,19 @@ Feature-based organization with clean separation of data, domain, and presentati
 
 **Riverpod.** One approach, used consistently throughout.
 
+## Routing Architecture
+
+**GoRouter** with `StatefulShellRoute.indexedStack` for bottom tab navigation (Home, Circles, Notifications, Profile). Each tab is a `StatefulShellBranch` with its own navigation stack.
+
+**Cross-shell navigation rule:** Screens outside the shell (e.g., Event Detail at `/events/:eventId`) must NOT push to routes inside a shell branch (e.g., `/circles/:circleId`). Doing so causes broken back-navigation — the user gets stranded in the wrong tab instead of returning to the originating screen.
+
+**Solution:** Top-level routes that reuse the same widgets but live outside the shell:
+- `/view-circle/:circleId` → `CircleDetailScreen` (for Event Detail → Circle)
+- `/invite-to-circle/:circleId` → `InviteScreen` (for post-creation invite flow)
+- Shell-internal routes (`/circles/:circleId`, `/circles/:circleId/invite`) remain for tab-based navigation
+
+**Post-creation invite prompt:** When creating an event with a NEW circle, `GoRouter.extra` passes `{circleId, circleName}` to Event Detail. On `initState`, a modal bottom sheet prompts the user to invite friends. `extra` is ephemeral (not in URL, not restorable from deep links) — the prompt fires once per creation.
+
 ## Networking
 
 **Dio** as the HTTP client. Configure with:

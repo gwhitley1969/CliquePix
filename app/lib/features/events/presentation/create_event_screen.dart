@@ -74,7 +74,14 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       // Refresh events list
       ref.read(allEventsListProvider.notifier).refresh();
 
-      if (mounted) context.push('/events/${event.id}');
+      if (mounted) {
+        context.push(
+          '/events/${event.id}',
+          extra: _creatingNewCircle
+              ? {'circleId': circleId, 'circleName': _newCircleNameController.text.trim()}
+              : null,
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));

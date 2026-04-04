@@ -13,7 +13,14 @@ import 'events_providers.dart';
 
 class EventDetailScreen extends ConsumerWidget {
   final String eventId;
-  const EventDetailScreen({super.key, required this.eventId});
+  final String? promptInviteCircleId;
+  final String? promptInviteCircleName;
+  const EventDetailScreen({
+    super.key,
+    required this.eventId,
+    this.promptInviteCircleId,
+    this.promptInviteCircleName,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -24,7 +31,12 @@ class EventDetailScreen extends ConsumerWidget {
       body: eventAsync.when(
         loading: () => const Center(child: CircularProgressIndicator(color: AppColors.electricAqua)),
         error: (err, _) => AppErrorWidget(message: err.toString()),
-        data: (event) => _EventDetailBody(event: event, eventId: eventId),
+        data: (event) => _EventDetailBody(
+          event: event,
+          eventId: eventId,
+          promptInviteCircleId: promptInviteCircleId,
+          promptInviteCircleName: promptInviteCircleName,
+        ),
       ),
     );
   }
@@ -33,7 +45,14 @@ class EventDetailScreen extends ConsumerWidget {
 class _EventDetailBody extends ConsumerStatefulWidget {
   final EventModel event;
   final String eventId;
-  const _EventDetailBody({required this.event, required this.eventId});
+  final String? promptInviteCircleId;
+  final String? promptInviteCircleName;
+  const _EventDetailBody({
+    required this.event,
+    required this.eventId,
+    this.promptInviteCircleId,
+    this.promptInviteCircleName,
+  });
 
   @override
   ConsumerState<_EventDetailBody> createState() => _EventDetailBodyState();
@@ -42,6 +61,35 @@ class _EventDetailBody extends ConsumerStatefulWidget {
 class _EventDetailBodyState extends ConsumerState<_EventDetailBody> {
   EventModel get event => widget.event;
   String get eventId => widget.eventId;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.promptInviteCircleId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _showInvitePrompt();
+      });
+    }
+  }
+
+  void _showInvitePrompt() {
+    final circleId = widget.promptInviteCircleId!;
+    final circleName = widget.promptInviteCircleName ?? 'your circle';
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isDismissible: true,
+      enableDrag: true,
+      builder: (sheetContext) => _InvitePromptSheet(
+        circleName: circleName,
+        onInvite: () {
+          Navigator.pop(sheetContext);
+          context.push('/invite-to-circle/$circleId');
+        },
+        onSkip: () => Navigator.pop(sheetContext),
+      ),
+    );
+  }
 
   String get _timeRemaining {
     if (event.isExpired) return 'Expired';
@@ -144,7 +192,7 @@ class _EventDetailBodyState extends ConsumerState<_EventDetailBody> {
             IconButton(
               icon: const Icon(Icons.group_rounded),
               tooltip: 'View Circle',
-              onPressed: () => context.push('/circles/${event.circleId}'),
+              onPressed: () => context.push('/view-circle/${event.circleId}'),
             ),
             if (event.isActive)
               IconButton(
@@ -220,7 +268,7 @@ class _EventDetailBodyState extends ConsumerState<_EventDetailBody> {
                 // Circle name
                 if (event.circleName != null)
                   GestureDetector(
-                    onTap: () => context.push('/circles/${event.circleId}'),
+                    onTap: () => context.push('/view-circle/${event.circleId}'),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -337,6 +385,115 @@ class _EventDetailBodyState extends ConsumerState<_EventDetailBody> {
           child: EventFeedScreen(eventId: eventId),
         ),
       ],
+    );
+  }
+}
+
+class _InvitePromptSheet extends StatelessWidget {
+  final String circleName;
+  final VoidCallback onInvite;
+  final VoidCallback onSkip;
+
+  const _InvitePromptSheet({
+    required this.circleName,
+    required this.onInvite,
+    required this.onSkip,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Color(0xFF1A2035),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Drag handle
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(height: 24),
+          // Icon
+          Container(
+            width: 64,
+            height: 64,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: AppGradients.primary,
+            ),
+            child: const Icon(Icons.group_add_rounded, color: Colors.white, size: 32),
+          ),
+          const SizedBox(height: 20),
+          // Circle name
+          ShaderMask(
+            shaderCallback: (bounds) => AppGradients.primary.createShader(bounds),
+            child: Text(
+              circleName,
+              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Colors.white),
+              textAlign: TextAlign.center,
+            ),
+          ),
+          const SizedBox(height: 8),
+          // Message
+          Text(
+            'Your circle is ready! Invite friends so they can join your events and share photos together.',
+            style: TextStyle(fontSize: 15, color: Colors.white.withValues(alpha: 0.6), height: 1.4),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 28),
+          // Invite button
+          Container(
+            width: double.infinity,
+            height: 52,
+            decoration: BoxDecoration(
+              gradient: AppGradients.primary,
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.deepBlue.withValues(alpha: 0.3),
+                  blurRadius: 16,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: onInvite,
+                borderRadius: BorderRadius.circular(14),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.person_add_rounded, color: Colors.white, size: 20),
+                    SizedBox(width: 8),
+                    Text(
+                      'Invite Friends',
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          // Skip button
+          TextButton(
+            onPressed: onSkip,
+            child: Text(
+              'Skip for Now',
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 15, fontWeight: FontWeight.w500),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -366,7 +366,9 @@ Scanning a circle invite QR code navigated to `https://clique-pix.com/invite/{co
 
 | Task | Status | Notes |
 |------|--------|-------|
-| Circle navigation from event detail | Done | AppBar group icon (always visible) + tappable circle name with chevron in hero section — both use `context.push('/circles/$circleId')` so back button returns to event |
+| Post-creation invite flow | Done | When creating event with NEW circle, modal bottom sheet prompts "Invite Friends" or "Skip for Now" on Event Detail screen. Uses `GoRouter.extra` to pass circleId/circleName (one-time, not restorable from URL) |
+| Top-level routes for cross-shell navigation | Done | Added `/view-circle/:circleId` and `/invite-to-circle/:circleId` outside `StatefulShellRoute` — fixes back-navigation when pushing to shell-internal routes from Event Detail |
+| Circle navigation from event detail | Done | AppBar group icon (always visible) + tappable circle name with chevron in hero section — both use top-level `/view-circle/` route for clean back-navigation |
 
 ### Recently Completed (2026-04-03)
 
