@@ -86,6 +86,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     final userName = authState is AuthAuthenticated ? authState.user.displayName : '';
 
+    // Compute home state at build level so FAB can be conditionally hidden
+    _HomeState? homeState;
+    if (eventsAsync.hasValue && circlesAsync.hasValue && _prefsLoaded) {
+      homeState = _computeState(eventsAsync.value!, circlesAsync.value!);
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFF0E1525),
       body: CustomScrollView(
@@ -129,29 +135,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           _buildContent(eventsAsync, circlesAsync, userName),
         ],
       ),
-      floatingActionButton: Container(
-        decoration: BoxDecoration(
-          gradient: AppGradients.primary,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.deepBlue.withValues(alpha: 0.4),
-              blurRadius: 16,
-              offset: const Offset(0, 6),
-            ),
-          ],
-        ),
-        child: FloatingActionButton.extended(
-          onPressed: () => context.go('/events/create'),
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          icon: const Icon(Icons.add_rounded, color: Colors.white, size: 22),
-          label: const Text(
-            'Create Event',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15),
-          ),
-        ),
-      ),
+      floatingActionButton: homeState == _HomeState.brandNew ? null : _buildFab(),
     );
   }
 
@@ -256,7 +240,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 12,
-                color: Colors.white.withValues(alpha: 0.3),
+                color: Colors.white.withValues(alpha: 0.55),
                 height: 1.5,
               ),
             ),
@@ -452,6 +436,32 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   // ── Shared widgets ────────────────────────────────────────────────────
+
+  Widget _buildFab() {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: AppGradients.primary,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.deepBlue.withValues(alpha: 0.4),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: FloatingActionButton.extended(
+        onPressed: () => context.go('/events/create'),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        icon: const Icon(Icons.add_rounded, color: Colors.white, size: 22),
+        label: const Text(
+          'Create Event',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15),
+        ),
+      ),
+    );
+  }
 
   Widget _buildCreateEventCTA(String label) {
     return Container(

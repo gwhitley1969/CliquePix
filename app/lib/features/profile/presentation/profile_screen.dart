@@ -199,7 +199,7 @@ class ProfileScreen extends ConsumerWidget {
                             ),
                           );
                           if (confirm == true) {
-                            ref.read(authStateProvider.notifier).signOut();
+                            await ref.read(authStateProvider.notifier).signOut();
                           }
                         },
                       ),

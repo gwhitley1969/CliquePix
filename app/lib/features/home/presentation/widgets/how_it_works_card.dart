@@ -54,7 +54,7 @@ class HowItWorksCard extends StatelessWidget {
                   stepNumber: '2',
                   icon: Icons.group_rounded,
                   gradientColors: [AppColors.deepBlue, AppColors.violetAccent],
-                  title: 'Add Your Crew',
+                  title: 'Add Your Circle',
                   subtitle: 'Invite friends to your circle',
                 ),
                 const SizedBox(height: 16),
