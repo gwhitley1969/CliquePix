@@ -6,7 +6,7 @@ import { query, queryOne, execute } from '../shared/services/dbService';
 import { trackEvent } from '../shared/services/telemetryService';
 import { isValidUUID, validateRequiredString } from '../shared/utils/validators';
 import { NotFoundError, ForbiddenError, ValidationError } from '../shared/utils/errors';
-import { publishToThread, getClientAccessToken, addUserToThreadGroup } from '../shared/services/webPubSubService';
+import { sendToUser, getClientAccessToken } from '../shared/services/webPubSubService';
 import { sendToMultipleTokens } from '../shared/services/fcmService';
 import { DmThread, DmMessage } from '../shared/models/dmThread';
 
@@ -161,13 +161,6 @@ async function getDmThread(req: HttpRequest, context: InvocationContext): Promis
       [getOtherUserId(thread, authUser.id)],
     );
 
-    // Add user to Web PubSub thread group for real-time delivery
-    try {
-      await addUserToThreadGroup(threadId, authUser.id);
-    } catch (_) {
-      // Non-fatal — real-time delivery will fall back to FCM
-    }
-
     return successResponse({
       ...thread,
       other_user_id: getOtherUserId(thread, authUser.id),
@@ -275,9 +268,11 @@ async function sendDmMessage(req: HttpRequest, context: InvocationContext): Prom
       [message!.created_at, threadId],
     );
 
-    // Publish to Web PubSub for real-time delivery
+    const recipientId = getOtherUserId(thread, authUser.id);
+
+    // Send to recipient via Web PubSub for real-time delivery
     try {
-      await publishToThread(threadId, {
+      await sendToUser(recipientId, {
         type: 'dm_message_created',
         thread_id: threadId,
         event_id: thread.event_id,
@@ -293,9 +288,6 @@ async function sendDmMessage(req: HttpRequest, context: InvocationContext): Prom
     } catch (_) {
       // Non-fatal — recipient will get FCM or fetch on next load
     }
-
-    // Always send FCM push in phase 1
-    const recipientId = getOtherUserId(thread, authUser.id);
     const tokens = await query<{ token: string }>(
       'SELECT token FROM push_tokens WHERE user_id = $1',
       [recipientId],

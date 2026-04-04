@@ -284,7 +284,7 @@ POST   /api/realtime/dm/negotiate
 - 1:1 only, text-only, event-centric, ephemeral
 - Threads tied to a specific event — same two users get a separate thread per event
 - Threads become read-only when event expires, CASCADE-deleted when event is purged
-- Real-time delivery via Azure Web PubSub; FCM push for background/terminated app
+- Real-time delivery via Azure Web PubSub (`sendToUser` for direct user-targeted delivery); FCM push for background/terminated app
 - Rate limited: max 10 messages per minute per sender per thread
 
 ### Notifications

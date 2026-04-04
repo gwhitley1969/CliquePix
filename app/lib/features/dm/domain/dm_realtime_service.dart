@@ -11,6 +11,7 @@ class DmRealtimeService {
   String? _url;
   int _reconnectAttempts = 0;
   bool _disposed = false;
+  Future<String> Function()? onNegotiate;
 
   Stream<DmMessageModel> get onMessage => _messageController.stream;
   bool get isConnected => _channel != null;
@@ -65,10 +66,18 @@ class DmRealtimeService {
     _reconnectAttempts++;
     final delay = Duration(seconds: _reconnectDelay());
     debugPrint('[CliquePix DM] Reconnecting in ${delay.inSeconds}s (attempt $_reconnectAttempts)');
-    _reconnectTimer = Timer(delay, () {
-      if (!_disposed && _url != null) {
-        _connectInternal(_url!);
+    _reconnectTimer = Timer(delay, () async {
+      if (_disposed) return;
+      // Re-negotiate for a fresh URL (old token may have expired)
+      if (onNegotiate != null) {
+        try {
+          _url = await onNegotiate!();
+          debugPrint('[CliquePix DM] Re-negotiated fresh URL');
+        } catch (e) {
+          debugPrint('[CliquePix DM] Re-negotiate failed: $e');
+        }
       }
+      if (_url != null) _connectInternal(_url!);
     });
   }
 

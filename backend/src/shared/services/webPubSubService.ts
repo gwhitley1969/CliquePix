@@ -18,6 +18,10 @@ export async function getClientAccessToken(userId: string): Promise<{ url: strin
   return getClient().getClientAccessToken({ userId });
 }
 
+export async function sendToUser(userId: string, payload: Record<string, unknown>): Promise<void> {
+  await getClient().sendToUser(userId, payload);
+}
+
 export async function publishToThread(threadId: string, payload: Record<string, unknown>): Promise<void> {
   await getClient().group(`dm-thread-${threadId}`).sendToAll(payload);
 }

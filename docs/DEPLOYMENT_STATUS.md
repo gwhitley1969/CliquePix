@@ -393,14 +393,14 @@ Scanning a circle invite QR code navigated to `https://clique-pix.com/invite/{co
 | Backend redeployed (4th) | Done | `func azure functionapp publish func-cliquepix-fresh --force` — 32 functions |
 | DM: Azure Web PubSub provisioned | Done | `wps-cliquepix-prod` Standard S1, connection string in Key Vault, Function App setting configured |
 | DM: database migration 005 | Done | `event_dm_threads` + `event_dm_messages` tables with indexes, CHECK constraints, CASCADE from events |
-| DM: Web PubSub service | Done | `webPubSubService.ts` — token negotiation, group publish, user group management |
+| DM: Web PubSub service | Done | `webPubSubService.ts` — token negotiation, `sendToUser` for direct user-targeted delivery (switched from thread-scoped groups) |
 | DM: backend endpoints (7) | Done | createOrGetThread, listThreads, getThread, listMessages, sendMessage (rate limited), markRead, negotiate |
 | DM: backend models | Done | `dmThread.ts` — DmThread + DmMessage TypeScript interfaces |
 | DM: timer integration | Done | DM threads marked read-only in existing `cleanupExpired` timer for expired events |
 | DM: circle removal integration | Done | `removeMember` + `leaveCircle` mark affected DM threads as read-only |
 | DM: Flutter models | Done | `DmThreadModel` + `DmMessageModel` with fromJson factories |
 | DM: Flutter API + repository | Done | `dm_api.dart` + `dm_repository.dart` — 7 methods matching backend |
-| DM: Flutter realtime service | Done | `dm_realtime_service.dart` — WebSocket connection with auto-reconnect (exponential backoff) |
+| DM: Flutter realtime service | Done | `dm_realtime_service.dart` — WebSocket connection with auto-reconnect (exponential backoff), re-negotiates fresh URL on reconnect |
 | DM: Flutter providers + routing | Done | Riverpod providers, 3 routes under `/events/:eventId/` (dm-threads, dm/new, dm/:threadId) |
 | DM: thread list screen | Done | Dark-themed list with unread indicators, "New Message" FAB, empty state |
 | DM: chat screen | Done | Message bubbles (gradient for sent, dark for received), composer, read-only banner |
@@ -409,6 +409,10 @@ Scanning a circle invite QR code navigated to `https://clique-pix.com/invite/{co
 | DM: FCM push tap routing | Done | `dm_message` type navigates to `/events/{eventId}/dm/{threadId}` |
 | DM: debug logging | Done | `[CliquePix DM]` logs for eventId, API response, thread count |
 | Backend redeployed (5th) | Done | `func azure functionapp publish func-cliquepix-fresh --force` — 39 functions |
+| Fix: Sign out not working | Done | Missing `await`, unprotected cleanup, stale PCA instance — all three fixed with defense-in-depth (try/catch + try/finally + `_pca = null`) |
+| Fix: Welcome screen UI | Done | Hide redundant FAB in brand-new state, brighten helper text (0.3→0.55), "Add Your Crew"→"Add Your Circle" |
+| Fix: DM real-time delivery | Done | Switched from group-based (`sendToAll`) to user-targeted (`sendToUser`) delivery; fixed WebSocket reconnection to re-negotiate fresh URL |
+| Backend redeployed (6th) | Done | `func azure functionapp publish func-cliquepix-fresh --force` — DM sendToUser fix |
 
 ### Not Started
 

@@ -41,6 +41,7 @@ class _DmChatScreenState extends ConsumerState<DmChatScreen> {
   Future<void> _setupRealtime() async {
     try {
       final realtimeService = ref.read(dmRealtimeServiceProvider);
+      realtimeService.onNegotiate = () => ref.read(dmRepositoryProvider).negotiate();
       if (!realtimeService.isConnected) {
         final url = await ref.read(dmRepositoryProvider).negotiate();
         await realtimeService.connect(url);
