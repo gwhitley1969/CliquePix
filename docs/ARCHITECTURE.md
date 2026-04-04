@@ -826,6 +826,9 @@ Every API endpoint must enforce:
 - Auth tokens in `flutter_secure_storage` only
 - No tokens, credentials, or PII in debug logs
 - Clear all auth state and cancel background refresh jobs on logout
+- MSAL `browser_sign_out_enabled: true` in `msal_config.json` — clears browser session cookies on sign-out (prevents Google auto-login loop)
+- `Prompt.login` on interactive `acquireToken` — forces re-authentication even if residual browser session exists
+- `_pca = null` after sign-out — forces fresh MSAL instance on next login (prevents stale cached state)
 
 ---
 

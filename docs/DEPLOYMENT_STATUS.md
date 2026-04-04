@@ -413,6 +413,7 @@ Scanning a circle invite QR code navigated to `https://clique-pix.com/invite/{co
 | Fix: Welcome screen UI | Done | Hide redundant FAB in brand-new state, brighten helper text (0.3→0.55), "Add Your Crew"→"Add Your Circle" |
 | Fix: DM real-time delivery | Done | Switched from group-based (`sendToAll`) to user-targeted (`sendToUser`) delivery; fixed WebSocket reconnection to re-negotiate fresh URL |
 | Backend redeployed (6th) | Done | `func azure functionapp publish func-cliquepix-fresh --force` — DM sendToUser fix |
+| Fix: Sign-out browser session | Done | Added `browser_sign_out_enabled: true` to `msal_config.json` + `Prompt.login` on `acquireToken` — clears Google session cookies on sign-out, forces re-authentication on sign-in |
 
 ### Not Started
 

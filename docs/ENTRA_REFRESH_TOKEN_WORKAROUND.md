@@ -485,6 +485,47 @@ class AuthNotifier extends StateNotifier<AuthState> {
 }
 ```
 
+## Sign-Out & Account Switching
+
+### Browser Session Persistence Problem
+
+When using Entra External ID with federated identity providers (e.g., Google), `pca.signOut()` only clears the MSAL token cache — it does NOT clear the browser session cookies in Chrome Custom Tab. This causes an "endless loop" where the user signs out but is automatically re-authenticated with the same Google account on next sign-in.
+
+### Required Configuration
+
+**`msal_config.json`** must include:
+```json
+{
+  "browser_sign_out_enabled": true
+}
+```
+This tells the MSAL Android SDK to clear browser cookies when `pca.signOut()` is called.
+
+**`acquireToken`** must pass `Prompt.login`:
+```dart
+final result = await pca.acquireToken(
+  scopes: _scopes,
+  prompt: Prompt.login,  // Forces re-authentication
+  loginHint: loginHint,
+);
+```
+This tells the Entra authorize endpoint to force re-authentication even if a residual browser session exists.
+
+**`signOut()`** must null the PCA instance:
+```dart
+_pca = null;  // Force fresh MSAL instance on next sign-in
+```
+This prevents the stale `SingleAccountPca` instance from retaining cached browser session affinity.
+
+### Defense-in-Depth Sign-Out
+
+The sign-out flow uses three layers of protection:
+1. **Repository**: Each cleanup step wrapped in individual try/catch + `_pca = null` — failures don't block other cleanup
+2. **Notifier**: `try/finally` ensures `state = AuthUnauthenticated()` always executes
+3. **UI**: `await` on the signOut call so exceptions surface properly
+
+---
+
 ## Implementation Details
 
 ### Files Modified/Created
