@@ -362,6 +362,12 @@ Scanning a circle invite QR code navigated to `https://clique-pix.com/invite/{co
 | Push notification: in-app list refresh | Done | `onMessage` invalidates `notificationsListProvider` for immediate update |
 | Backend redeployed | Done | `func azure functionapp publish func-cliquepix-fresh` — 27 functions |
 
+### Recently Completed (2026-04-04)
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Circle navigation from event detail | Done | AppBar group icon (always visible) + tappable circle name with chevron in hero section — both use `context.push('/circles/$circleId')` so back button returns to event |
+
 ### Recently Completed (2026-04-03)
 
 | Task | Status | Notes |

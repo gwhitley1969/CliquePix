@@ -141,6 +141,11 @@ class _EventDetailBodyState extends ConsumerState<_EventDetailBody> {
           ),
           centerTitle: true,
           actions: [
+            IconButton(
+              icon: const Icon(Icons.group_rounded),
+              tooltip: 'View Circle',
+              onPressed: () => context.push('/circles/${event.circleId}'),
+            ),
             if (event.isActive)
               IconButton(
                 icon: const Icon(Icons.message_rounded),
@@ -214,16 +219,21 @@ class _EventDetailBodyState extends ConsumerState<_EventDetailBody> {
 
                 // Circle name
                 if (event.circleName != null)
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.group_rounded, size: 14, color: colors[0].withValues(alpha: 0.6)),
-                      const SizedBox(width: 5),
-                      Text(
-                        event.circleName!,
-                        style: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.5)),
-                      ),
-                    ],
+                  GestureDetector(
+                    onTap: () => context.push('/circles/${event.circleId}'),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.group_rounded, size: 14, color: colors[0].withValues(alpha: 0.7)),
+                        const SizedBox(width: 5),
+                        Text(
+                          event.circleName!,
+                          style: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.7)),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(Icons.chevron_right_rounded, size: 16, color: Colors.white.withValues(alpha: 0.5)),
+                      ],
+                    ),
                   ),
                 const SizedBox(height: 16),
 
