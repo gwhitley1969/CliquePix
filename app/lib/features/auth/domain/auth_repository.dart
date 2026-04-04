@@ -50,6 +50,7 @@ class AuthRepository {
 
     final result = await pca.acquireToken(
       scopes: _scopes,
+      prompt: Prompt.login,
       loginHint: loginHint,
     );
 
