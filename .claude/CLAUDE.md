@@ -589,15 +589,18 @@ Serve from Azure Front Door or a simple static web app. Static JSON files that r
 
 ## Expiration & Cleanup
 
-### Photo Expiration
+### Event & Photo Expiration
 
 Timer-triggered Azure Function (every 15 minutes):
 
 1. Query photos where `expires_at < now()` and `status = 'active'`
 2. Delete blobs (original + thumbnail) via managed identity
 3. Update photo records: `status = 'deleted'`, `deleted_at = now()`
-4. If all photos in event are deleted, update event `status = 'expired'`
-5. Log `expired_photos_deleted` telemetry with count
+4. If all photos in event are deleted, mark event `status = 'expired'`
+5. Mark DM threads as `read_only` for expired events
+6. Delete any remaining blobs for expired events (safety net)
+7. **Hard-delete expired event records** — CASCADE removes photos, reactions, DM threads, and DM messages
+8. Log `expired_photos_deleted` and `expired_events_deleted` telemetry with counts
 
 ### Orphan Cleanup
 
@@ -610,7 +613,9 @@ Separate scheduled check:
 
 ### Important
 
-Device-saved copies remain untouched. Only cloud-managed copies are deleted. Users are notified 24 hours before expiration via push.
+- Device-saved copies remain untouched — only cloud-managed copies are deleted
+- Users are notified 24 hours before expiration via push
+- Expired events are fully removed from the database, not soft-deleted
 
 ---
 
@@ -718,7 +723,7 @@ This is sufficient. Most photo sharing happens in bursts during active events. D
 ### Application Insights Telemetry Events
 
 - `clique_created`, `clique_joined`, `clique_left`
-- `event_created`, `event_expired`, `event_deleted`
+- `event_created`, `event_expired`, `event_deleted`, `expired_events_deleted`
 - `photo_upload_started`, `photo_upload_completed`, `photo_upload_failed`
 - `photo_saved_to_device`
 - `reaction_added`, `reaction_removed`

@@ -678,13 +678,20 @@ Each photo record stores:
 
 ## Cleanup Process
 
-Timer-triggered Azure Function on a schedule (e.g., every 15 minutes):
+Timer-triggered Azure Function on a schedule (every 15 minutes):
 
 1. Query photos where `expires_at < now()` and `status = 'active'`
 2. Delete corresponding blobs (original + thumbnail) via managed identity
 3. Update photo records: set `status = 'deleted'`, set `deleted_at = now()`
-4. If all photos in an event are deleted, update event status to `expired`
-5. Log `expired_photos_deleted` telemetry event with count
+4. If all photos in an event are deleted, mark event `status = 'expired'`
+5. Mark DM threads as `read_only` for expired events
+6. Delete any remaining blobs for expired events (safety net)
+7. **Hard-delete expired event records** from the database — CASCADE removes:
+   - `photos` (FK `event_id` ON DELETE CASCADE)
+   - `reactions` (FK `photo_id` ON DELETE CASCADE, cascaded from photos)
+   - `event_dm_threads` (FK `event_id` ON DELETE CASCADE)
+   - `event_dm_messages` (FK `thread_id` ON DELETE CASCADE, cascaded from threads)
+8. Log `expired_photos_deleted` and `expired_events_deleted` telemetry events with counts
 
 ### Orphan Cleanup
 
@@ -697,6 +704,7 @@ Separate scheduled check for orphaned uploads:
 
 - Device-saved copies remain untouched — only cloud-managed copies are deleted
 - Users are notified 24 hours before expiration via push notification
+- Expired events are fully removed from the database, not soft-deleted
 
 ---
 

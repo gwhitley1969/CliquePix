@@ -404,7 +404,7 @@ Scanning a clique invite QR code navigated to `https://clique-pix.com/invite/{co
 | DM: Web PubSub service | Done | `webPubSubService.ts` — token negotiation, `sendToUser` for direct user-targeted delivery (switched from thread-scoped groups) |
 | DM: backend endpoints (7) | Done | createOrGetThread, listThreads, getThread, listMessages, sendMessage (rate limited), markRead, negotiate |
 | DM: backend models | Done | `dmThread.ts` — DmThread + DmMessage TypeScript interfaces |
-| DM: timer integration | Done | DM threads marked read-only in existing `cleanupExpired` timer for expired events |
+| DM: timer integration | Done | DM threads marked read-only in `cleanupExpired` timer, then hard-deleted with event via CASCADE |
 | DM: clique removal integration | Done | `removeMember` + `leaveClique` mark affected DM threads as read-only |
 | DM: Flutter models | Done | `DmThreadModel` + `DmMessageModel` with fromJson factories |
 | DM: Flutter API + repository | Done | `dm_api.dart` + `dm_repository.dart` — 7 methods matching backend |
