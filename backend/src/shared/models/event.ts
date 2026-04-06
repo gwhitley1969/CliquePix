@@ -3,7 +3,7 @@ export type EventStatus = 'active' | 'expired';
 
 export interface Event {
   id: string;
-  circle_id: string;
+  clique_id: string;
   name: string;
   description: string | null;
   created_by_user_id: string;

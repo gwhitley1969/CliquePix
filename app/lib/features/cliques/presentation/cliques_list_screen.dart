@@ -9,17 +9,17 @@ import '../../../core/theme/app_theme.dart';
 import '../../../widgets/empty_state_widget.dart';
 import '../../../widgets/error_widget.dart';
 import '../../../widgets/avatar_widget.dart';
-import '../../../models/circle_model.dart';
-import 'circles_providers.dart';
+import '../../../models/clique_model.dart';
+import 'cliques_providers.dart';
 
-class CirclesListScreen extends ConsumerStatefulWidget {
-  const CirclesListScreen({super.key});
+class CliquesListScreen extends ConsumerStatefulWidget {
+  const CliquesListScreen({super.key});
 
   @override
-  ConsumerState<CirclesListScreen> createState() => _CirclesListScreenState();
+  ConsumerState<CliquesListScreen> createState() => _CliquesListScreenState();
 }
 
-class _CirclesListScreenState extends ConsumerState<CirclesListScreen>
+class _CliquesListScreenState extends ConsumerState<CliquesListScreen>
     with WidgetsBindingObserver {
   Timer? _pollTimer;
 
@@ -39,27 +39,27 @@ class _CirclesListScreenState extends ConsumerState<CirclesListScreen>
 
   void _startPolling() {
     _pollTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (mounted) ref.read(circlesListProvider.notifier).refresh();
+      if (mounted) ref.read(cliquesListProvider.notifier).refresh();
     });
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      ref.read(circlesListProvider.notifier).refresh();
+      ref.read(cliquesListProvider.notifier).refresh();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final circlesAsync = ref.watch(circlesListProvider);
+    final cliquesAsync = ref.watch(cliquesListProvider);
 
     return Scaffold(
       backgroundColor: const Color(0xFF0E1525),
       body: RefreshIndicator(
         color: AppColors.electricAqua,
         backgroundColor: const Color(0xFF1A2035),
-        onRefresh: () => ref.read(circlesListProvider.notifier).refresh(),
+        onRefresh: () => ref.read(cliquesListProvider.notifier).refresh(),
         child: CustomScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
@@ -73,14 +73,14 @@ class _CirclesListScreenState extends ConsumerState<CirclesListScreen>
               IconButton(
                 icon: const Icon(Icons.refresh_rounded),
                 tooltip: 'Refresh',
-                onPressed: () => ref.read(circlesListProvider.notifier).refresh(),
+                onPressed: () => ref.read(cliquesListProvider.notifier).refresh(),
               ),
             ],
             flexibleSpace: FlexibleSpaceBar(
               title: ShaderMask(
                 shaderCallback: (bounds) => AppGradients.primary.createShader(bounds),
                 child: const Text(
-                  'My Circles',
+                  'My Cliques',
                   style: TextStyle(
                     fontWeight: FontWeight.w800,
                     fontSize: 22,
@@ -106,7 +106,7 @@ class _CirclesListScreenState extends ConsumerState<CirclesListScreen>
           ),
 
           // Content
-          circlesAsync.when(
+          cliquesAsync.when(
             loading: () => const SliverFillRemaining(
               child: Center(
                 child: CircularProgressIndicator(color: AppColors.electricAqua),
@@ -115,18 +115,18 @@ class _CirclesListScreenState extends ConsumerState<CirclesListScreen>
             error: (err, _) => SliverFillRemaining(
               child: AppErrorWidget(
                 message: err.toString(),
-                onRetry: () => ref.read(circlesListProvider.notifier).refresh(),
+                onRetry: () => ref.read(cliquesListProvider.notifier).refresh(),
               ),
             ),
-            data: (circles) {
-              if (circles.isEmpty) {
+            data: (cliques) {
+              if (cliques.isEmpty) {
                 return SliverFillRemaining(
                   child: EmptyStateWidget(
                     icon: Icons.group_outlined,
-                    title: 'No circles yet',
-                    subtitle: 'Create a circle to start sharing photos with friends',
-                    actionText: 'Create Circle',
-                    onAction: () => context.go('/circles/create'),
+                    title: 'No cliques yet',
+                    subtitle: 'Create a clique to start sharing photos with friends',
+                    actionText: 'Create Clique',
+                    onAction: () => context.go('/cliques/create'),
                   ),
                 );
               }
@@ -135,8 +135,8 @@ class _CirclesListScreenState extends ConsumerState<CirclesListScreen>
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
                 sliver: SliverList(
                   delegate: SliverChildBuilderDelegate(
-                    (context, index) => _CircleCard(circle: circles[index]),
-                    childCount: circles.length,
+                    (context, index) => _CliqueCard(clique: cliques[index]),
+                    childCount: cliques.length,
                   ),
                 ),
               );
@@ -158,12 +158,12 @@ class _CirclesListScreenState extends ConsumerState<CirclesListScreen>
           ],
         ),
         child: FloatingActionButton.extended(
-          onPressed: () => context.go('/circles/create'),
+          onPressed: () => context.go('/cliques/create'),
           backgroundColor: Colors.transparent,
           elevation: 0,
           icon: const Icon(Icons.add_rounded, color: Colors.white, size: 22),
           label: const Text(
-            'Create Circle',
+            'Create Clique',
             style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15),
           ),
         ),
@@ -172,9 +172,9 @@ class _CirclesListScreenState extends ConsumerState<CirclesListScreen>
   }
 }
 
-class _CircleCard extends StatelessWidget {
-  final CircleModel circle;
-  const _CircleCard({required this.circle});
+class _CliqueCard extends StatelessWidget {
+  final CliqueModel clique;
+  const _CliqueCard({required this.clique});
 
   List<Color> _gradientForName(String name) {
     final hash = name.hashCode.abs() % 5;
@@ -194,14 +194,14 @@ class _CircleCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = _gradientForName(circle.name);
+    final colors = _gradientForName(clique.name);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: () => context.go('/circles/${circle.id}'),
+          onTap: () => context.go('/cliques/${clique.id}'),
           borderRadius: BorderRadius.circular(16),
           child: Container(
             decoration: BoxDecoration(
@@ -223,14 +223,14 @@ class _CircleCard extends StatelessWidget {
               padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
-                  AvatarWidget(name: circle.name, size: 54),
+                  AvatarWidget(name: clique.name, size: 54),
                   const SizedBox(width: 16),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          circle.name,
+                          clique.name,
                           style: const TextStyle(
                             fontSize: 17,
                             fontWeight: FontWeight.w700,
@@ -248,7 +248,7 @@ class _CircleCard extends StatelessWidget {
                             ),
                             const SizedBox(width: 5),
                             Text(
-                              '${circle.memberCount} member${circle.memberCount != 1 ? 's' : ''}',
+                              '${clique.memberCount} member${clique.memberCount != 1 ? 's' : ''}',
                               style: TextStyle(
                                 fontSize: 13,
                                 color: Colors.white.withValues(alpha: 0.5),

@@ -100,7 +100,7 @@ async function notifyExpiring(myTimer: Timer, context: InvocationContext): Promi
   context.log('Running expiration notification check');
 
   const expiringEvents = await query<any>(
-    `SELECT e.id, e.name, e.circle_id, e.expires_at
+    `SELECT e.id, e.name, e.clique_id, e.expires_at
      FROM events e
      WHERE e.status = 'active'
        AND e.expires_at > NOW() + INTERVAL '23 hours'
@@ -123,9 +123,9 @@ async function notifyExpiring(myTimer: Timer, context: InvocationContext): Promi
     try {
       const tokens = await query<{ token: string; user_id: string }>(
         `SELECT pt.token, pt.user_id FROM push_tokens pt
-         JOIN circle_members cm ON cm.user_id = pt.user_id
-         WHERE cm.circle_id = $1`,
-        [event.circle_id],
+         JOIN clique_members cm ON cm.user_id = pt.user_id
+         WHERE cm.clique_id = $1`,
+        [event.clique_id],
       );
 
       if (tokens.length > 0) {

@@ -17,12 +17,12 @@ const MAX_BLOB_SIZE = 15 * 1024 * 1024; // 15MB server-side limit
 const DEFAULT_PAGE_LIMIT = 20;
 const MAX_PAGE_LIMIT = 50;
 
-// Helper: verify event exists and user is a member of the event's circle
+// Helper: verify event exists and user is a member of the event's clique
 async function getEventWithMembershipCheck(eventId: string, userId: string): Promise<Event & { member_id: string }> {
   const event = await queryOne<Event & { member_id: string }>(
     `SELECT e.*, cm.id AS member_id
      FROM events e
-     JOIN circle_members cm ON cm.circle_id = e.circle_id AND cm.user_id = $2
+     JOIN clique_members cm ON cm.clique_id = e.clique_id AND cm.user_id = $2
      WHERE e.id = $1`,
     [eventId, userId],
   );
@@ -93,7 +93,7 @@ async function getUploadUrl(req: HttpRequest, context: InvocationContext): Promi
     }
 
     const photoId = uuidv4();
-    const blobPath = `photos/${event.circle_id}/${eventId}/${photoId}/original.jpg`;
+    const blobPath = `photos/${event.clique_id}/${eventId}/${photoId}/original.jpg`;
 
     await queryOne<Photo>(
       `INSERT INTO photos (id, event_id, uploaded_by_user_id, blob_path, mime_type, status, expires_at)
@@ -206,8 +206,8 @@ async function confirmUpload(req: HttpRequest, context: InvocationContext): Prom
     // Send push notifications to other event members
     const tokens = await query<{ token: string }>(
       `SELECT pt.token FROM push_tokens pt
-       JOIN circle_members cm ON cm.user_id = pt.user_id
-       JOIN events e ON e.circle_id = cm.circle_id
+       JOIN clique_members cm ON cm.user_id = pt.user_id
+       JOIN events e ON e.clique_id = cm.clique_id
        WHERE e.id = $1 AND pt.user_id != $2`,
       [eventId, authUser.id],
     );
@@ -224,8 +224,8 @@ async function confirmUpload(req: HttpRequest, context: InvocationContext): Prom
       await execute(
         `INSERT INTO notifications (id, user_id, type, payload_json)
          SELECT gen_random_uuid(), cm.user_id, 'new_photo', $1::jsonb
-         FROM circle_members cm
-         JOIN events e ON e.circle_id = cm.circle_id
+         FROM clique_members cm
+         JOIN events e ON e.clique_id = cm.clique_id
          WHERE e.id = $2 AND cm.user_id != $3`,
         [JSON.stringify({ event_id: eventId, photo_id: photoId }), eventId, authUser.id],
       );
@@ -396,16 +396,16 @@ async function getPhoto(req: HttpRequest, context: InvocationContext): Promise<H
       throw new NotFoundError('photo');
     }
 
-    // Verify user is a member of the event's circle
+    // Verify user is a member of the event's clique
     const membership = await queryOne<{ id: string }>(
-      `SELECT cm.id FROM circle_members cm
-       JOIN events e ON e.circle_id = cm.circle_id
+      `SELECT cm.id FROM clique_members cm
+       JOIN events e ON e.clique_id = cm.clique_id
        WHERE e.id = $1 AND cm.user_id = $2`,
       [photo.event_id, authUser.id],
     );
 
     if (!membership) {
-      throw new ForbiddenError('You are not a member of this event\'s circle.');
+      throw new ForbiddenError('You are not a member of this event\'s clique.');
     }
 
     const enrichedPhoto = await enrichPhotoWithUrls(photo, authUser.id);

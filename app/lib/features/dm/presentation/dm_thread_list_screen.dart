@@ -167,8 +167,8 @@ class DmThreadListScreen extends ConsumerWidget {
         ),
         child: FloatingActionButton.extended(
           onPressed: () {
-            final circleId = eventAsync.valueOrNull?.circleId ?? '';
-            context.push('/events/$eventId/dm/new?circleId=$circleId');
+            final cliqueId = eventAsync.valueOrNull?.cliqueId ?? '';
+            context.push('/events/$eventId/dm/new?cliqueId=$cliqueId');
           },
           backgroundColor: Colors.transparent,
           elevation: 0,

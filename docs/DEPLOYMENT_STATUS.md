@@ -15,13 +15,13 @@ Last updated: 2026-04-03
 | Migration (002_member_joined_notification.sql) | Done | Added `member_joined` to notifications type CHECK constraint (run 2026-03-31) |
 | Migration (003_event_deleted_notification.sql) | Done | Added `event_deleted` to notifications type CHECK constraint (run 2026-04-03) |
 | Migration (004_user_delete_set_null.sql) | Done | Made `created_by_user_id` / `uploaded_by_user_id` nullable with ON DELETE SET NULL (run 2026-04-03) |
-| Shared models (8 files) | Done | User, Circle, Event, Photo, Reaction, Notification, PushToken |
+| Shared models (8 files) | Done | User, Clique, Event, Photo, Reaction, Notification, PushToken |
 | Shared utils (response, errors, validators) | Done | |
 | Shared services (db, blob, sas, fcm, telemetry) | Done | Code reviewed + 49 issues fixed |
 | Auth middleware (JWT via JWKS) | Done | Uses typed errors (UnauthorizedError, NotFoundError) |
 | Error handler middleware | Done | Correlation IDs via invocationId |
-| Auth functions (verify, getMe, deleteMe) | Done | `deleteMe` cleans up blobs, sole-owner circles, user record |
-| Circles functions (8 endpoints) | Done | joinCircle sends FCM push; `removeMember` endpoint for owner to remove members |
+| Auth functions (verify, getMe, deleteMe) | Done | `deleteMe` cleans up blobs, sole-owner cliques, user record |
+| Cliques functions (8 endpoints) | Done | joinClique sends FCM push; `removeMember` endpoint for owner to remove members |
 | Events functions (4 endpoints) | Done | Includes `deleteEvent` for organizer-initiated deletion |
 | Photos functions (5 endpoints) | Done | Validates via blob properties, async thumbnail gen |
 | Reactions functions (2 endpoints) | Done | Static imports, consistent telemetry keys |
@@ -39,27 +39,27 @@ Last updated: 2026-04-03
 | Design system (colors, gradients, typography, theme) | Done | Dark theme throughout, uses `withValues(alpha:)` (Flutter 3.27+) |
 | Constants (endpoints, app constants, environment) | Done | Domain: `clique-pix.com` |
 | Error types (sealed AppFailure, error mapper) | Done | |
-| Routing (GoRouter with shell route) | Done | Event-first flow, 4 tabs (Home/Circles/Notifications/Profile), auth guard with redirect preservation for invite deep links |
+| Routing (GoRouter with shell route) | Done | Event-first flow, 4 tabs (Home/Cliques/Notifications/Profile), auth guard with redirect preservation for invite deep links |
 | API client (Dio + 3 interceptors) | Done | Auth interceptor uses parent Dio for retry |
 | Token storage service | Done | Refresh callback mechanism wired to MSAL |
 | Storage service (save to gallery + share + batch download) | Done | Single save, batch save with progress, share via temp file |
 | Deep link service | Done | Host: clique-pix.com, initialized in app.dart via ConsumerStatefulWidget |
 | Push notification service | Done | FCM token registration + refresh; foreground display via `flutter_local_notifications`; background/terminated tap navigation; static callback for local notification taps |
 | Shared widgets (7 widgets) | Done | Gradient-ringed avatars, dark-themed bottom nav with gradient icons |
-| Data models (5 models) | Done | PhotoModel with resilient num/string parsing, EventModel with circleName/memberCount |
+| Data models (5 models) | Done | PhotoModel with resilient num/string parsing, EventModel with cliqueName/memberCount |
 | Auth feature (MSAL integration) | Done | `msal_auth` 3.3.0, custom API scope, auto-login on startup, MSAL error recovery, dismiss button |
 | 5-layer token refresh defense | Done | All layers wired; loginHint threaded through Layer 5 |
-| Circles feature (API, repository, providers, 6 screens) | Done | Dark theme, gradient-bordered cards, gradient-ringed avatars, labeled "Create Circle" FAB, pull-to-refresh + 30s polling on list and detail screens, JoinCircleScreen with dark theme |
+| Cliques feature (API, repository, providers, 6 screens) | Done | Dark theme, gradient-bordered cards, gradient-ringed avatars, labeled "Create Clique" FAB, pull-to-refresh + 30s polling on list and detail screens, JoinCliqueScreen with dark theme |
 | Events feature (API, repository, providers, 4 screens) | Done | Event-first flow, events home screen, dark-themed event detail with hero header, labeled "Create Event" FAB, `listAllEvents` backend endpoint |
 | Photos feature (API, repository, services, providers, 6 screens/widgets) | Done | `pro_image_editor` for crop/draw/stickers/filters, prominent "Upload to Event" button, step-by-step progress overlay, `uploaded_by_name` in responses, multi-select photo download with progress, debug logging throughout pipeline |
-| Notifications feature (API, repository, providers, 1 screen) | Done | Dark theme, colored icon badges, unread/read styling, `member_joined` type with circle navigation |
+| Notifications feature (API, repository, providers, 1 screen) | Done | Dark theme, colored icon badges, unread/read styling, `member_joined` type with clique navigation |
 | Profile feature (1 screen) | Done | Dark theme, gradient profile card, grouped settings with gradient icons |
 | App entry point (main.dart) | Done | Firebase, timezone, WorkManager, local notifications plugin (top-level), `cliquepix_default` channel creation, Android 13+ permission request, FCM `onMessage` foreground listener, background message handler |
 | All API providers wired to ApiClient | Done | No UnimplementedError providers |
 | App launcher icon | Done | Clique Pix camera logo at all Android densities |
 | Login screen | Done | Dark gradient, animated glowing logo, slide-in animations |
 | App-wide dark theme | Done | `AppTheme.dark` applied globally in app.dart; all screens use consistent dark (#0E1525) background with gradient accents |
-| Home screen dashboard | Done | State-aware: brand new, has circles, active events, expired events; How It Works card, circle quick-start chips, active event cards with countdown timers |
+| Home screen dashboard | Done | State-aware: brand new, has cliques, active events, expired events; How It Works card, clique quick-start chips, active event cards with countdown timers |
 | Android manifest | Done | Permissions, App Links, FCM, MSAL BrowserTabActivity |
 | iOS Info.plist | Done | Camera/photo permissions, background modes, MSAL URL schemes |
 | Firebase config (Android) | Done | `google-services.json` placed in `android/app/` |
@@ -264,11 +264,11 @@ The photo upload pipeline appeared completely broken — photos never appeared a
 
 ---
 
-## QR Invite Flow Fix + Circle Join Notifications (2026-03-31)
+## QR Invite Flow Fix + Clique Join Notifications (2026-03-31)
 
 ### Problem 1: QR Code invite returns 404
 
-Scanning a circle invite QR code navigated to `https://clique-pix.com/invite/{code}` which returned a 404 from Azure because the Static Web App had no route or page for `/invite/*` paths.
+Scanning a clique invite QR code navigated to `https://clique-pix.com/invite/{code}` which returned a 404 from Azure because the Static Web App had no route or page for `/invite/*` paths.
 
 **Root causes and fixes:**
 
@@ -279,20 +279,20 @@ Scanning a circle invite QR code navigated to `https://clique-pix.com/invite/{co
 | `DeepLinkService` never initialized | Converted `app.dart` to `ConsumerStatefulWidget`, call `initialize(router)` in `initState` |
 | Invite route bypassed auth check | Removed `isInviteRoute` exemption from GoRouter redirect; added `?redirect=` query param to preserve invite URL through login flow |
 | `.well-known` placeholders | Replaced `TEAM_ID` → `4ML27KY869` in AASA; replaced SHA256 placeholder with debug keystore fingerprint in assetlinks.json |
-| `JoinCircleScreen` light theme | Restyled with dark background, gradient heading, aqua accents, dark TextField |
+| `JoinCliqueScreen` light theme | Restyled with dark background, gradient heading, aqua accents, dark TextField |
 
 **Website redeployed** to `swa-cliquepix-prod` via SWA CLI. Invite URLs now return 200 with branded page.
 
-### Problem 2: Owner not notified when someone joins circle
+### Problem 2: Owner not notified when someone joins clique
 
 | Issue | Fix |
 |-------|-----|
 | No `member_joined` notification type | Created migration `002_member_joined_notification.sql` — ALTERed CHECK constraint on `notifications.type` |
-| Backend didn't send push on join | Added FCM push + notification record creation to `joinCircle()` in `circles.ts`; replicates exact pattern from `photos.ts` |
+| Backend didn't send push on join | Added FCM push + notification record creation to `joinClique()` in `cliques.ts`; replicates exact pattern from `photos.ts` |
 | `NotificationType` model missing type | Added `'member_joined'` to union type in `notification.ts` |
-| Client didn't render `member_joined` | Added icon/color case (person_add + aqua/violet), title case ("New Member"), and circle navigation in `_NotificationTile.onTap` |
+| Client didn't render `member_joined` | Added icon/color case (person_add + aqua/violet), title case ("New Member"), and clique navigation in `_NotificationTile.onTap` |
 | No FCM token registration | Created `PushNotificationService` — requests permission, gets FCM token, sends to `POST /api/push-tokens`, listens for token refresh |
-| No auto-refresh on circle screens | Added `WidgetsBindingObserver` + `RefreshIndicator` + `Timer.periodic(30s)` polling to both `CirclesListScreen` and `CircleDetailScreen` |
+| No auto-refresh on clique screens | Added `WidgetsBindingObserver` + `RefreshIndicator` + `Timer.periodic(30s)` polling to both `CliquesListScreen` and `CliqueDetailScreen` |
 
 **Backend redeployed** to `func-cliquepix-fresh`. Migration run against `pg-cliquepixdb`.
 
@@ -300,7 +300,7 @@ Scanning a circle invite QR code navigated to `https://clique-pix.com/invite/{co
 
 ### Problem 3: Global light theme overriding dark screens
 
-`app.dart` used `AppTheme.light` — a Material 3 light theme that overrode per-widget dark styling on some screens (notably `CreateCircleScreen`).
+`app.dart` used `AppTheme.light` — a Material 3 light theme that overrode per-widget dark styling on some screens (notably `CreateCliqueScreen`).
 
 **Fix:** Created `AppTheme.dark` in `app_theme.dart` with dark defaults matching the app's visual design (dark scaffold, dark AppBar, dark InputDecoration, aqua accents). Switched `app.dart` to `theme: AppTheme.dark`.
 
@@ -313,12 +313,12 @@ Scanning a circle invite QR code navigated to `https://clique-pix.com/invite/{co
 | Task | Status | Notes |
 |------|--------|-------|
 | MSAL authentication flow | Done | End-to-end working: MSAL → custom API scope → backend JWT verification → user upsert |
-| Event-first UX flow | Done | 4 tabs (Events/Circles/Notifications/Profile), event creation with inline circle picker |
-| Dark theme across all screens | Done | Circles detail, event detail, camera capture, notifications, profile — all consistent |
+| Event-first UX flow | Done | 4 tabs (Events/Cliques/Notifications/Profile), event creation with inline clique picker |
+| Dark theme across all screens | Done | Cliques detail, event detail, camera capture, notifications, profile — all consistent |
 | Photo editor integration | Done | `pro_image_editor` ^5.1.4 — crop, draw, stickers, emoji, filters, text |
 | Auth error recovery | Done | Auto-login on startup, MSAL cache reset on failure, error dismiss button |
 | New app icon/logo | Done | Generated via `flutter_launcher_icons` from 1024x1024 source |
-| Backend: `listAllEvents` endpoint | Done | `GET /api/events` — returns all events across user's circles with circle name/member count |
+| Backend: `listAllEvents` endpoint | Done | `GET /api/events` — returns all events across user's cliques with clique name/member count |
 | Backend: `uploaded_by_name` in photos | Done | `listPhotos` JOINs users table; `PhotoWithUrls` includes uploader display name |
 | PhotoModel resilient parsing | Done | Handles PostgreSQL bigint-as-string (file_size_bytes) without type cast errors |
 | ProImageEditor double-pop fix | Done | v5.x calls `onCloseEditor` after `onImageEditingComplete`; moved `Navigator.pop()` to `onCloseEditor` only to prevent double-pop that skipped preview/upload screen |
@@ -334,29 +334,29 @@ Scanning a circle invite QR code navigated to `https://clique-pix.com/invite/{co
 | Deep link service initialization | Done | `DeepLinkService.initialize(router)` called in `app.dart` |
 | Auth gate for invite routes | Done | Unauthenticated invite URLs redirect to login with `?redirect=` preservation |
 | Global dark theme | Done | Created `AppTheme.dark`, switched `app.dart` from `AppTheme.light` |
-| Home screen dashboard | Done | 4-state contextual dashboard, How It Works card, circle chips, active event cards |
+| Home screen dashboard | Done | 4-state contextual dashboard, How It Works card, clique chips, active event cards |
 | Back buttons on full-screen routes | Done | Event detail, camera capture, photo detail all have explicit back navigation |
-| Circle join push notification (backend) | Done | `joinCircle()` sends FCM to existing members, creates `member_joined` notification records |
+| Clique join push notification (backend) | Done | `joinClique()` sends FCM to existing members, creates `member_joined` notification records |
 | DB migration: member_joined type | Done | `002_member_joined_notification.sql` run against `pg-cliquepixdb` |
 | FCM token registration (client) | Done | `PushNotificationService` gets token, registers with backend, listens for refresh |
-| Circle screens refresh | Done | Pull-to-refresh + app-resume + 30s polling on CirclesListScreen and CircleDetailScreen |
-| JoinCircleScreen dark theme | Done | Gradient heading, aqua accents, dark TextField |
-| Dark theme consistency | Done | EventsListScreen, CreateCircleScreen, InviteScreen all restyled |
+| Clique screens refresh | Done | Pull-to-refresh + app-resume + 30s polling on CliquesListScreen and CliqueDetailScreen |
+| JoinCliqueScreen dark theme | Done | Gradient heading, aqua accents, dark TextField |
+| Dark theme consistency | Done | EventsListScreen, CreateCliqueScreen, InviteScreen all restyled |
 
 ### Recently Completed (2026-04-01)
 
 | Task | Status | Notes |
 |------|--------|-------|
-| Circle member management: owner remove | Done | `DELETE /api/circles/{circleId}/members/{userId}` — owner-only, validates role, prevents self-removal |
-| Circle member management: leave/delete UI | Done | "Leave Circle" button (members), "Delete Circle" button (sole owner), confirmation dialogs |
-| Circle member management: tappable removal | Done | Owner sees remove icon on non-owner members; tap shows confirmation dialog |
-| Graceful 404 on member removal | Done | When removed user's screen refreshes, detects 404 DioException and navigates to `/circles` with SnackBar instead of showing error |
+| Clique member management: owner remove | Done | `DELETE /api/cliques/{cliqueId}/members/{userId}` — owner-only, validates role, prevents self-removal |
+| Clique member management: leave/delete UI | Done | "Leave Clique" button (members), "Delete Clique" button (sole owner), confirmation dialogs |
+| Clique member management: tappable removal | Done | Owner sees remove icon on non-owner members; tap shows confirmation dialog |
+| Graceful 404 on member removal | Done | When removed user's screen refreshes, detects 404 DioException and navigates to `/cliques` with SnackBar instead of showing error |
 | State invalidation: member count | Done | Uses `membersAsync.valueOrNull?.length` for live count; avoids full-screen loading flash |
-| Frontend API: `removeMember` | Done | Endpoint constant, CirclesApi method, CirclesRepository method |
+| Frontend API: `removeMember` | Done | Endpoint constant, CliquesApi method, CliquesRepository method |
 | Push notification: foreground display | Done | `onMessage` listener in `main.dart` shows heads-up banner via `flutter_local_notifications.show()` |
 | Push notification: channel creation | Done | `cliquepix_default` channel with `Importance.high` created in `main.dart` at startup |
 | Push notification: Android 13+ permission | Done | `requestNotificationsPermission()` via Android-specific plugin API |
-| Push notification: background tap | Done | `onMessageOpenedApp` → navigates to circle/event via GoRouter |
+| Push notification: background tap | Done | `onMessageOpenedApp` → navigates to clique/event via GoRouter |
 | Push notification: terminated tap | Done | `getInitialMessage()` → delayed navigation after router init |
 | Push notification: local tap routing | Done | Static callback bridges `main.dart` `onDidReceiveNotificationResponse` → `PushNotificationService.onNotificationTap` → GoRouter |
 | Push notification: in-app list refresh | Done | `onMessage` invalidates `notificationsListProvider` for immediate update |
@@ -366,15 +366,15 @@ Scanning a circle invite QR code navigated to `https://clique-pix.com/invite/{co
 
 | Task | Status | Notes |
 |------|--------|-------|
-| Post-creation invite flow | Done | When creating event with NEW circle, modal bottom sheet prompts "Invite Friends" or "Skip for Now" on Event Detail screen. Uses `GoRouter.extra` to pass circleId/circleName (one-time, not restorable from URL) |
-| Top-level routes for cross-shell navigation | Done | Added `/view-circle/:circleId` and `/invite-to-circle/:circleId` outside `StatefulShellRoute` — fixes back-navigation when pushing to shell-internal routes from Event Detail |
-| Circle navigation from event detail | Done | AppBar group icon (always visible) + tappable circle name with chevron in hero section — both use top-level `/view-circle/` route for clean back-navigation |
+| Post-creation invite flow | Done | When creating event with NEW clique, modal bottom sheet prompts "Invite Friends" or "Skip for Now" on Event Detail screen. Uses `GoRouter.extra` to pass cliqueId/cliqueName (one-time, not restorable from URL) |
+| Top-level routes for cross-shell navigation | Done | Added `/view-clique/:cliqueId` and `/invite-to-clique/:cliqueId` outside `StatefulShellRoute` — fixes back-navigation when pushing to shell-internal routes from Event Detail |
+| Clique navigation from event detail | Done | AppBar group icon (always visible) + tappable clique name with chevron in hero section — both use top-level `/view-clique/` route for clean back-navigation |
 
 ### Recently Completed (2026-04-03)
 
 | Task | Status | Notes |
 |------|--------|-------|
-| Event deletion: backend endpoint | Done | `DELETE /api/events/{eventId}` — creator-only auth, blob cleanup before cascade DB delete, push + in-app notification to circle members |
+| Event deletion: backend endpoint | Done | `DELETE /api/events/{eventId}` — creator-only auth, blob cleanup before cascade DB delete, push + in-app notification to clique members |
 | Event deletion: frontend UI | Done | Delete icon in AppBar (organizer only), dark-themed confirmation dialog, post-delete navigation to events list with SnackBar |
 | Event deletion: API/repository layer | Done | `deleteEvent()` method in EventsApi and EventsRepository |
 | Photo card name readability fix | Done | Uploader name and timestamp text overridden to white for dark card background (#162033) — was invisible dark navy (#0F172A) |
@@ -383,7 +383,7 @@ Scanning a circle invite QR code navigated to `https://clique-pix.com/invite/{co
 | Multi-select photo download: feed UI | Done | Selection toolbar with Select All / Deselect All + Cancel; download action bar with progress indicator at bottom |
 | Multi-select photo download: batch save | Done | `savePhotosToGallery()` in StorageService — sequential download with progress callback, continues past individual failures |
 | Backend redeployed | Done | `func azure functionapp publish func-cliquepix-fresh` — 28 functions |
-| Circle screens: refresh button | Done | Refresh icon in AppBar on both CircleDetailScreen and CirclesListScreen — calls existing `_refresh()` / `circlesListProvider.notifier.refresh()` |
+| Clique screens: refresh button | Done | Refresh icon in AppBar on both CliqueDetailScreen and CliquesListScreen — calls existing `_refresh()` / `cliquesListProvider.notifier.refresh()` |
 | DB migration: `event_deleted` notification type | Done | Migration `003_event_deleted_notification.sql` — added `event_deleted` to notifications CHECK constraint |
 | Event creator name: backend queries | Done | `getEvent`, `listEvents`, `listAllEvents` now JOIN `users` table, return `created_by_name` |
 | Event creator name: frontend model | Done | Added `createdByName` optional field to `EventModel`, parsed from `created_by_name` |
@@ -394,8 +394,8 @@ Scanning a circle invite QR code navigated to `https://clique-pix.com/invite/{co
 | Notification clear/delete: UI | Done | Clear All icon in AppBar with confirmation dialog; swipe-to-dismiss (Dismissible) on each notification tile |
 | Backend redeployed (3rd) | Done | `func azure functionapp publish func-cliquepix-fresh --force` — 31 functions |
 | Copy user ID button | Done | User ID displayed on profile card with copy icon, copies to clipboard with SnackBar |
-| Delete account: backend endpoint | Done | `DELETE /api/users/me` — cleans up sole-owner circles + blobs, deletes user photos + blobs, deletes user record |
-| Delete account: DB migration 004 | Done | `created_by_user_id` and `uploaded_by_user_id` made nullable with ON DELETE SET NULL on circles, events, photos |
+| Delete account: backend endpoint | Done | `DELETE /api/users/me` — cleans up sole-owner cliques + blobs, deletes user photos + blobs, deletes user record |
+| Delete account: DB migration 004 | Done | `created_by_user_id` and `uploaded_by_user_id` made nullable with ON DELETE SET NULL on cliques, events, photos |
 | Delete account: auth layer | Done | `deleteAccount()` threaded through AuthApi → AuthRepository → AuthNotifier with local cleanup |
 | Delete account: profile UI | Done | Red "Delete Account" tile with confirmation dialog; GoRouter auto-redirects to login on success |
 | Backend redeployed (4th) | Done | `func azure functionapp publish func-cliquepix-fresh --force` — 32 functions |
@@ -405,20 +405,20 @@ Scanning a circle invite QR code navigated to `https://clique-pix.com/invite/{co
 | DM: backend endpoints (7) | Done | createOrGetThread, listThreads, getThread, listMessages, sendMessage (rate limited), markRead, negotiate |
 | DM: backend models | Done | `dmThread.ts` — DmThread + DmMessage TypeScript interfaces |
 | DM: timer integration | Done | DM threads marked read-only in existing `cleanupExpired` timer for expired events |
-| DM: circle removal integration | Done | `removeMember` + `leaveCircle` mark affected DM threads as read-only |
+| DM: clique removal integration | Done | `removeMember` + `leaveClique` mark affected DM threads as read-only |
 | DM: Flutter models | Done | `DmThreadModel` + `DmMessageModel` with fromJson factories |
 | DM: Flutter API + repository | Done | `dm_api.dart` + `dm_repository.dart` — 7 methods matching backend |
 | DM: Flutter realtime service | Done | `dm_realtime_service.dart` — WebSocket connection with auto-reconnect (exponential backoff), re-negotiates fresh URL on reconnect |
 | DM: Flutter providers + routing | Done | Riverpod providers, 3 routes under `/events/:eventId/` (dm-threads, dm/new, dm/:threadId) |
 | DM: thread list screen | Done | Dark-themed list with unread indicators, "New Message" FAB, empty state |
 | DM: chat screen | Done | Message bubbles (gradient for sent, dark for received), composer, read-only banner |
-| DM: member picker screen | Done | Lists circle members for starting new DMs |
+| DM: member picker screen | Done | Lists clique members for starting new DMs |
 | DM: event detail entry points | Done | Messages icon in AppBar + prominent "Messages" button below "Add Photo" |
 | DM: FCM push tap routing | Done | `dm_message` type navigates to `/events/{eventId}/dm/{threadId}` |
 | DM: debug logging | Done | `[CliquePix DM]` logs for eventId, API response, thread count |
 | Backend redeployed (5th) | Done | `func azure functionapp publish func-cliquepix-fresh --force` — 39 functions |
 | Fix: Sign out not working | Done | Missing `await`, unprotected cleanup, stale PCA instance — all three fixed with defense-in-depth (try/catch + try/finally + `_pca = null`) |
-| Fix: Welcome screen UI | Done | Hide redundant FAB in brand-new state, brighten helper text (0.3→0.55), "Add Your Crew"→"Add Your Circle" |
+| Fix: Welcome screen UI | Done | Hide redundant FAB in brand-new state, brighten helper text (0.3→0.55), "Add Your Crew"→"Add Your Clique" |
 | Fix: DM real-time delivery | Done | Switched from group-based (`sendToAll`) to user-targeted (`sendToUser`) delivery; fixed WebSocket reconnection to re-negotiate fresh URL |
 | Backend redeployed (6th) | Done | `func azure functionapp publish func-cliquepix-fresh --force` — DM sendToUser fix |
 | Fix: Sign-out browser session | Done | Added `browser_sign_out_enabled: true` to `msal_config.json` + `Prompt.login` on `acquireToken` — clears Google session cookies on sign-out, forces re-authentication on sign-in |
@@ -439,9 +439,9 @@ Scanning a circle invite QR code navigated to `https://clique-pix.com/invite/{co
 | Step | Status |
 |------|--------|
 | 1. Sign up / sign in | Done (2026-03-26) |
-| 2. Create a Circle | Done (2026-03-26) |
+| 2. Create a Clique | Done (2026-03-26) |
 | 3. Generate invite link/QR | Done (2026-03-31) — QR code encodes `https://clique-pix.com/invite/{code}` |
-| 4. Join Circle via invite (QR scan) | Done (2026-03-31) — invite landing page loads (no more 404), join succeeds, joiner appears in circle |
+| 4. Join Clique via invite (QR scan) | Done (2026-03-31) — invite landing page loads (no more 404), join succeeds, joiner appears in clique |
 | 5. Create Event (24h/3d/7d) | Done (2026-03-26) |
 | 6. Capture photo in-app | Done (2026-03-26) — photo confirmed in database |
 | 7. Upload photo (compress → SAS → blob → confirm) | In progress — double-pop bug fixed (user never saw Upload button); Dio config fixed; needs retest |
@@ -449,13 +449,13 @@ Scanning a circle invite QR code navigated to `https://clique-pix.com/invite/{co
 | 9. React to photo | Not tested |
 | 10. Save photo to device | Not tested |
 | 11. Share photo externally | Not tested |
-| 12. Receive push notification (circle join) | In progress — backend sends FCM successfully (confirmed via App Insights telemetry), client has foreground/background/terminated handlers + notification channel + Android 13+ permission. Needs on-device verification. |
+| 12. Receive push notification (clique join) | In progress — backend sends FCM successfully (confirmed via App Insights telemetry), client has foreground/background/terminated handlers + notification channel + Android 13+ permission. Needs on-device verification. |
 | 13. Auto-deletion after expiry | Not tested |
 | 14. Graceful re-login (Layer 5) | Not tested |
 | 15. Owner sees new member (auto-refresh) | Partial — pull-to-refresh works, 30s polling implemented, but auto-refresh not confirmed working on device |
-| 16. Owner removes member from circle | Done (2026-04-01) — owner taps member → confirm dialog → member removed → list refreshes |
-| 17. Member leaves circle | Done (2026-04-01) — member taps "Leave Circle" → confirm → navigates to circles list |
-| 18. Removed member graceful redirect | Done (2026-04-01) — 404 detection auto-navigates removed user back to circles list with SnackBar |
+| 16. Owner removes member from clique | Done (2026-04-01) — owner taps member → confirm dialog → member removed → list refreshes |
+| 17. Member leaves clique | Done (2026-04-01) — member taps "Leave Clique" → confirm → navigates to cliques list |
+| 18. Removed member graceful redirect | Done (2026-04-01) — 404 detection auto-navigates removed user back to cliques list with SnackBar |
 | 19. Event organizer deletes event | Not tested — delete icon visible to creator, confirmation dialog, blob cleanup + cascade delete |
 | 20. Non-organizer cannot delete event | Not tested — delete icon should not appear for non-creators |
 | 21. Multi-select photo download | Not tested — enter selection mode, select photos, download with progress bar |

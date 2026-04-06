@@ -199,11 +199,11 @@ class NotificationsScreen extends ConsumerWidget {
                           onTap: () {
                             ref.read(notificationsRepositoryProvider).markRead(n.id);
                             final eventId = n.payload['event_id'] as String?;
-                            final circleId = n.payload['circle_id'] as String?;
+                            final cliqueId = n.payload['clique_id'] as String?;
                             if (eventId != null) {
                               context.push('/events/$eventId');
-                            } else if (circleId != null) {
-                              context.push('/circles/$circleId');
+                            } else if (cliqueId != null) {
+                              context.push('/cliques/$cliqueId');
                             }
                           },
                         ),

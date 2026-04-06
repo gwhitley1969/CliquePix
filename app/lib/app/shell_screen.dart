@@ -49,7 +49,7 @@ class ShellScreen extends StatelessWidget {
                 ).createShader(bounds),
                 child: const Icon(Icons.group, color: Colors.white),
               ),
-              label: 'Circles',
+              label: 'Cliques',
             ),
             NavigationDestination(
               icon: Icon(Icons.notifications_outlined, color: Colors.white.withValues(alpha: 0.4)),

@@ -297,13 +297,13 @@ class _EventCard extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 4),
-                        if (event.circleName != null)
+                        if (event.cliqueName != null)
                           Row(
                             children: [
                               Icon(Icons.group_rounded, size: 13, color: colors[0].withValues(alpha: 0.6)),
                               const SizedBox(width: 4),
                               Text(
-                                event.circleName!,
+                                event.cliqueName!,
                                 style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.5)),
                               ),
                               if (event.memberCount != null) ...[

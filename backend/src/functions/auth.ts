@@ -116,30 +116,30 @@ async function deleteMe(req: HttpRequest, context: InvocationContext): Promise<H
   try {
     const authUser = await authenticateRequest(req);
 
-    // 1. Find circles where user is the sole owner (only member)
-    const soleOwnerCircles = await query<{ id: string }>(
-      `SELECT c.id FROM circles c
+    // 1. Find cliques where user is the sole owner (only member)
+    const soleOwnerCliques = await query<{ id: string }>(
+      `SELECT c.id FROM cliques c
        WHERE c.created_by_user_id = $1
-       AND (SELECT COUNT(*) FROM circle_members cm WHERE cm.circle_id = c.id) = 1`,
+       AND (SELECT COUNT(*) FROM clique_members cm WHERE cm.clique_id = c.id) = 1`,
       [authUser.id],
     );
 
-    // 2. For sole-owner circles: delete all photo blobs, then delete circle (CASCADE)
-    for (const circle of soleOwnerCircles) {
-      const circlePhotos = await query<{ blob_path: string; thumbnail_blob_path: string | null }>(
+    // 2. For sole-owner cliques: delete all photo blobs, then delete clique (CASCADE)
+    for (const clique of soleOwnerCliques) {
+      const cliquePhotos = await query<{ blob_path: string; thumbnail_blob_path: string | null }>(
         `SELECT p.blob_path, p.thumbnail_blob_path FROM photos p
          JOIN events e ON e.id = p.event_id
-         WHERE e.circle_id = $1`,
-        [circle.id],
+         WHERE e.clique_id = $1`,
+        [clique.id],
       );
-      for (const photo of circlePhotos) {
+      for (const photo of cliquePhotos) {
         await deleteBlob(photo.blob_path);
         if (photo.thumbnail_blob_path) await deleteBlob(photo.thumbnail_blob_path);
       }
-      await execute('DELETE FROM circles WHERE id = $1', [circle.id]);
+      await execute('DELETE FROM cliques WHERE id = $1', [clique.id]);
     }
 
-    // 3. Delete remaining photos uploaded by user (in other circles)
+    // 3. Delete remaining photos uploaded by user (in other cliques)
     const userPhotos = await query<{ blob_path: string; thumbnail_blob_path: string | null }>(
       'SELECT blob_path, thumbnail_blob_path FROM photos WHERE uploaded_by_user_id = $1',
       [authUser.id],
@@ -150,8 +150,8 @@ async function deleteMe(req: HttpRequest, context: InvocationContext): Promise<H
     }
     await execute('DELETE FROM photos WHERE uploaded_by_user_id = $1', [authUser.id]);
 
-    // 4. Delete user record (CASCADE: circle_members, reactions, push_tokens, notifications)
-    // (SET NULL via migration 004: circles.created_by_user_id, events.created_by_user_id)
+    // 4. Delete user record (CASCADE: clique_members, reactions, push_tokens, notifications)
+    // (SET NULL via migration 004: cliques.created_by_user_id, events.created_by_user_id)
     await execute('DELETE FROM users WHERE id = $1', [authUser.id]);
 
     trackEvent('account_deleted', { userId: authUser.id });

@@ -4,13 +4,13 @@ import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_gradients.dart';
-import '../../../models/circle_model.dart';
-import '../../circles/presentation/circles_providers.dart';
+import '../../../models/clique_model.dart';
+import '../../cliques/presentation/cliques_providers.dart';
 import 'events_providers.dart';
 
 class CreateEventScreen extends ConsumerStatefulWidget {
-  final String? circleId;
-  const CreateEventScreen({super.key, this.circleId});
+  final String? cliqueId;
+  const CreateEventScreen({super.key, this.cliqueId});
 
   @override
   ConsumerState<CreateEventScreen> createState() => _CreateEventScreenState();
@@ -19,32 +19,32 @@ class CreateEventScreen extends ConsumerStatefulWidget {
 class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
   final _nameController = TextEditingController();
   final _descriptionController = TextEditingController();
-  final _newCircleNameController = TextEditingController();
+  final _newCliqueNameController = TextEditingController();
   int _retentionHours = AppConstants.defaultDuration;
-  String? _selectedCircleId;
-  bool _creatingNewCircle = false;
+  String? _selectedCliqueId;
+  bool _creatingNewClique = false;
   bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
-    _selectedCircleId = widget.circleId;
+    _selectedCliqueId = widget.cliqueId;
     _nameController.addListener(() => setState(() {}));
-    _newCircleNameController.addListener(() => setState(() {}));
+    _newCliqueNameController.addListener(() => setState(() {}));
   }
 
   @override
   void dispose() {
     _nameController.dispose();
     _descriptionController.dispose();
-    _newCircleNameController.dispose();
+    _newCliqueNameController.dispose();
     super.dispose();
   }
 
   bool get _canSubmit {
     if (_nameController.text.trim().isEmpty) return false;
-    if (_creatingNewCircle) return _newCircleNameController.text.trim().isNotEmpty;
-    return _selectedCircleId != null;
+    if (_creatingNewClique) return _newCliqueNameController.text.trim().isNotEmpty;
+    return _selectedCliqueId != null;
   }
 
   Future<void> _createEvent() async {
@@ -52,20 +52,20 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
 
     setState(() => _isLoading = true);
     try {
-      String circleId;
+      String cliqueId;
 
-      if (_creatingNewCircle) {
-        final circle = await ref.read(circlesListProvider.notifier).createCircle(
-          _newCircleNameController.text.trim(),
+      if (_creatingNewClique) {
+        final clique = await ref.read(cliquesListProvider.notifier).createClique(
+          _newCliqueNameController.text.trim(),
         );
-        circleId = circle.id;
+        cliqueId = clique.id;
       } else {
-        circleId = _selectedCircleId!;
+        cliqueId = _selectedCliqueId!;
       }
 
       final repo = ref.read(eventsRepositoryProvider);
       final event = await repo.createEvent(
-        circleId,
+        cliqueId,
         _nameController.text.trim(),
         _descriptionController.text.trim().isNotEmpty ? _descriptionController.text.trim() : null,
         _retentionHours,
@@ -77,8 +77,8 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       if (mounted) {
         context.push(
           '/events/${event.id}',
-          extra: _creatingNewCircle
-              ? {'circleId': circleId, 'circleName': _newCircleNameController.text.trim()}
+          extra: _creatingNewClique
+              ? {'cliqueId': cliqueId, 'cliqueName': _newCliqueNameController.text.trim()}
               : null,
         );
       }
@@ -93,7 +93,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final circlesAsync = ref.watch(circlesListProvider);
+    final cliquesAsync = ref.watch(cliquesListProvider);
 
     return Scaffold(
       backgroundColor: const Color(0xFF0E1525),
@@ -152,15 +152,15 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
             ),
             const SizedBox(height: 24),
 
-            // Circle picker
-            _SectionLabel(text: 'Circle'),
+            // Clique picker
+            _SectionLabel(text: 'Clique'),
             const SizedBox(height: 4),
             Text(
               'Choose which friend group to share with',
               style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.4)),
             ),
             const SizedBox(height: 12),
-            circlesAsync.when(
+            cliquesAsync.when(
               loading: () => const Center(
                 child: Padding(
                   padding: EdgeInsets.all(16),
@@ -168,18 +168,18 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                 ),
               ),
               error: (err, _) => Text(err.toString(), style: const TextStyle(color: AppColors.error)),
-              data: (circles) => _CirclePicker(
-                circles: circles,
-                selectedCircleId: _selectedCircleId,
-                creatingNew: _creatingNewCircle,
-                newCircleController: _newCircleNameController,
-                onSelectCircle: (id) => setState(() {
-                  _selectedCircleId = id;
-                  _creatingNewCircle = false;
+              data: (cliques) => _CliquePicker(
+                cliques: cliques,
+                selectedCliqueId: _selectedCliqueId,
+                creatingNew: _creatingNewClique,
+                newCliqueController: _newCliqueNameController,
+                onSelectClique: (id) => setState(() {
+                  _selectedCliqueId = id;
+                  _creatingNewClique = false;
                 }),
                 onCreateNew: () => setState(() {
-                  _selectedCircleId = null;
-                  _creatingNewCircle = true;
+                  _selectedCliqueId = null;
+                  _creatingNewClique = true;
                 }),
               ),
             ),
@@ -337,20 +337,20 @@ class _DarkDurationPicker extends StatelessWidget {
   }
 }
 
-class _CirclePicker extends StatelessWidget {
-  final List<CircleModel> circles;
-  final String? selectedCircleId;
+class _CliquePicker extends StatelessWidget {
+  final List<CliqueModel> cliques;
+  final String? selectedCliqueId;
   final bool creatingNew;
-  final TextEditingController newCircleController;
-  final ValueChanged<String> onSelectCircle;
+  final TextEditingController newCliqueController;
+  final ValueChanged<String> onSelectClique;
   final VoidCallback onCreateNew;
 
-  const _CirclePicker({
-    required this.circles,
-    required this.selectedCircleId,
+  const _CliquePicker({
+    required this.cliques,
+    required this.selectedCliqueId,
     required this.creatingNew,
-    required this.newCircleController,
-    required this.onSelectCircle,
+    required this.newCliqueController,
+    required this.onSelectClique,
     required this.onCreateNew,
   });
 
@@ -358,13 +358,13 @@ class _CirclePicker extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        // Existing circles
-        ...circles.map((circle) {
-          final isSelected = circle.id == selectedCircleId && !creatingNew;
+        // Existing cliques
+        ...cliques.map((clique) {
+          final isSelected = clique.id == selectedCliqueId && !creatingNew;
           return Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: GestureDetector(
-              onTap: () => onSelectCircle(circle.id),
+              onTap: () => onSelectClique(clique.id),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 decoration: BoxDecoration(
@@ -385,7 +385,7 @@ class _CirclePicker extends StatelessWidget {
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        circle.name,
+                        clique.name,
                         style: TextStyle(
                           color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.7),
                           fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
@@ -394,7 +394,7 @@ class _CirclePicker extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      '${circle.memberCount} member${circle.memberCount != 1 ? 's' : ''}',
+                      '${clique.memberCount} member${clique.memberCount != 1 ? 's' : ''}',
                       style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.35)),
                     ),
                   ],
@@ -404,7 +404,7 @@ class _CirclePicker extends StatelessWidget {
           );
         }),
 
-        // Create new circle option
+        // Create new clique option
         GestureDetector(
           onTap: onCreateNew,
           child: Container(
@@ -426,7 +426,7 @@ class _CirclePicker extends StatelessWidget {
                 ),
                 const SizedBox(width: 12),
                 Text(
-                  'Create New Circle',
+                  'Create New Clique',
                   style: TextStyle(
                     color: creatingNew ? Colors.white : Colors.white.withValues(alpha: 0.6),
                     fontWeight: creatingNew ? FontWeight.w600 : FontWeight.w400,
@@ -438,12 +438,12 @@ class _CirclePicker extends StatelessWidget {
           ),
         ),
 
-        // New circle name field
+        // New clique name field
         if (creatingNew) ...[
           const SizedBox(height: 12),
           _DarkTextField(
-            controller: newCircleController,
-            hintText: 'Circle name, e.g., College Friends',
+            controller: newCliqueController,
+            hintText: 'Clique name, e.g., College Friends',
             maxLength: 100,
             autofocus: true,
           ),

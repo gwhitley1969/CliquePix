@@ -4,16 +4,16 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_gradients.dart';
 import '../../../widgets/gradient_button.dart';
-import 'circles_providers.dart';
+import 'cliques_providers.dart';
 
-class CreateCircleScreen extends ConsumerStatefulWidget {
-  const CreateCircleScreen({super.key});
+class CreateCliqueScreen extends ConsumerStatefulWidget {
+  const CreateCliqueScreen({super.key});
 
   @override
-  ConsumerState<CreateCircleScreen> createState() => _CreateCircleScreenState();
+  ConsumerState<CreateCliqueScreen> createState() => _CreateCliqueScreenState();
 }
 
-class _CreateCircleScreenState extends ConsumerState<CreateCircleScreen> {
+class _CreateCliqueScreenState extends ConsumerState<CreateCliqueScreen> {
   final _nameController = TextEditingController();
   bool _isLoading = false;
 
@@ -29,14 +29,14 @@ class _CreateCircleScreenState extends ConsumerState<CreateCircleScreen> {
     super.dispose();
   }
 
-  Future<void> _createCircle() async {
+  Future<void> _createClique() async {
     final name = _nameController.text.trim();
     if (name.isEmpty) return;
 
     setState(() => _isLoading = true);
     try {
-      final circle = await ref.read(circlesListProvider.notifier).createCircle(name);
-      if (mounted) context.go('/circles/${circle.id}');
+      final clique = await ref.read(cliquesListProvider.notifier).createClique(name);
+      if (mounted) context.go('/cliques/${clique.id}');
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -56,7 +56,7 @@ class _CreateCircleScreenState extends ConsumerState<CreateCircleScreen> {
         backgroundColor: const Color(0xFF0E1525),
         foregroundColor: Colors.white,
         title: const Text(
-          'Create Circle',
+          'Create Clique',
           style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
         ),
         centerTitle: true,
@@ -69,7 +69,7 @@ class _CreateCircleScreenState extends ConsumerState<CreateCircleScreen> {
             const SizedBox(height: 16),
             // Section label
             Text(
-              'Circle Name',
+              'Clique Name',
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
@@ -113,9 +113,9 @@ class _CreateCircleScreenState extends ConsumerState<CreateCircleScreen> {
             ),
             const Spacer(),
             GradientButton(
-              text: 'Create Circle',
+              text: 'Create Clique',
               isLoading: _isLoading,
-              onPressed: _nameController.text.trim().isNotEmpty ? _createCircle : null,
+              onPressed: _nameController.text.trim().isNotEmpty ? _createClique : null,
             ),
             const SizedBox(height: 32),
           ],

@@ -13,13 +13,13 @@ import 'events_providers.dart';
 
 class EventDetailScreen extends ConsumerWidget {
   final String eventId;
-  final String? promptInviteCircleId;
-  final String? promptInviteCircleName;
+  final String? promptInviteCliqueId;
+  final String? promptInviteCliqueName;
   const EventDetailScreen({
     super.key,
     required this.eventId,
-    this.promptInviteCircleId,
-    this.promptInviteCircleName,
+    this.promptInviteCliqueId,
+    this.promptInviteCliqueName,
   });
 
   @override
@@ -34,8 +34,8 @@ class EventDetailScreen extends ConsumerWidget {
         data: (event) => _EventDetailBody(
           event: event,
           eventId: eventId,
-          promptInviteCircleId: promptInviteCircleId,
-          promptInviteCircleName: promptInviteCircleName,
+          promptInviteCliqueId: promptInviteCliqueId,
+          promptInviteCliqueName: promptInviteCliqueName,
         ),
       ),
     );
@@ -45,13 +45,13 @@ class EventDetailScreen extends ConsumerWidget {
 class _EventDetailBody extends ConsumerStatefulWidget {
   final EventModel event;
   final String eventId;
-  final String? promptInviteCircleId;
-  final String? promptInviteCircleName;
+  final String? promptInviteCliqueId;
+  final String? promptInviteCliqueName;
   const _EventDetailBody({
     required this.event,
     required this.eventId,
-    this.promptInviteCircleId,
-    this.promptInviteCircleName,
+    this.promptInviteCliqueId,
+    this.promptInviteCliqueName,
   });
 
   @override
@@ -65,7 +65,7 @@ class _EventDetailBodyState extends ConsumerState<_EventDetailBody> {
   @override
   void initState() {
     super.initState();
-    if (widget.promptInviteCircleId != null) {
+    if (widget.promptInviteCliqueId != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _showInvitePrompt();
       });
@@ -73,18 +73,18 @@ class _EventDetailBodyState extends ConsumerState<_EventDetailBody> {
   }
 
   void _showInvitePrompt() {
-    final circleId = widget.promptInviteCircleId!;
-    final circleName = widget.promptInviteCircleName ?? 'your circle';
+    final cliqueId = widget.promptInviteCliqueId!;
+    final cliqueName = widget.promptInviteCliqueName ?? 'your clique';
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       isDismissible: true,
       enableDrag: true,
       builder: (sheetContext) => _InvitePromptSheet(
-        circleName: circleName,
+        cliqueName: cliqueName,
         onInvite: () {
           Navigator.pop(sheetContext);
-          context.push('/invite-to-circle/$circleId');
+          context.push('/invite-to-clique/$cliqueId');
         },
         onSkip: () => Navigator.pop(sheetContext),
       ),
@@ -136,7 +136,7 @@ class _EventDetailBodyState extends ConsumerState<_EventDetailBody> {
       try {
         await ref.read(eventsRepositoryProvider).deleteEvent(eventId);
         ref.invalidate(allEventsListProvider);
-        ref.invalidate(eventsListProvider(event.circleId));
+        ref.invalidate(eventsListProvider(event.cliqueId));
         if (mounted) {
           context.go('/events');
           ScaffoldMessenger.of(context).showSnackBar(
@@ -191,8 +191,8 @@ class _EventDetailBodyState extends ConsumerState<_EventDetailBody> {
           actions: [
             IconButton(
               icon: const Icon(Icons.group_rounded),
-              tooltip: 'View Circle',
-              onPressed: () => context.push('/view-circle/${event.circleId}'),
+              tooltip: 'View Clique',
+              onPressed: () => context.push('/view-clique/${event.cliqueId}'),
             ),
             if (event.isActive)
               IconButton(
@@ -265,17 +265,17 @@ class _EventDetailBodyState extends ConsumerState<_EventDetailBody> {
                   ),
                 const SizedBox(height: 4),
 
-                // Circle name
-                if (event.circleName != null)
+                // Clique name
+                if (event.cliqueName != null)
                   GestureDetector(
-                    onTap: () => context.push('/view-circle/${event.circleId}'),
+                    onTap: () => context.push('/view-clique/${event.cliqueId}'),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(Icons.group_rounded, size: 14, color: colors[0].withValues(alpha: 0.7)),
                         const SizedBox(width: 5),
                         Text(
-                          event.circleName!,
+                          event.cliqueName!,
                           style: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.7)),
                         ),
                         const SizedBox(width: 4),
@@ -390,12 +390,12 @@ class _EventDetailBodyState extends ConsumerState<_EventDetailBody> {
 }
 
 class _InvitePromptSheet extends StatelessWidget {
-  final String circleName;
+  final String cliqueName;
   final VoidCallback onInvite;
   final VoidCallback onSkip;
 
   const _InvitePromptSheet({
-    required this.circleName,
+    required this.cliqueName,
     required this.onInvite,
     required this.onSkip,
   });
@@ -432,11 +432,11 @@ class _InvitePromptSheet extends StatelessWidget {
             child: const Icon(Icons.group_add_rounded, color: Colors.white, size: 32),
           ),
           const SizedBox(height: 20),
-          // Circle name
+          // Clique name
           ShaderMask(
             shaderCallback: (bounds) => AppGradients.primary.createShader(bounds),
             child: Text(
-              circleName,
+              cliqueName,
               style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Colors.white),
               textAlign: TextAlign.center,
             ),
@@ -444,7 +444,7 @@ class _InvitePromptSheet extends StatelessWidget {
           const SizedBox(height: 8),
           // Message
           Text(
-            'Your circle is ready! Invite friends so they can join your events and share photos together.',
+            'Your clique is ready! Invite friends so they can join your events and share photos together.',
             style: TextStyle(fontSize: 15, color: Colors.white.withValues(alpha: 0.6), height: 1.4),
             textAlign: TextAlign.center,
           ),

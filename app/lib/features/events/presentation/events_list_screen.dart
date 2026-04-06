@@ -8,12 +8,12 @@ import '../../../widgets/error_widget.dart';
 import 'events_providers.dart';
 
 class EventsListScreen extends ConsumerWidget {
-  final String circleId;
-  const EventsListScreen({super.key, required this.circleId});
+  final String cliqueId;
+  const EventsListScreen({super.key, required this.cliqueId});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final eventsAsync = ref.watch(eventsListProvider(circleId));
+    final eventsAsync = ref.watch(eventsListProvider(cliqueId));
 
     return Scaffold(
       backgroundColor: const Color(0xFF0E1525),
@@ -32,7 +32,7 @@ class EventsListScreen extends ConsumerWidget {
         ),
         error: (err, _) => AppErrorWidget(
           message: err.toString(),
-          onRetry: () => ref.invalidate(eventsListProvider(circleId)),
+          onRetry: () => ref.invalidate(eventsListProvider(cliqueId)),
         ),
         data: (events) {
           if (events.isEmpty) {
@@ -71,7 +71,7 @@ class EventsListScreen extends ConsumerWidget {
           return RefreshIndicator(
             color: AppColors.electricAqua,
             backgroundColor: const Color(0xFF1A2035),
-            onRefresh: () async => ref.invalidate(eventsListProvider(circleId)),
+            onRefresh: () async => ref.invalidate(eventsListProvider(cliqueId)),
             child: ListView.builder(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
               itemCount: events.length,
@@ -93,7 +93,7 @@ class EventsListScreen extends ConsumerWidget {
           ],
         ),
         child: FloatingActionButton.extended(
-          onPressed: () => context.go('/events/create?circleId=$circleId'),
+          onPressed: () => context.go('/events/create?cliqueId=$cliqueId'),
           backgroundColor: Colors.transparent,
           elevation: 0,
           icon: const Icon(Icons.add_rounded, color: Colors.white, size: 22),

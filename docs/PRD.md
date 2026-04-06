@@ -15,13 +15,13 @@ Clique Pix is NOT a social network. It is a **private, real-time group photo sha
 ## 2. Goals (v1.0)
 
 ### Primary Goals
-- Enable instant sharing of photos within a defined group (Circle/Event)
+- Enable instant sharing of photos within a defined group (Clique/Event)
 - Reduce friction compared to texting or AirDrop
 - Provide a clean, beautiful, and fast experience
 - Ensure privacy and control
 
 ### Secondary Goals
-- Drive repeat usage through recurring groups (Circles)
+- Drive repeat usage through recurring groups (Cliques)
 - Create a strong brand identity (modern, vibrant, non-corporate)
 
 ---
@@ -43,9 +43,9 @@ Secondary:
 A temporary shared photo session — the primary action in Clique Pix
 - Example: “Friday Night – Downtown”
 - Duration: 24 hours, 3 days, or 7 days (default)
-- Created first, then assigned to a Circle
+- Created first, then assigned to a Clique
 
-### 4.2 Circle
+### 4.2 Clique
 A persistent group of people (e.g., “Girls Night Out” or bachelor party)
 - Reusable across multiple Events
 - Created during Event creation or independently
@@ -68,25 +68,25 @@ A persistent group of people (e.g., “Girls Night Out” or bachelor party)
   - Event name
   - Optional description
   - Duration (24h / 3 days / 7 days — three presets only, default 7 days)
-  - Circle picker (select existing Circle or create new one inline)
+  - Clique picker (select existing Clique or create new one inline)
 - Create Event button
 - Event organizer (creator) can manually delete an event at any time
   - Confirmation dialog warns that deletion is permanent
   - All photos are removed from cloud storage
-  - Circle members are notified via push notification
+  - Clique members are notified via push notification
 
 ---
 
-### 5.3 Circle Management
+### 5.3 Clique Management
 
-- Create Circle
+- Create Clique
 - Invite users via:
   - Link
   - SMS
   - QR code
 - View members
-- Leave Circle
-- Originator of circle can "remove" members as well
+- Leave Clique
+- Originator of clique can "remove" members as well
 
 ------
 
@@ -164,7 +164,7 @@ A persistent group of people (e.g., “Girls Night Out” or bachelor party)
 - Real-time delivery via Azure Web PubSub (instant when both users are online)
 - FCM push notifications for background/terminated app
 - Accessible via "Messages" button on event detail screen
-- Member picker to start new DMs with event circle members
+- Member picker to start new DMs with event clique members
 - Rate limited: max 10 messages per minute per sender per thread
 - Not a global messaging inbox — DMs exist only within events
 - No attachments, no group chat, no typing indicators, no read receipts UI
@@ -175,7 +175,7 @@ A persistent group of people (e.g., “Girls Night Out” or bachelor party)
 - Push notifications via FCM (Firebase Cloud Messaging)
 - Notification types:
   - New photo added to event ("New Photo!")
-  - Someone joins a circle ("New Member!")
+  - Someone joins a clique ("New Member!")
   - Event expiring in 24 hours
   - Event expired
   - Event deleted by organizer
@@ -193,7 +193,7 @@ A persistent group of people (e.g., “Girls Night Out” or bachelor party)
   - Leave event
   - Remove own photos
   - Mute notifications
-  - **Delete account** — permanently removes user account, photos, and circle memberships. Shared circles/events are preserved for other members (creator set to null). Required by Apple App Store Review Guideline 5.1.1(v).
+  - **Delete account** — permanently removes user account, photos, and clique memberships. Shared cliques/events are preserved for other members (creator set to null). Required by Apple App Store Review Guideline 5.1.1(v).
 
 ---
 
@@ -254,7 +254,7 @@ A persistent group of people (e.g., “Girls Night Out” or bachelor party)
 - Warning: #F59E0B
 
 #### Design Note
-The app uses a dark theme throughout, consistent from the login screen through all main screens (Circles, Notifications, Profile). Gradient accents from the primary colors provide vibrant contrast against the dark surfaces.
+The app uses a dark theme throughout, consistent from the login screen through all main screens (Cliques, Notifications, Profile). Gradient accents from the primary colors provide vibrant contrast against the dark surfaces.
 
 ---
 
@@ -319,7 +319,7 @@ Why Flutter for Clique Pix:
 ## 10. Key User Flow
 
 1. User opens app → lands on Events tab (home)
-2. Creates Event (name, duration, pick or create Circle)
+2. Creates Event (name, duration, pick or create Clique)
 3. Takes or uploads photo
 4. Shares to Event
 5. Group receives notification

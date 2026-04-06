@@ -22,7 +22,7 @@ async function addReaction(req: HttpRequest, context: InvocationContext): Promis
     const photo = await queryOne<any>(
       `SELECT p.id, p.event_id FROM photos p
        JOIN events e ON e.id = p.event_id
-       JOIN circle_members cm ON cm.circle_id = e.circle_id AND cm.user_id = $2
+       JOIN clique_members cm ON cm.clique_id = e.clique_id AND cm.user_id = $2
        WHERE p.id = $1 AND p.status = 'active'`,
       [photoId, authUser.id],
     );

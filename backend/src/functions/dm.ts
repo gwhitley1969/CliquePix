@@ -47,21 +47,21 @@ async function createOrGetDmThread(req: HttpRequest, context: InvocationContext)
     }
 
     // Verify event exists and is active
-    const event = await queryOne<{ id: string; circle_id: string; status: string }>(
-      'SELECT id, circle_id, status FROM events WHERE id = $1',
+    const event = await queryOne<{ id: string; clique_id: string; status: string }>(
+      'SELECT id, clique_id, status FROM events WHERE id = $1',
       [eventId],
     );
     if (!event) throw new NotFoundError('event');
     if (event.status !== 'active') throw new ValidationError('Cannot create DM threads for expired events.');
 
-    // Verify both users are circle members
+    // Verify both users are clique members
     const memberCount = await queryOne<{ count: number }>(
-      `SELECT COUNT(*)::int AS count FROM circle_members
-       WHERE circle_id = $1 AND user_id IN ($2, $3)`,
-      [event.circle_id, authUser.id, targetUserId],
+      `SELECT COUNT(*)::int AS count FROM clique_members
+       WHERE clique_id = $1 AND user_id IN ($2, $3)`,
+      [event.clique_id, authUser.id, targetUserId],
     );
     if (!memberCount || memberCount.count < 2) {
-      throw new ForbiddenError('Both users must be members of the event\'s circle.');
+      throw new ForbiddenError('Both users must be members of the event\'s clique.');
     }
 
     const { userA, userB } = normalizeUserPair(authUser.id, targetUserId);

@@ -18,7 +18,7 @@ This is not a "someday" architecture. This is what we build and deploy.
 # 1. Architecture Principles
 
 1. **Build for production from day one** — Front Door, APIM, managed identity, RBAC. No shortcuts to retrofit later.
-2. **Optimize for the core product loop** — every architectural decision serves the Circle → Event → Photo → Feed → Expire flow.
+2. **Optimize for the core product loop** — every architectural decision serves the Clique → Event → Photo → Feed → Expire flow.
 3. **Use managed Azure services** — minimize operational overhead, maximize reliability.
 4. **Separate concerns cleanly** — UI, state, API client, and backend are distinct layers.
 5. **No storage account keys anywhere** — RBAC and managed identity for all Azure resource access.
@@ -31,7 +31,7 @@ This is not a "someday" architecture. This is what we build and deploy.
 Everything in the architecture must support this loop:
 
 1. User signs in
-2. User creates an Event (picks or creates a Circle during creation)
+2. User creates an Event (picks or creates a Clique during creation)
 3. User takes or uploads a photo
 5. Photo is compressed on-device and uploaded directly to Blob Storage
 6. Other event members are notified via push
@@ -77,7 +77,7 @@ Why Flutter for Clique Pix:
 | Entry point | **Azure Front Door** (Standard) | Global load balancing, SSL termination |
 | API gateway | **Azure API Management** | Rate limiting, API versioning, policy enforcement, single published API surface |
 | Compute | **Azure Functions** (TypeScript, Node.js) | REST API endpoints, timer-triggered cleanup, thumbnail generation |
-| Database | **PostgreSQL Flexible Server** | Relational data (users, circles, events, photos, reactions) |
+| Database | **PostgreSQL Flexible Server** | Relational data (users, cliques, events, photos, reactions) |
 | Object storage | **Azure Blob Storage** | Photo originals and thumbnails |
 | Identity (consumer) | **Microsoft Entra External ID** | User authentication (Google, Apple, email OTP) |
 | Identity (infra) | **System-assigned managed identity** | Function App access to Blob Storage, Key Vault |
@@ -223,27 +223,27 @@ GET    /api/users/me
 DELETE /api/users/me
 ```
 
-### Circles
+### Cliques
 ```
-POST   /api/circles
-GET    /api/circles
-GET    /api/circles/{circleId}
-POST   /api/circles/{circleId}/invite
-POST   /api/circles/{circleId}/join
-GET    /api/circles/{circleId}/members
-DELETE /api/circles/{circleId}/members/me
-DELETE /api/circles/{circleId}/members/{userId}
+POST   /api/cliques
+GET    /api/cliques
+GET    /api/cliques/{cliqueId}
+POST   /api/cliques/{cliqueId}/invite
+POST   /api/cliques/{cliqueId}/join
+GET    /api/cliques/{cliqueId}/members
+DELETE /api/cliques/{cliqueId}/members/me
+DELETE /api/cliques/{cliqueId}/members/{userId}
 ```
 
 **Member management:**
-- `DELETE .../members/me` — member leaves circle (or sole owner deletes circle)
+- `DELETE .../members/me` — member leaves clique (or sole owner deletes clique)
 - `DELETE .../members/{userId}` — owner removes a specific member (owner-only, returns 403 for non-owners)
 - Azure Functions route matching: literal `me` segment takes priority over parameterized `{userId}`, so no route conflict
 
 ### Events
 ```
-POST   /api/circles/{circleId}/events
-GET    /api/circles/{circleId}/events
+POST   /api/cliques/{cliqueId}/events
+GET    /api/cliques/{cliqueId}/events
 GET    /api/events/{eventId}
 DELETE /api/events/{eventId}
 ```
@@ -251,7 +251,7 @@ DELETE /api/events/{eventId}
 **Event deletion:**
 - `DELETE /api/events/{eventId}` — only the event creator (organizer) can delete
 - Deletes all photo blobs from Azure Storage before cascading the database delete (photos + reactions)
-- Sends push notification and in-app notification to circle members
+- Sends push notification and in-app notification to clique members
 - Hard delete — permanent, not recoverable
 
 ### Photos
@@ -311,8 +311,8 @@ Error:
 {
   "data": null,
   "error": {
-    "code": "CIRCLE_NOT_FOUND",
-    "message": "The requested circle does not exist."
+    "code": "CLIQUE_NOT_FOUND",
+    "message": "The requested clique does not exist."
   }
 }
 ```
@@ -325,7 +325,7 @@ Use consistent error codes. Never return raw exception messages or stack traces 
 
 ## PostgreSQL Flexible Server
 
-Relational model fits the circles/events/memberships domain cleanly. Predictable structure, strong querying for feeds and membership checks.
+Relational model fits the cliques/events/memberships domain cleanly. Predictable structure, strong querying for feeds and membership checks.
 
 ## Core Tables
 
@@ -340,7 +340,7 @@ Relational model fits the circles/events/memberships domain cleanly. Predictable
 | created_at | TIMESTAMPTZ | |
 | updated_at | TIMESTAMPTZ | |
 
-### circles
+### cliques
 | Column | Type | Notes |
 |--------|------|-------|
 | id | UUID | Primary key |
@@ -350,22 +350,22 @@ Relational model fits the circles/events/memberships domain cleanly. Predictable
 | created_at | TIMESTAMPTZ | |
 | updated_at | TIMESTAMPTZ | |
 
-### circle_members
+### clique_members
 | Column | Type | Notes |
 |--------|------|-------|
 | id | UUID | Primary key |
-| circle_id | UUID | FK → circles |
+| clique_id | UUID | FK → cliques |
 | user_id | UUID | FK → users |
 | role | VARCHAR | owner / member |
 | joined_at | TIMESTAMPTZ | |
 
-Unique constraint on (circle_id, user_id).
+Unique constraint on (clique_id, user_id).
 
 ### events
 | Column | Type | Notes |
 |--------|------|-------|
 | id | UUID | Primary key |
-| circle_id | UUID | FK → circles |
+| clique_id | UUID | FK → cliques |
 | name | VARCHAR | |
 | description | VARCHAR | Nullable |
 | created_by_user_id | UUID | Nullable, FK → users (ON DELETE SET NULL) |
@@ -380,7 +380,7 @@ Unique constraint on (circle_id, user_id).
 | id | UUID | Primary key, generated server-side at upload-url step |
 | event_id | UUID | FK → events |
 | uploaded_by_user_id | UUID | Nullable, FK → users (ON DELETE SET NULL) |
-| blob_path | VARCHAR | e.g., photos/{circleId}/{eventId}/{photoId}/original.jpg |
+| blob_path | VARCHAR | e.g., photos/{cliqueId}/{eventId}/{photoId}/original.jpg |
 | thumbnail_blob_path | VARCHAR | Nullable until thumbnail generated |
 | original_filename | VARCHAR | |
 | mime_type | VARCHAR | JPEG or PNG |
@@ -464,8 +464,8 @@ Name: `photos`
 ### Path Convention
 
 ```
-photos/{circleId}/{eventId}/{photoId}/original.jpg
-photos/{circleId}/{eventId}/{photoId}/thumb.jpg
+photos/{cliqueId}/{eventId}/{photoId}/original.jpg
+photos/{cliqueId}/{eventId}/{photoId}/thumb.jpg
 ```
 
 ### Access Model — RBAC + User Delegation SAS
@@ -538,7 +538,7 @@ Calling `Navigator.pop()` in both callbacks causes a double-pop that removes bot
 ## Upload Flow
 
 1. Client calls `POST /api/events/{eventId}/photos/upload-url`
-2. Function validates Entra token and confirms user is a member of the event's circle
+2. Function validates Entra token and confirms user is a member of the event's clique
 3. Function generates a photo ID and blob path, creates a photo record with status `pending`
 4. Function uses managed identity to request a User Delegation Key, generates a write-only User Delegation SAS scoped to the exact blob path, 5-minute expiry
 5. Function returns the SAS upload URL and photo ID
@@ -565,7 +565,7 @@ The Function never touches photo bytes during the upload flow. Post-confirmation
 - Triggered by blob upload event or queue message
 - Function reads original blob via managed identity
 - Generates thumbnail: 400px longest edge, JPEG quality 70
-- Writes thumbnail to `photos/{circleId}/{eventId}/{photoId}/thumb.jpg` via managed identity
+- Writes thumbnail to `photos/{cliqueId}/{eventId}/{photoId}/thumb.jpg` via managed identity
 - Updates `thumbnail_blob_path` in photo record
 - Target thumbnail size: ~30–80KB
 
@@ -586,7 +586,7 @@ If thumbnail generation fails, the feed falls back to loading the original (slow
 
 Users must be notified when:
 - a new photo is added to an active event
-- someone joins one of their circles
+- someone joins one of their cliques
 - an event is nearing expiration (24 hours before)
 
 ## Delivery
@@ -597,18 +597,18 @@ FCM (Firebase Cloud Messaging) for push delivery to both Android and iOS. FCM is
 
 | Type | Trigger | Recipients | Payload |
 |------|---------|------------|---------|
-| `new_photo` | Photo uploaded to event | Event circle members (excl. uploader) | `{ event_id, photo_id }` |
-| `member_joined` | User joins circle via invite | Existing circle members (excl. joiner) | `{ circle_id, circle_name, joined_user_name }` |
-| `event_expiring` | Timer (24h before expiry) | Event circle members | `{ event_id }` |
-| `event_expired` | Timer (after expiry) | Event circle members | `{ event_id }` |
-| `event_deleted` | Event organizer deletes event | Circle members (excl. deleter) | `{ event_id, event_name }` |
+| `new_photo` | Photo uploaded to event | Event clique members (excl. uploader) | `{ event_id, photo_id }` |
+| `member_joined` | User joins clique via invite | Existing clique members (excl. joiner) | `{ clique_id, clique_name, joined_user_name }` |
+| `event_expiring` | Timer (24h before expiry) | Event clique members | `{ event_id }` |
+| `event_expired` | Timer (after expiry) | Event clique members | `{ event_id }` |
+| `event_deleted` | Event organizer deletes event | Clique members (excl. deleter) | `{ event_id, event_name }` |
 
 **No notifications sent** for member removals or voluntary departures — the member simply disappears from the list.
 
 ### Push Notification Pipeline
 
 **Backend (Azure Functions):**
-1. Backend action (photo upload, circle join, timer) queries relevant members' push tokens from `push_tokens` table
+1. Backend action (photo upload, clique join, timer) queries relevant members' push tokens from `push_tokens` table
 2. Function sends push via FCM HTTP v1 API (`sendToMultipleTokens()`) with `notification` + `data` payloads
 3. Function creates notification records in `notifications` table for in-app display
 4. Failed token sends trigger stale token cleanup (`DELETE FROM push_tokens WHERE token = ANY($1)`)
@@ -618,7 +618,7 @@ FCM (Firebase Cloud Messaging) for push delivery to both Android and iOS. FCM is
 | App State | Handler | Display Mechanism |
 |-----------|---------|-------------------|
 | **Foreground** | `FirebaseMessaging.onMessage` in `main.dart` | `flutter_local_notifications.show()` — manually displays heads-up banner |
-| **Background** | Android auto-displays from FCM `notification` payload | `FirebaseMessaging.onMessageOpenedApp` handles tap → navigates to circle/event |
+| **Background** | Android auto-displays from FCM `notification` payload | `FirebaseMessaging.onMessageOpenedApp` handles tap → navigates to clique/event |
 | **Terminated** | Android auto-displays from FCM `notification` payload | `FirebaseMessaging.getInitialMessage()` handles cold-start tap → navigates |
 
 **Key design:** The `onMessage` listener is set up in `main.dart` immediately after `flutter_local_notifications` plugin initialization — not in a separate service class. This ensures the plugin is always ready when `show()` is called.
@@ -652,7 +652,7 @@ Referenced in AndroidManifest as `com.google.firebase.messaging.default_notifica
 
 All notification taps (foreground local notification, background FCM, terminated cold-start) navigate via GoRouter:
 - `data.event_id` → `router.push('/events/$eventId')`
-- `data.circle_id` → `router.push('/circles/$circleId')`
+- `data.clique_id` → `router.push('/cliques/$cliqueId')`
 
 Foreground taps use a static callback pattern: `main.dart`'s `onDidReceiveNotificationResponse` → `PushNotificationService.onNotificationTap` → GoRouter navigation.
 
@@ -706,10 +706,10 @@ Separate scheduled check for orphaned uploads:
 
 Do not overbuild live infrastructure. The following is sufficient to feel responsive:
 
-- Push notification on new photo / circle join → user taps to open relevant screen
+- Push notification on new photo / clique join → user taps to open relevant screen
 - Refresh on app resume via `WidgetsBindingObserver` (`didChangeAppLifecycleState`)
 - Pull-to-refresh via `RefreshIndicator` on list and detail screens
-- 30-second polling via `Timer.periodic` while circle list/detail screens are active
+- 30-second polling via `Timer.periodic` while clique list/detail screens are active
 
 This three-layer approach (push + app-resume + polling) covers all cases: push for immediate alerting, app-resume for returning users, polling for actively-open screens. Most photo sharing happens in bursts (everyone at the same event, actively using the app).
 
@@ -723,7 +723,7 @@ If true real-time becomes a strong requirement post-v1, consider Azure Web PubSu
 
 ## Purpose
 
-Circle invites are core to the product loop. When a user taps an invite link (via SMS, social share, or QR code), the app must open directly to the invite acceptance screen.
+Clique invites are core to the product loop. When a user taps an invite link (via SMS, social share, or QR code), the app must open directly to the invite acceptance screen.
 
 ## Link Format
 
@@ -771,7 +771,7 @@ Unauthenticated users hitting `/invite/{code}` are redirected to `/login?redirec
 
 ## Flow
 
-1. **App installed + verified:** OS intercepts URL → app opens → `DeepLinkService` routes to `JoinCircleScreen` → auto-joins circle
+1. **App installed + verified:** OS intercepts URL → app opens → `DeepLinkService` routes to `JoinCliqueScreen` → auto-joins clique
 2. **App installed, not verified:** Browser loads `invite.html` → "Open in Clique Pix" button uses `intent://` (Android) → app opens
 3. **App not installed:** Browser loads `invite.html` → shows branded page with app store download buttons and invite code for manual entry
 
@@ -804,7 +804,7 @@ Store in Key Vault:
 
 Every API endpoint must enforce:
 - user is authenticated (valid Entra token verified by the Function)
-- user belongs to the circle/event they are accessing (membership check)
+- user belongs to the clique/event they are accessing (membership check)
 - user can only delete their own photos
 
 ## Blob Storage Security
@@ -852,7 +852,7 @@ Feature-based organization with clean separation of data, domain, and presentati
       /data
       /domain
       /presentation
-    /circles              # Circle CRUD, invites, membership
+    /cliques              # Clique CRUD, invites, membership
       /data
       /domain
       /presentation
@@ -883,16 +883,16 @@ Feature-based organization with clean separation of data, domain, and presentati
 
 ## Routing Architecture
 
-**GoRouter** with `StatefulShellRoute.indexedStack` for bottom tab navigation (Home, Circles, Notifications, Profile). Each tab is a `StatefulShellBranch` with its own navigation stack.
+**GoRouter** with `StatefulShellRoute.indexedStack` for bottom tab navigation (Home, Cliques, Notifications, Profile). Each tab is a `StatefulShellBranch` with its own navigation stack.
 
-**Cross-shell navigation rule:** Screens outside the shell (e.g., Event Detail at `/events/:eventId`) must NOT push to routes inside a shell branch (e.g., `/circles/:circleId`). Doing so causes broken back-navigation — the user gets stranded in the wrong tab instead of returning to the originating screen.
+**Cross-shell navigation rule:** Screens outside the shell (e.g., Event Detail at `/events/:eventId`) must NOT push to routes inside a shell branch (e.g., `/cliques/:cliqueId`). Doing so causes broken back-navigation — the user gets stranded in the wrong tab instead of returning to the originating screen.
 
 **Solution:** Top-level routes that reuse the same widgets but live outside the shell:
-- `/view-circle/:circleId` → `CircleDetailScreen` (for Event Detail → Circle)
-- `/invite-to-circle/:circleId` → `InviteScreen` (for post-creation invite flow)
-- Shell-internal routes (`/circles/:circleId`, `/circles/:circleId/invite`) remain for tab-based navigation
+- `/view-clique/:cliqueId` → `CliqueDetailScreen` (for Event Detail → Clique)
+- `/invite-to-clique/:cliqueId` → `InviteScreen` (for post-creation invite flow)
+- Shell-internal routes (`/cliques/:cliqueId`, `/cliques/:cliqueId/invite`) remain for tab-based navigation
 
-**Post-creation invite prompt:** When creating an event with a NEW circle, `GoRouter.extra` passes `{circleId, circleName}` to Event Detail. On `initState`, a modal bottom sheet prompts the user to invite friends. `extra` is ephemeral (not in URL, not restorable from deep links) — the prompt fires once per creation.
+**Post-creation invite prompt:** When creating an event with a NEW clique, `GoRouter.extra` passes `{cliqueId, cliqueName}` to Event Detail. On `initState`, a modal bottom sheet prompts the user to invite friends. `extra` is ephemeral (not in URL, not restorable from deep links) — the prompt fires once per creation.
 
 ## Networking
 
@@ -982,7 +982,7 @@ Function App system-assigned managed identity requires:
 
 Track these custom telemetry events:
 
-- `circle_created`, `circle_joined`, `circle_left`
+- `clique_created`, `clique_joined`, `clique_left`
 - `event_created`, `event_expired`, `event_deleted`
 - `photo_upload_started`, `photo_upload_completed`, `photo_upload_failed`
 - `photo_saved_to_device`

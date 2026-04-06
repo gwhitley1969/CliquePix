@@ -7,17 +7,17 @@ import '../../../widgets/avatar_widget.dart';
 import '../../../widgets/error_widget.dart';
 import '../../auth/domain/auth_state.dart';
 import '../../auth/presentation/auth_providers.dart';
-import '../../circles/presentation/circles_providers.dart';
+import '../../cliques/presentation/cliques_providers.dart';
 import 'dm_providers.dart';
 
 class DmMemberPickerScreen extends ConsumerWidget {
   final String eventId;
-  final String circleId;
-  const DmMemberPickerScreen({super.key, required this.eventId, required this.circleId});
+  final String cliqueId;
+  const DmMemberPickerScreen({super.key, required this.eventId, required this.cliqueId});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final membersAsync = ref.watch(circleMembersProvider(circleId));
+    final membersAsync = ref.watch(cliqueMembersProvider(cliqueId));
     final authState = ref.watch(authStateProvider);
     final currentUserId = authState is AuthAuthenticated ? authState.user.id : null;
 
@@ -39,7 +39,7 @@ class DmMemberPickerScreen extends ConsumerWidget {
           if (otherMembers.isEmpty) {
             return Center(
               child: Text(
-                'No other members in this circle',
+                'No other members in this clique',
                 style: TextStyle(fontSize: 15, color: Colors.white.withValues(alpha: 0.5)),
               ),
             );

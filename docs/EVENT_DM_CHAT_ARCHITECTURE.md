@@ -45,7 +45,7 @@ A DM thread exists **inside the context of a specific event**.
 That means:
 
 - A thread is tied to a single `event_id`
-- Only users who are valid members of that event's circle can participate
+- Only users who are valid members of that event's clique can participate
 - The same two users may have a **different thread per event**
 - A thread does **not** become a permanent global DM relationship between two users
 
@@ -297,14 +297,14 @@ Every DM API and realtime token issuance path must enforce all of the following:
 
 1. user is authenticated
 2. user belongs to the thread they are accessing
-3. both participants are valid members of the event's circle while thread is active
+3. both participants are valid members of the event's clique while thread is active
 4. no new messages can be sent after thread becomes read-only
 
 ### Event membership rule
 
 A thread may be created only if:
 
-- both users are members of the circle that owns the event
+- both users are members of the clique that owns the event
 - the event is active
 
 ### Sender validation rule
@@ -314,7 +314,7 @@ A message send must fail if:
 - event is expired
 - thread is read-only / expired / deleted
 - sender is not one of the two participants
-- sender is no longer a valid member of the event's circle
+- sender is no longer a valid member of the event's clique
 
 ### Recipient validation rule
 
@@ -392,7 +392,7 @@ Request body:
 ```
 
 Behavior:
-- validate current user and target user are both circle members for the event
+- validate current user and target user are both clique members for the event
 - if thread already exists for this event + pair, return it
 - else create thread + 2 participant rows
 

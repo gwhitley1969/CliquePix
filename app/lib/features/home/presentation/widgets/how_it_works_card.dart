@@ -54,8 +54,8 @@ class HowItWorksCard extends StatelessWidget {
                   stepNumber: '2',
                   icon: Icons.group_rounded,
                   gradientColors: [AppColors.deepBlue, AppColors.violetAccent],
-                  title: 'Add Your Circle',
-                  subtitle: 'Invite friends to your circle',
+                  title: 'Add Your Clique',
+                  subtitle: 'Invite friends to your clique',
                 ),
                 const SizedBox(height: 16),
                 const _StepRow(

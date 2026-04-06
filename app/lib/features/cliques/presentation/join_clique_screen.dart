@@ -4,17 +4,17 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_gradients.dart';
 import '../../../widgets/gradient_button.dart';
-import 'circles_providers.dart';
+import 'cliques_providers.dart';
 
-class JoinCircleScreen extends ConsumerStatefulWidget {
+class JoinCliqueScreen extends ConsumerStatefulWidget {
   final String inviteCode;
-  const JoinCircleScreen({super.key, required this.inviteCode});
+  const JoinCliqueScreen({super.key, required this.inviteCode});
 
   @override
-  ConsumerState<JoinCircleScreen> createState() => _JoinCircleScreenState();
+  ConsumerState<JoinCliqueScreen> createState() => _JoinCliqueScreenState();
 }
 
-class _JoinCircleScreenState extends ConsumerState<JoinCircleScreen> {
+class _JoinCliqueScreenState extends ConsumerState<JoinCliqueScreen> {
   late final TextEditingController _codeController;
   bool _isLoading = false;
   String? _error;
@@ -24,7 +24,7 @@ class _JoinCircleScreenState extends ConsumerState<JoinCircleScreen> {
     super.initState();
     _codeController = TextEditingController(text: widget.inviteCode);
     if (widget.inviteCode.isNotEmpty) {
-      _joinCircle();
+      _joinClique();
     }
   }
 
@@ -34,18 +34,18 @@ class _JoinCircleScreenState extends ConsumerState<JoinCircleScreen> {
     super.dispose();
   }
 
-  Future<void> _joinCircle() async {
+  Future<void> _joinClique() async {
     final code = _codeController.text.trim();
     if (code.isEmpty) return;
 
     setState(() { _isLoading = true; _error = null; });
     try {
-      final repo = ref.read(circlesRepositoryProvider);
-      final circle = await repo.joinByInviteCode(code);
-      ref.read(circlesListProvider.notifier).refresh();
-      ref.invalidate(circleDetailProvider(circle.id));
-      ref.invalidate(circleMembersProvider(circle.id));
-      if (mounted) context.go('/circles/${circle.id}');
+      final repo = ref.read(cliquesRepositoryProvider);
+      final clique = await repo.joinByInviteCode(code);
+      ref.read(cliquesListProvider.notifier).refresh();
+      ref.invalidate(cliqueDetailProvider(clique.id));
+      ref.invalidate(cliqueMembersProvider(clique.id));
+      if (mounted) context.go('/cliques/${clique.id}');
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
     } finally {
@@ -61,7 +61,7 @@ class _JoinCircleScreenState extends ConsumerState<JoinCircleScreen> {
         backgroundColor: const Color(0xFF0E1525),
         foregroundColor: Colors.white,
         title: const Text(
-          'Join Circle',
+          'Join Clique',
           style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
         ),
         centerTitle: true,
@@ -84,7 +84,7 @@ class _JoinCircleScreenState extends ConsumerState<JoinCircleScreen> {
             ShaderMask(
               shaderCallback: (bounds) => AppGradients.primary.createShader(bounds),
               child: const Text(
-                'Join a Circle',
+                'Join a Clique',
                 style: TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.w800,
@@ -146,9 +146,9 @@ class _JoinCircleScreenState extends ConsumerState<JoinCircleScreen> {
             ],
             const SizedBox(height: 24),
             GradientButton(
-              text: 'Join Circle',
+              text: 'Join Clique',
               isLoading: _isLoading,
-              onPressed: _joinCircle,
+              onPressed: _joinClique,
             ),
           ],
         ),

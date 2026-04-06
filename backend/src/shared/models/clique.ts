@@ -1,4 +1,4 @@
-export interface Circle {
+export interface Clique {
   id: string;
   name: string;
   invite_code: string;
@@ -7,14 +7,14 @@ export interface Circle {
   updated_at: Date;
 }
 
-export interface CircleMember {
+export interface CliqueMember {
   id: string;
-  circle_id: string;
+  clique_id: string;
   user_id: string;
   role: 'owner' | 'member';
   joined_at: Date;
 }
 
-export interface CircleWithMemberCount extends Circle {
+export interface CliqueWithMemberCount extends Clique {
   member_count: number;
 }

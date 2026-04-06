@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../../../../models/circle_model.dart';
+import '../../../../models/clique_model.dart';
 import '../../../../widgets/avatar_widget.dart';
 
-class CircleQuickStartChips extends StatelessWidget {
-  final List<CircleModel> circles;
+class CliqueQuickStartChips extends StatelessWidget {
+  final List<CliqueModel> cliques;
 
-  const CircleQuickStartChips({super.key, required this.circles});
+  const CliqueQuickStartChips({super.key, required this.cliques});
 
   @override
   Widget build(BuildContext context) {
@@ -16,30 +16,30 @@ class CircleQuickStartChips extends StatelessWidget {
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),
-        itemCount: circles.length + 1, // +1 for "New Circle" chip
+        itemCount: cliques.length + 1, // +1 for "New Clique" chip
         separatorBuilder: (_, __) => const SizedBox(width: 10),
         itemBuilder: (context, index) {
-          if (index < circles.length) {
-            return _CircleChip(circle: circles[index]);
+          if (index < cliques.length) {
+            return _CliqueChip(clique: cliques[index]);
           }
-          return const _NewCircleChip();
+          return const _NewCliqueChip();
         },
       ),
     );
   }
 }
 
-class _CircleChip extends StatelessWidget {
-  final CircleModel circle;
+class _CliqueChip extends StatelessWidget {
+  final CliqueModel clique;
 
-  const _CircleChip({required this.circle});
+  const _CliqueChip({required this.clique});
 
   @override
   Widget build(BuildContext context) {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () => context.go('/events/create?circleId=${circle.id}'),
+        onTap: () => context.go('/events/create?cliqueId=${clique.id}'),
         borderRadius: BorderRadius.circular(14),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -54,14 +54,14 @@ class _CircleChip extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              AvatarWidget(name: circle.name, size: 36),
+              AvatarWidget(name: clique.name, size: 36),
               const SizedBox(width: 10),
               Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    circle.name,
+                    clique.name,
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
@@ -71,7 +71,7 @@ class _CircleChip extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '${circle.memberCount} members',
+                    '${clique.memberCount} members',
                     style: TextStyle(
                       fontSize: 11,
                       color: Colors.white.withValues(alpha: 0.4),
@@ -87,15 +87,15 @@ class _CircleChip extends StatelessWidget {
   }
 }
 
-class _NewCircleChip extends StatelessWidget {
-  const _NewCircleChip();
+class _NewCliqueChip extends StatelessWidget {
+  const _NewCliqueChip();
 
   @override
   Widget build(BuildContext context) {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () => context.go('/circles/create'),
+        onTap: () => context.go('/cliques/create'),
         borderRadius: BorderRadius.circular(14),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -125,7 +125,7 @@ class _NewCircleChip extends StatelessWidget {
               ),
               const SizedBox(width: 10),
               Text(
-                'New Circle',
+                'New Clique',
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,

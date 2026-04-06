@@ -1,5 +1,5 @@
 export { User } from './user';
-export { Circle, CircleMember, CircleWithMemberCount } from './circle';
+export { Clique, CliqueMember, CliqueWithMemberCount } from './clique';
 export { Event, RetentionHours, EventStatus } from './event';
 export { Photo, PhotoWithUrls, PhotoStatus, MimeType } from './photo';
 export { Reaction, ReactionType } from './reaction';
