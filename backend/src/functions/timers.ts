@@ -61,6 +61,33 @@ async function cleanupExpired(myTimer: Timer, context: InvocationContext): Promi
     trackEvent('dm_thread_marked_read_only', { count: String(dmReadOnlyCount) });
   }
 
+  // Hard-delete expired events (CASCADE removes photos, reactions, DM threads/messages)
+  const expiredEvents = await query<{ id: string }>(
+    `SELECT id FROM events WHERE status = 'expired'`,
+  );
+
+  if (expiredEvents.length > 0) {
+    // Safety net: delete any remaining blobs before cascade-deleting DB records
+    for (const event of expiredEvents) {
+      const remainingPhotos = await query<{ blob_path: string; thumbnail_blob_path: string | null }>(
+        `SELECT blob_path, thumbnail_blob_path FROM photos WHERE event_id = $1`,
+        [event.id],
+      );
+      for (const photo of remainingPhotos) {
+        try {
+          await deleteBlob(photo.blob_path);
+          if (photo.thumbnail_blob_path) await deleteBlob(photo.thumbnail_blob_path);
+        } catch (_) { /* blob may already be deleted */ }
+      }
+    }
+
+    const deleteCount = await execute(
+      `DELETE FROM events WHERE status = 'expired'`,
+    );
+    trackEvent('expired_events_deleted', { count: String(deleteCount) });
+    context.log(`Deleted ${deleteCount} expired events`);
+  }
+
   trackEvent('expired_photos_deleted', { count: String(deletedCount) });
   context.log(`Cleaned up ${deletedCount} expired photos`);
 }
