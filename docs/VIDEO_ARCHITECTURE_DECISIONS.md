@@ -555,22 +555,72 @@ These are known-unknowns that will be resolved when we write the implementation 
 
 ---
 
-## Open questions for the user before implementation begins
+## Locked answers (resolved before implementation)
 
-These need explicit answers before the implementation plan gets written:
+All 7 open questions were resolved in the conversation that approved this doc. The answers below are binding inputs to the implementation plan.
 
-1. **Container image maintenance policy.** Are we OK using `jrottenberg/ffmpeg:6-alpine` as the base image (trusted public maintainer), or do you want a custom Dockerfile with pinned FFmpeg version for supply-chain control? Trade-off: custom is more work and more upkeep, public is easier but depends on a third party.
+### Q1: Container image base — `jrottenberg/ffmpeg:6-alpine`
 
-2. **Local dev workflow for the transcoder.** Running the transcoder locally requires Docker Desktop or a Docker alternative installed. Do you have Docker set up, or should the implementation plan include setup steps? Or do you want to do transcoder development in the cloud (push to ACR and test on Azure) and skip local development entirely?
+Use the public `jrottenberg/ffmpeg:6-alpine` image as the transcoder base. Pin to a specific image SHA in the Dockerfile for reproducibility. Switch to a custom Dockerfile only if a specific issue arises (CVE, missing codec, etc.). Trusted maintainer with steady release cadence.
 
-3. **ffprobe validation strictness.** When a user uploads a "weird" video (e.g., an MOV with a non-standard audio codec), do we (a) reject it cleanly with an error message, or (b) attempt to transcode and see if FFmpeg can handle it, or (c) transcode anyway and mark the result as "best effort"? Recommendation: (a) for v1 simplicity.
+### Q2: Local dev workflow — Docker Desktop installed locally
 
-4. **Transcoding cost ceiling.** What's your monthly spend comfort zone for the new infrastructure? The architecture assumes MVP scale (~$8-20/month) but you should set an Azure budget alert at a number you'd want to know about. Suggest $50/month as the first alarm threshold.
+Docker Desktop runs the transcoder container locally for fast iteration. Test FFmpeg invocations on real video files (sample iPhone MOVs, Android MP4s, HDR sources) without round-tripping through ACR + Container Apps. The implementation plan includes a `make transcode-local INPUT=sample.mov` style developer command. Cloud-only testing only happens for the integration test of the queue dispatch + callback round-trip.
 
-5. **Video deletion while transcoding.** If a user deletes a video (or the event containing it) while transcoding is in progress, what should happen? Options: (a) let the transcode finish then delete everything, (b) send a cancel signal to the Container Apps Job, (c) mark the row as `deleted` and let the callback discard its results. Recommendation: (c) — simplest, no job-cancellation plumbing needed, transcoder work is a small waste but low cost.
+### Q3: ffprobe validation strictness — Reject cleanly with specific error codes
 
-6. **HEVC support on low-end Android devices.** Some older Android devices cannot decode HEVC in ExoPlayer even though ExoPlayer advertises HEVC support. How do we want to handle playback failure on these devices? Options: (a) always show MP4 fallback, (b) rely on video_player to auto-fallback, (c) accept the edge case and show an error. Recommendation: (b) — let `video_player` handle it and add telemetry to track how often it happens.
+Server-side ffprobe runs first inside the transcoder container. On failure, the video is rejected with a specific error code and user-facing message:
+- `UNSUPPORTED_CONTAINER` — "We can't process this video format. Please use MP4 or MOV."
+- `UNSUPPORTED_CODEC` — "This video uses a codec we can't process. Try re-recording or exporting to H.264."
+- `DURATION_EXCEEDED` — "Videos must be 5 minutes or shorter."
+- `CORRUPT_MEDIA` — "We couldn't read this video file. It may be damaged."
+- `HDR_CONVERSION_FAILED` — "We couldn't convert this HDR video for playback. Try re-recording in standard mode."
 
-7. **Per-member video limits.** Do we want to cap how many videos a user can upload to a single event, or a daily limit, to prevent runaway costs from a misbehaving client? Not in the spec but worth considering. Recommendation: soft-cap at 10 videos per user per event for v1.
+No transcode-and-hope. Rejected videos move to `status='rejected'` and the user gets the error in the upload-confirm response.
 
-Once these are answered, the implementation plan can be written with enough specificity to execute without further clarification rounds.
+### Q4: Cost ceiling — $50/month Azure budget alert
+
+Azure budget alert configured on the resource group at $50/month. At MVP scale (~$8-25/month total expected), $50 represents a real anomaly (~2-3x normal usage), not noise. Catches both runaway transcoding scenarios and configuration mistakes (e.g., a job stuck in retry loop). Threshold is reviewable as usage patterns become clear.
+
+### Q5: Delete during transcoding — Mark row deleted, callback discards results
+
+When a user deletes a video (or its event) while a transcode is in progress:
+1. The `photos` row is immediately marked `status='deleted'`
+2. The Container Apps Job continues running (not cancelled — no cancellation plumbing needed)
+3. When the job completes and POSTs to `/api/internal/video-processing-complete`, the Function sees the row is already `deleted`, discards the results, and prefix-deletes any blobs the job already wrote
+4. Wasted compute is a few minutes of FFmpeg time (~$0.01 per discarded transcode at MVP scale) — acceptable cost for not having to build job cancellation
+
+### Q6: HEVC fallback on Android — Rely on video_player auto-fallback + telemetry
+
+The transcoder always outputs **H.264** for both HLS and MP4 fallback (HEVC is the input format we accept, not the output we deliver — see Decision 3). This means the HEVC-on-old-Android problem is largely a non-issue at the playback layer because we never serve HEVC.
+
+For the edge case where some other playback failure occurs:
+- `video_player` attempts HLS first
+- On any HLS error, the client automatically retries with the MP4 fallback URL from the playback response
+- Add telemetry: `video_playback_fallback_used` event with `reason` field
+- If telemetry shows this happens often, revisit during v1.5
+
+### Q7: Per-user video limits — Soft cap of 5 videos per user per event
+
+Each user is limited to **5 currently non-deleted videos in any single event**. Counting semantics:
+- Counts videos in `status IN ('pending', 'processing', 'active')` for this user in this event
+- Deleted videos (`status='deleted'`) **do NOT count** — deletion frees a slot, encouraging cleanup
+- Rejected videos (`status='rejected'`) do NOT count
+- Limit is enforced at the `POST /api/events/{eventId}/videos/upload-url` endpoint
+- Error response: `VIDEO_LIMIT_REACHED` — "You've reached the 5-video limit for this event. Delete a video to upload another."
+
+Photos remain unlimited per user per event — this cap is video-specific because video has dramatically higher per-item cost (transcoding compute + multi-asset storage) than photos.
+
+---
+
+## Original "Open questions" — preserved for history
+
+1. **Container image maintenance policy** → Q1 above
+2. **Local dev workflow for the transcoder** → Q2 above
+3. **ffprobe validation strictness** → Q3 above
+4. **Transcoding cost ceiling** → Q4 above
+5. **Video deletion while transcoding** → Q5 above
+6. **HEVC support on low-end Android devices** → Q6 above
+7. **Per-member video limits** → Q7 above
+
+The implementation plan can now be written with enough specificity to execute without further clarification rounds.
