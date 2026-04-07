@@ -1,7 +1,6 @@
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
 import { v4 as uuidv4 } from 'uuid';
 import { authenticateRequest } from '../shared/middleware/authMiddleware';
-import { validateInternalCallerIdentity } from '../shared/middleware/internalAuthMiddleware';
 import { handleError } from '../shared/middleware/errorHandler';
 import { successResponse } from '../shared/utils/response';
 import { query, queryOne, execute } from '../shared/services/dbService';
@@ -755,8 +754,13 @@ async function videoProcessingComplete(
   context: InvocationContext,
 ): Promise<HttpResponseInit> {
   try {
-    // Verify the caller is the transcoder's managed identity
-    await validateInternalCallerIdentity(req);
+    // Auth: handled by Functions runtime via authLevel='function'.
+    // The transcoder must present a valid function key as ?code=<key>.
+    // The key is stored in Key Vault and surfaced to the Container Apps Job
+    // as a secret env var. See docs/VIDEO_INFRASTRUCTURE_RUNBOOK.md.
+    //
+    // (Earlier attempt: managed identity bearer token via custom audience.
+    //  That requires an Azure AD app registration which we deferred to v1.5.)
 
     const body = (await req.json()) as CallbackBody;
     if (!body.video_id || !isValidUUID(body.video_id)) {
@@ -913,7 +917,7 @@ app.http('deleteVideo', {
 
 app.http('videoProcessingComplete', {
   methods: ['POST'],
-  authLevel: 'anonymous',
+  authLevel: 'function',
   route: 'internal/video-processing-complete',
   handler: videoProcessingComplete,
 });

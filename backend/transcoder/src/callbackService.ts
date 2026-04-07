@@ -1,39 +1,22 @@
 // HTTP callback to the Function App's /api/internal/video-processing-complete endpoint.
 //
-// Auth: managed identity. The transcoder acquires a token for the Function App's
-// audience (`api://func-cliquepix-fresh`) and presents it as a Bearer token.
-// The Function validates the token's signature and `oid` claim against the
-// transcoder's principal ID (set as TRANSCODER_MI_PRINCIPAL_ID env var on the Function).
+// Auth: Azure Functions function key, passed as ?code=<key> query parameter.
+// The Function endpoint is configured with `authLevel: 'function'` so the
+// runtime validates the key automatically before invoking the handler.
+//
+// The function key is sourced from FUNCTION_CALLBACK_KEY env var, which on
+// Container Apps Job points at a secretref backed by Key Vault.
 
-import { DefaultAzureCredential } from '@azure/identity';
 import type { CallbackPayload } from './types';
 
 const CALLBACK_URL = process.env.FUNCTION_CALLBACK_URL!;
-const FUNCTION_AUDIENCE = process.env.FUNCTION_APP_AUDIENCE!;
+const FUNCTION_CALLBACK_KEY = process.env.FUNCTION_CALLBACK_KEY!;
 
 if (!CALLBACK_URL) {
   throw new Error('FUNCTION_CALLBACK_URL env var is required');
 }
-if (!FUNCTION_AUDIENCE) {
-  throw new Error('FUNCTION_APP_AUDIENCE env var is required');
-}
-
-let cachedCredential: DefaultAzureCredential | null = null;
-
-function getCredential(): DefaultAzureCredential {
-  if (!cachedCredential) {
-    cachedCredential = new DefaultAzureCredential();
-  }
-  return cachedCredential;
-}
-
-async function getAccessToken(): Promise<string> {
-  const credential = getCredential();
-  const tokenResponse = await credential.getToken(`${FUNCTION_AUDIENCE}/.default`);
-  if (!tokenResponse) {
-    throw new Error('Failed to acquire access token for Function App callback');
-  }
-  return tokenResponse.token;
+if (!FUNCTION_CALLBACK_KEY) {
+  throw new Error('FUNCTION_CALLBACK_KEY env var is required');
 }
 
 /**
@@ -46,17 +29,19 @@ async function getAccessToken(): Promise<string> {
  * the message to the poison queue and a separate timer Function cleans up.
  */
 export async function postCallback(payload: CallbackPayload): Promise<void> {
-  const token = await getAccessToken();
   const body = JSON.stringify(payload);
+
+  // Append the function key as a query parameter
+  const separator = CALLBACK_URL.includes('?') ? '&' : '?';
+  const urlWithKey = `${CALLBACK_URL}${separator}code=${encodeURIComponent(FUNCTION_CALLBACK_KEY)}`;
 
   let lastError: Error | null = null;
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      const response = await fetch(CALLBACK_URL, {
+      const response = await fetch(urlWithKey, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
         body,
       });

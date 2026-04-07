@@ -131,8 +131,12 @@ async function runQueueMode(): Promise<void> {
     console.log('[runner] Extracting poster...');
     await extractPoster(localInput, posterPath, probeResult.durationSeconds);
 
-    // 4. Upload outputs to blob storage at expected paths
-    const basePrefix = `${cliqueId}/${eventId}/${videoId}`;
+    // 4. Upload outputs to blob storage at expected paths.
+    // The "photos/" prefix is the historical convention used throughout the
+    // codebase — the container is named "photos" AND the path inside the
+    // container starts with "photos/" to mirror the project's blob naming
+    // (matches photos.ts and videos.ts blob path construction).
+    const basePrefix = `photos/${cliqueId}/${eventId}/${videoId}`;
     console.log(`[runner] Uploading outputs to ${basePrefix}/`);
     await uploadDirectory(hlsDir, `${basePrefix}/hls`);
     await uploadBlob(fallbackPath, `${basePrefix}/fallback.mp4`, 'video/mp4');
