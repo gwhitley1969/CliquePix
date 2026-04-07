@@ -40,12 +40,12 @@ async function enrichPhotoWithUrls(photo: Photo, userId: string): Promise<PhotoW
     query<{ reaction_type: string; count: number }>(
       `SELECT reaction_type, COUNT(*)::int AS count
        FROM reactions
-       WHERE photo_id = $1
+       WHERE media_id = $1
        GROUP BY reaction_type`,
       [photo.id],
     ),
     query<{ reaction_type: string }>(
-      `SELECT reaction_type FROM reactions WHERE photo_id = $1 AND user_id = $2`,
+      `SELECT reaction_type FROM reactions WHERE media_id = $1 AND user_id = $2`,
       [photo.id, userId],
     ),
   ]);
@@ -308,42 +308,42 @@ async function listPhotos(req: HttpRequest, context: InvocationContext): Promise
     // Batch-fetch reaction counts and user reactions for all photos
     const photoIds = photos.map(p => p.id);
 
-    let allReactionCounts: { photo_id: string; reaction_type: string; count: number }[] = [];
-    let allUserReactions: { photo_id: string; reaction_type: string }[] = [];
+    let allReactionCounts: { media_id: string; reaction_type: string; count: number }[] = [];
+    let allUserReactions: { media_id: string; reaction_type: string }[] = [];
 
     if (photoIds.length > 0) {
       [allReactionCounts, allUserReactions] = await Promise.all([
-        query<{ photo_id: string; reaction_type: string; count: number }>(
-          `SELECT photo_id, reaction_type, COUNT(*)::int AS count
+        query<{ media_id: string; reaction_type: string; count: number }>(
+          `SELECT media_id, reaction_type, COUNT(*)::int AS count
            FROM reactions
-           WHERE photo_id = ANY($1)
-           GROUP BY photo_id, reaction_type`,
+           WHERE media_id = ANY($1)
+           GROUP BY media_id, reaction_type`,
           [photoIds],
         ),
-        query<{ photo_id: string; reaction_type: string }>(
-          `SELECT photo_id, reaction_type
+        query<{ media_id: string; reaction_type: string }>(
+          `SELECT media_id, reaction_type
            FROM reactions
-           WHERE photo_id = ANY($1) AND user_id = $2`,
+           WHERE media_id = ANY($1) AND user_id = $2`,
           [photoIds, authUser.id],
         ),
       ]);
     }
 
-    // Index reaction data by photo_id
+    // Index reaction data by media_id
     const reactionCountsByPhoto = new Map<string, Record<string, number>>();
     for (const row of allReactionCounts) {
-      if (!reactionCountsByPhoto.has(row.photo_id)) {
-        reactionCountsByPhoto.set(row.photo_id, {});
+      if (!reactionCountsByPhoto.has(row.media_id)) {
+        reactionCountsByPhoto.set(row.media_id, {});
       }
-      reactionCountsByPhoto.get(row.photo_id)![row.reaction_type] = row.count;
+      reactionCountsByPhoto.get(row.media_id)![row.reaction_type] = row.count;
     }
 
     const userReactionsByPhoto = new Map<string, string[]>();
     for (const row of allUserReactions) {
-      if (!userReactionsByPhoto.has(row.photo_id)) {
-        userReactionsByPhoto.set(row.photo_id, []);
+      if (!userReactionsByPhoto.has(row.media_id)) {
+        userReactionsByPhoto.set(row.media_id, []);
       }
-      userReactionsByPhoto.get(row.photo_id)!.push(row.reaction_type);
+      userReactionsByPhoto.get(row.media_id)!.push(row.reaction_type);
     }
 
     // Generate SAS URLs for all photos

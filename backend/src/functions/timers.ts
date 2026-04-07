@@ -1,26 +1,35 @@
 import { app, InvocationContext, Timer } from '@azure/functions';
 import { query, queryOne, execute } from '../shared/services/dbService';
-import { deleteBlob } from '../shared/services/blobService';
+import { deleteBlob, deleteBlobsByPrefix } from '../shared/services/blobService';
 import { sendToMultipleTokens } from '../shared/services/fcmService';
 import { trackEvent } from '../shared/services/telemetryService';
 import { initTelemetry } from '../shared/services/telemetryService';
+import * as path from 'path';
+
+// Helper: prefix-delete all blobs under a video's directory
+// (e.g., photos/{cliqueId}/{eventId}/{videoId}/) to clean up the original
+// master + HLS segments + MP4 fallback + poster in one operation.
+async function deleteVideoAssets(video: { blob_path: string; hls_manifest_blob_path: string | null }): Promise<number> {
+  // The video's "directory" is the parent of its original.mp4 path
+  const videoDirPrefix = path.posix.dirname(video.blob_path) + '/';
+  return deleteBlobsByPrefix(videoDirPrefix);
+}
 
 async function cleanupExpired(myTimer: Timer, context: InvocationContext): Promise<void> {
   initTelemetry();
-  context.log('Running expired photo cleanup');
+  context.log('Running expired media cleanup');
 
+  // ====================================================================================
+  // 1. Expired PHOTOS — delete original + thumbnail per row
+  // ====================================================================================
   const expiredPhotos = await query<any>(
     `SELECT id, blob_path, thumbnail_blob_path, event_id
-     FROM photos WHERE status = 'active' AND expires_at < NOW()
+     FROM photos
+     WHERE media_type = 'photo' AND status = 'active' AND expires_at < NOW()
      LIMIT 500`,
   );
 
-  if (expiredPhotos.length === 0) {
-    context.log('No expired photos to clean up');
-    return;
-  }
-
-  let deletedCount = 0;
+  let deletedPhotoCount = 0;
   for (const photo of expiredPhotos) {
     try {
       await deleteBlob(photo.blob_path);
@@ -31,11 +40,58 @@ async function cleanupExpired(myTimer: Timer, context: InvocationContext): Promi
         "UPDATE photos SET status = 'deleted', deleted_at = NOW() WHERE id = $1",
         [photo.id],
       );
-      deletedCount++;
+      deletedPhotoCount++;
     } catch (err) {
       context.error(`Failed to clean up photo ${photo.id}:`, err);
     }
   }
+  if (deletedPhotoCount > 0) {
+    trackEvent('expired_photos_deleted', { count: String(deletedPhotoCount) });
+    context.log(`Cleaned up ${deletedPhotoCount} expired photos`);
+  }
+
+  // ====================================================================================
+  // 2. Expired VIDEOS — prefix-delete the video directory (HLS segments + all derivatives)
+  //    Smaller batch since each video can be 30+ blobs to delete
+  // ====================================================================================
+  const expiredVideos = await query<any>(
+    `SELECT id, blob_path, hls_manifest_blob_path, event_id
+     FROM photos
+     WHERE media_type = 'video' AND status = 'active' AND expires_at < NOW()
+     LIMIT 100`,
+  );
+
+  let deletedVideoCount = 0;
+  let totalBlobsDeleted = 0;
+  for (const video of expiredVideos) {
+    try {
+      const blobCount = await deleteVideoAssets(video);
+      totalBlobsDeleted += blobCount;
+      await execute(
+        "UPDATE photos SET status = 'deleted', deleted_at = NOW() WHERE id = $1",
+        [video.id],
+      );
+      deletedVideoCount++;
+    } catch (err) {
+      context.error(`Failed to clean up video ${video.id}:`, err);
+    }
+  }
+  if (deletedVideoCount > 0) {
+    trackEvent('expired_videos_deleted', { count: String(deletedVideoCount) });
+    trackEvent('expired_video_hls_prefix_deleted', {
+      videoCount: String(deletedVideoCount),
+      blobCount: String(totalBlobsDeleted),
+    });
+    context.log(`Cleaned up ${deletedVideoCount} expired videos (${totalBlobsDeleted} blobs)`);
+  }
+
+  if (expiredPhotos.length === 0 && expiredVideos.length === 0) {
+    context.log('No expired media to clean up');
+    // Don't return — still process events/dm-threads/expired-event hard-delete below
+  }
+
+  // (Original photo-only counter retained for backwards compatibility with downstream queries)
+  let deletedCount = deletedPhotoCount + deletedVideoCount;
 
   // Check for events that should be marked expired
   const expiredEventRows = await query<{ id: string }>(
@@ -96,30 +152,86 @@ async function cleanupOrphans(myTimer: Timer, context: InvocationContext): Promi
   initTelemetry();
   context.log('Running orphan upload cleanup');
 
-  const orphans = await query<any>(
+  // ====================================================================================
+  // 1. Orphaned PHOTO uploads — 10 min window (existing behavior)
+  // ====================================================================================
+  const photoOrphans = await query<any>(
     `SELECT id, blob_path FROM photos
-     WHERE status = 'pending' AND created_at < NOW() - INTERVAL '10 minutes'
+     WHERE media_type = 'photo' AND status = 'pending'
+       AND created_at < NOW() - INTERVAL '10 minutes'
      LIMIT 200`,
   );
 
-  if (orphans.length === 0) {
-    context.log('No orphaned uploads to clean up');
-    return;
-  }
-
-  let cleanedCount = 0;
-  for (const orphan of orphans) {
+  let cleanedPhotoCount = 0;
+  for (const orphan of photoOrphans) {
     try {
       await deleteBlob(orphan.blob_path);
       await execute('DELETE FROM photos WHERE id = $1', [orphan.id]);
-      cleanedCount++;
+      cleanedPhotoCount++;
     } catch (err) {
-      context.error(`Failed to clean up orphan ${orphan.id}:`, err);
+      context.error(`Failed to clean up photo orphan ${orphan.id}:`, err);
     }
   }
 
-  trackEvent('orphaned_uploads_cleaned', { count: String(cleanedCount) });
-  context.log(`Cleaned up ${cleanedCount} orphaned uploads`);
+  // ====================================================================================
+  // 2. Orphaned VIDEO uploads — 30 min window (Q5: videos take longer to upload)
+  // ====================================================================================
+  const videoOrphans = await query<any>(
+    `SELECT id, blob_path FROM photos
+     WHERE media_type = 'video' AND status = 'pending'
+       AND created_at < NOW() - INTERVAL '30 minutes'
+     LIMIT 100`,
+  );
+
+  let cleanedVideoCount = 0;
+  for (const orphan of videoOrphans) {
+    try {
+      // Pending videos may have partial blocks committed but not finalized.
+      // deleteBlob handles both committed and uncommitted blocks.
+      await deleteBlob(orphan.blob_path);
+      await execute('DELETE FROM photos WHERE id = $1', [orphan.id]);
+      cleanedVideoCount++;
+    } catch (err) {
+      context.error(`Failed to clean up video orphan ${orphan.id}:`, err);
+    }
+  }
+
+  // ====================================================================================
+  // 3. Failed video processing cleanup — 1 hour window
+  //    Videos that the transcoder rejected (status='rejected') may have partially-
+  //    written outputs. Prefix-delete the whole video directory.
+  // ====================================================================================
+  const failedVideos = await query<any>(
+    `SELECT id, blob_path FROM photos
+     WHERE media_type = 'video' AND status = 'rejected'
+       AND created_at < NOW() - INTERVAL '1 hour'
+     LIMIT 100`,
+  );
+
+  let cleanedFailedCount = 0;
+  for (const failed of failedVideos) {
+    try {
+      const videoDirPrefix = path.posix.dirname(failed.blob_path) + '/';
+      await deleteBlobsByPrefix(videoDirPrefix);
+      await execute('DELETE FROM photos WHERE id = $1', [failed.id]);
+      cleanedFailedCount++;
+    } catch (err) {
+      context.error(`Failed to clean up failed video ${failed.id}:`, err);
+    }
+  }
+
+  if (cleanedPhotoCount > 0) {
+    trackEvent('orphaned_uploads_cleaned', { count: String(cleanedPhotoCount), mediaType: 'photo' });
+  }
+  if (cleanedVideoCount > 0) {
+    trackEvent('orphaned_video_uploads_cleaned', { count: String(cleanedVideoCount) });
+  }
+  if (cleanedFailedCount > 0) {
+    trackEvent('failed_video_processing_cleaned', { count: String(cleanedFailedCount) });
+  }
+
+  const totalCleaned = cleanedPhotoCount + cleanedVideoCount + cleanedFailedCount;
+  context.log(`Cleaned up ${totalCleaned} orphaned/failed uploads (${cleanedPhotoCount} photo / ${cleanedVideoCount} video orphans / ${cleanedFailedCount} failed videos)`);
 }
 
 async function notifyExpiring(myTimer: Timer, context: InvocationContext): Promise<void> {

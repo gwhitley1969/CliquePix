@@ -26,7 +26,17 @@ async function getUserDelegationKey(): Promise<UserDelegationKey> {
   return cachedDelegationKey;
 }
 
-export async function generateUploadSas(blobPath: string): Promise<string> {
+/**
+ * Generate a write-only User Delegation SAS for uploading to a blob path.
+ *
+ * @param blobPath - blob path inside the photos container
+ * @param expirySeconds - SAS validity duration in seconds (default: 5 min for photos).
+ *                        Use 30 * 60 (1800) for video block uploads — videos take longer.
+ */
+export async function generateUploadSas(
+  blobPath: string,
+  expirySeconds: number = 5 * 60,
+): Promise<string> {
   const delegationKey = await getUserDelegationKey();
   const accountName = process.env.STORAGE_ACCOUNT_NAME!;
 
@@ -34,7 +44,7 @@ export async function generateUploadSas(blobPath: string): Promise<string> {
   permissions.write = true;
 
   const now = new Date();
-  const expiresOn = new Date(now.getTime() + 5 * 60 * 1000); // 5 minutes
+  const expiresOn = new Date(now.getTime() + expirySeconds * 1000);
 
   const sasParams = generateBlobSASQueryParameters(
     {
@@ -52,7 +62,18 @@ export async function generateUploadSas(blobPath: string): Promise<string> {
   return `https://${accountName}.blob.core.windows.net/${CONTAINER_NAME}/${blobPath}?${sasParams.toString()}`;
 }
 
-export async function generateViewSas(blobPath: string): Promise<string> {
+/**
+ * Generate a read-only User Delegation SAS for viewing/downloading a blob.
+ *
+ * @param blobPath - blob path inside the photos container
+ * @param expirySeconds - SAS validity duration in seconds (default: 5 min for photos).
+ *                        Use 15 * 60 (900) for HLS segments and video posters/fallbacks
+ *                        — playback sessions can last several minutes.
+ */
+export async function generateViewSas(
+  blobPath: string,
+  expirySeconds: number = 5 * 60,
+): Promise<string> {
   const delegationKey = await getUserDelegationKey();
   const accountName = process.env.STORAGE_ACCOUNT_NAME!;
 
@@ -60,7 +81,7 @@ export async function generateViewSas(blobPath: string): Promise<string> {
   permissions.read = true;
 
   const now = new Date();
-  const expiresOn = new Date(now.getTime() + 5 * 60 * 1000); // 5 minutes
+  const expiresOn = new Date(now.getTime() + expirySeconds * 1000);
 
   const sasParams = generateBlobSASQueryParameters(
     {
