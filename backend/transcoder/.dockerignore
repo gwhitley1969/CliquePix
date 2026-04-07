@@ -1,0 +1,9 @@
+node_modules/
+src/
+test-output/
+sample-videos/
+*.md
+.git
+.gitignore
+tsconfig.json
+Makefile

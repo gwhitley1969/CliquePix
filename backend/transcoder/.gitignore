@@ -1,0 +1,7 @@
+node_modules/
+dist/
+test-output/
+sample-videos/*
+!sample-videos/README.md
+*.log
+.env
