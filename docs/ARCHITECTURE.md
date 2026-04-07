@@ -18,7 +18,7 @@ This is not a "someday" architecture. This is what we build and deploy.
 # 1. Architecture Principles
 
 1. **Build for production from day one** — Front Door, APIM, managed identity, RBAC. No shortcuts to retrofit later.
-2. **Optimize for the core product loop** — every architectural decision serves the Circle → Event → Photo → Feed → Expire flow.
+2. **Optimize for the core product loop** — every architectural decision serves the Clique → Event → Photo → Feed → Expire flow.
 3. **Use managed Azure services** — minimize operational overhead, maximize reliability.
 4. **Separate concerns cleanly** — UI, state, API client, and backend are distinct layers.
 5. **No storage account keys anywhere** — RBAC and managed identity for all Azure resource access.
@@ -31,7 +31,7 @@ This is not a "someday" architecture. This is what we build and deploy.
 Everything in the architecture must support this loop:
 
 1. User signs in
-2. User creates an Event (picks or creates a Circle during creation)
+2. User creates an Event (picks or creates a Clique during creation)
 3. User takes or uploads a photo
 5. Photo is compressed on-device and uploaded directly to Blob Storage
 6. Other event members are notified via push
@@ -77,19 +77,20 @@ Why Flutter for Clique Pix:
 | Entry point | **Azure Front Door** (Standard) | Global load balancing, SSL termination |
 | API gateway | **Azure API Management** | Rate limiting, API versioning, policy enforcement, single published API surface |
 | Compute | **Azure Functions** (TypeScript, Node.js) | REST API endpoints, timer-triggered cleanup, thumbnail generation |
-| Database | **PostgreSQL Flexible Server** | Relational data (users, circles, events, photos, reactions) |
+| Database | **PostgreSQL Flexible Server** | Relational data (users, cliques, events, photos, reactions) |
 | Object storage | **Azure Blob Storage** | Photo originals and thumbnails |
 | Identity (consumer) | **Microsoft Entra External ID** | User authentication (Google, Apple, email OTP) |
 | Identity (infra) | **System-assigned managed identity** | Function App access to Blob Storage, Key Vault |
 | Secrets | **Azure Key Vault** | Database connection string, push notification credentials |
 | Observability | **Application Insights** | API telemetry, error tracking, dependency monitoring |
+| Realtime messaging | **Azure Web PubSub** | Real-time DM delivery via WebSocket (Standard S1) |
 
 ### What Is Not In v1
 
 | Service | Why deferred |
 |---------|-------------|
 | Azure Cache for Redis | Not needed at v1 scale |
-| Azure SignalR / Web PubSub | Push notifications + pull-to-refresh is sufficient for v1 |
+| Azure SignalR Service | Web PubSub used instead for DMs |
 | Azure Service Bus | No async workflow complexity needed yet |
 | Azure Notification Hubs | Direct FCM/APNs is simpler; add Hubs if multi-platform orchestration grows |
 
@@ -222,27 +223,27 @@ GET    /api/users/me
 DELETE /api/users/me
 ```
 
-### Circles
+### Cliques
 ```
-POST   /api/circles
-GET    /api/circles
-GET    /api/circles/{circleId}
-POST   /api/circles/{circleId}/invite
-POST   /api/circles/{circleId}/join
-GET    /api/circles/{circleId}/members
-DELETE /api/circles/{circleId}/members/me
-DELETE /api/circles/{circleId}/members/{userId}
+POST   /api/cliques
+GET    /api/cliques
+GET    /api/cliques/{cliqueId}
+POST   /api/cliques/{cliqueId}/invite
+POST   /api/cliques/{cliqueId}/join
+GET    /api/cliques/{cliqueId}/members
+DELETE /api/cliques/{cliqueId}/members/me
+DELETE /api/cliques/{cliqueId}/members/{userId}
 ```
 
 **Member management:**
-- `DELETE .../members/me` — member leaves circle (or sole owner deletes circle)
+- `DELETE .../members/me` — member leaves clique (or sole owner deletes clique)
 - `DELETE .../members/{userId}` — owner removes a specific member (owner-only, returns 403 for non-owners)
 - Azure Functions route matching: literal `me` segment takes priority over parameterized `{userId}`, so no route conflict
 
 ### Events
 ```
-POST   /api/circles/{circleId}/events
-GET    /api/circles/{circleId}/events
+POST   /api/cliques/{cliqueId}/events
+GET    /api/cliques/{cliqueId}/events
 GET    /api/events/{eventId}
 DELETE /api/events/{eventId}
 ```
@@ -250,7 +251,7 @@ DELETE /api/events/{eventId}
 **Event deletion:**
 - `DELETE /api/events/{eventId}` — only the event creator (organizer) can delete
 - Deletes all photo blobs from Azure Storage before cascading the database delete (photos + reactions)
-- Sends push notification and in-app notification to circle members
+- Sends push notification and in-app notification to clique members
 - Hard delete — permanent, not recoverable
 
 ### Photos
@@ -267,6 +268,24 @@ DELETE /api/photos/{photoId}
 POST   /api/photos/{photoId}/reactions
 DELETE /api/photos/{photoId}/reactions/{reactionId}
 ```
+
+### Direct Messages (Event-Centric DMs)
+```
+POST   /api/events/{eventId}/dm-threads
+GET    /api/events/{eventId}/dm-threads
+GET    /api/dm-threads/{threadId}
+GET    /api/dm-threads/{threadId}/messages
+POST   /api/dm-threads/{threadId}/messages
+PATCH  /api/dm-threads/{threadId}/read
+POST   /api/realtime/dm/negotiate
+```
+
+**DM model:**
+- 1:1 only, text-only, event-centric, ephemeral
+- Threads tied to a specific event — same two users get a separate thread per event
+- Threads become read-only when event expires, CASCADE-deleted when event is purged
+- Real-time delivery via Azure Web PubSub (`sendToUser` for direct user-targeted delivery); FCM push for background/terminated app
+- Rate limited: max 10 messages per minute per sender per thread
 
 ### Notifications
 ```
@@ -292,8 +311,8 @@ Error:
 {
   "data": null,
   "error": {
-    "code": "CIRCLE_NOT_FOUND",
-    "message": "The requested circle does not exist."
+    "code": "CLIQUE_NOT_FOUND",
+    "message": "The requested clique does not exist."
   }
 }
 ```
@@ -306,7 +325,7 @@ Use consistent error codes. Never return raw exception messages or stack traces 
 
 ## PostgreSQL Flexible Server
 
-Relational model fits the circles/events/memberships domain cleanly. Predictable structure, strong querying for feeds and membership checks.
+Relational model fits the cliques/events/memberships domain cleanly. Predictable structure, strong querying for feeds and membership checks.
 
 ## Core Tables
 
@@ -321,7 +340,7 @@ Relational model fits the circles/events/memberships domain cleanly. Predictable
 | created_at | TIMESTAMPTZ | |
 | updated_at | TIMESTAMPTZ | |
 
-### circles
+### cliques
 | Column | Type | Notes |
 |--------|------|-------|
 | id | UUID | Primary key |
@@ -331,22 +350,22 @@ Relational model fits the circles/events/memberships domain cleanly. Predictable
 | created_at | TIMESTAMPTZ | |
 | updated_at | TIMESTAMPTZ | |
 
-### circle_members
+### clique_members
 | Column | Type | Notes |
 |--------|------|-------|
 | id | UUID | Primary key |
-| circle_id | UUID | FK → circles |
+| clique_id | UUID | FK → cliques |
 | user_id | UUID | FK → users |
 | role | VARCHAR | owner / member |
 | joined_at | TIMESTAMPTZ | |
 
-Unique constraint on (circle_id, user_id).
+Unique constraint on (clique_id, user_id).
 
 ### events
 | Column | Type | Notes |
 |--------|------|-------|
 | id | UUID | Primary key |
-| circle_id | UUID | FK → circles |
+| clique_id | UUID | FK → cliques |
 | name | VARCHAR | |
 | description | VARCHAR | Nullable |
 | created_by_user_id | UUID | Nullable, FK → users (ON DELETE SET NULL) |
@@ -361,7 +380,7 @@ Unique constraint on (circle_id, user_id).
 | id | UUID | Primary key, generated server-side at upload-url step |
 | event_id | UUID | FK → events |
 | uploaded_by_user_id | UUID | Nullable, FK → users (ON DELETE SET NULL) |
-| blob_path | VARCHAR | e.g., photos/{circleId}/{eventId}/{photoId}/original.jpg |
+| blob_path | VARCHAR | e.g., photos/{cliqueId}/{eventId}/{photoId}/original.jpg |
 | thumbnail_blob_path | VARCHAR | Nullable until thumbnail generated |
 | original_filename | VARCHAR | |
 | mime_type | VARCHAR | JPEG or PNG |
@@ -406,6 +425,30 @@ Unique constraint on (photo_id, user_id, reaction_type).
 | is_read | BOOLEAN | Default false |
 | created_at | TIMESTAMPTZ | |
 
+### event_dm_threads
+| Column | Type | Notes |
+|--------|------|-------|
+| id | UUID | Primary key |
+| event_id | UUID | FK → events (ON DELETE CASCADE) |
+| user_a_id | UUID | FK → users (ON DELETE CASCADE), always < user_b_id |
+| user_b_id | UUID | FK → users (ON DELETE CASCADE), always > user_a_id |
+| status | VARCHAR | active / read_only |
+| user_a_last_read_message_id | UUID | Nullable, FK → event_dm_messages |
+| user_b_last_read_message_id | UUID | Nullable, FK → event_dm_messages |
+| last_message_at | TIMESTAMPTZ | Nullable, updated on each new message |
+| created_at | TIMESTAMPTZ | |
+
+Unique constraint on (event_id, user_a_id, user_b_id). CHECK constraint ensures user_a_id < user_b_id to prevent duplicate threads.
+
+### event_dm_messages
+| Column | Type | Notes |
+|--------|------|-------|
+| id | UUID | Primary key |
+| thread_id | UUID | FK → event_dm_threads (ON DELETE CASCADE) |
+| sender_user_id | UUID | Nullable, FK → users (ON DELETE SET NULL) |
+| body | TEXT | Max 2000 chars, non-empty enforced by CHECK |
+| created_at | TIMESTAMPTZ | |
+
 ---
 
 # 8. Object Storage Architecture
@@ -421,8 +464,8 @@ Name: `photos`
 ### Path Convention
 
 ```
-photos/{circleId}/{eventId}/{photoId}/original.jpg
-photos/{circleId}/{eventId}/{photoId}/thumb.jpg
+photos/{cliqueId}/{eventId}/{photoId}/original.jpg
+photos/{cliqueId}/{eventId}/{photoId}/thumb.jpg
 ```
 
 ### Access Model — RBAC + User Delegation SAS
@@ -495,7 +538,7 @@ Calling `Navigator.pop()` in both callbacks causes a double-pop that removes bot
 ## Upload Flow
 
 1. Client calls `POST /api/events/{eventId}/photos/upload-url`
-2. Function validates Entra token and confirms user is a member of the event's circle
+2. Function validates Entra token and confirms user is a member of the event's clique
 3. Function generates a photo ID and blob path, creates a photo record with status `pending`
 4. Function uses managed identity to request a User Delegation Key, generates a write-only User Delegation SAS scoped to the exact blob path, 5-minute expiry
 5. Function returns the SAS upload URL and photo ID
@@ -522,7 +565,7 @@ The Function never touches photo bytes during the upload flow. Post-confirmation
 - Triggered by blob upload event or queue message
 - Function reads original blob via managed identity
 - Generates thumbnail: 400px longest edge, JPEG quality 70
-- Writes thumbnail to `photos/{circleId}/{eventId}/{photoId}/thumb.jpg` via managed identity
+- Writes thumbnail to `photos/{cliqueId}/{eventId}/{photoId}/thumb.jpg` via managed identity
 - Updates `thumbnail_blob_path` in photo record
 - Target thumbnail size: ~30–80KB
 
@@ -543,7 +586,7 @@ If thumbnail generation fails, the feed falls back to loading the original (slow
 
 Users must be notified when:
 - a new photo is added to an active event
-- someone joins one of their circles
+- someone joins one of their cliques
 - an event is nearing expiration (24 hours before)
 
 ## Delivery
@@ -554,18 +597,18 @@ FCM (Firebase Cloud Messaging) for push delivery to both Android and iOS. FCM is
 
 | Type | Trigger | Recipients | Payload |
 |------|---------|------------|---------|
-| `new_photo` | Photo uploaded to event | Event circle members (excl. uploader) | `{ event_id, photo_id }` |
-| `member_joined` | User joins circle via invite | Existing circle members (excl. joiner) | `{ circle_id, circle_name, joined_user_name }` |
-| `event_expiring` | Timer (24h before expiry) | Event circle members | `{ event_id }` |
-| `event_expired` | Timer (after expiry) | Event circle members | `{ event_id }` |
-| `event_deleted` | Event organizer deletes event | Circle members (excl. deleter) | `{ event_id, event_name }` |
+| `new_photo` | Photo uploaded to event | Event clique members (excl. uploader) | `{ event_id, photo_id }` |
+| `member_joined` | User joins clique via invite | Existing clique members (excl. joiner) | `{ clique_id, clique_name, joined_user_name }` |
+| `event_expiring` | Timer (24h before expiry) | Event clique members | `{ event_id }` |
+| `event_expired` | Timer (after expiry) | Event clique members | `{ event_id }` |
+| `event_deleted` | Event organizer deletes event | Clique members (excl. deleter) | `{ event_id, event_name }` |
 
 **No notifications sent** for member removals or voluntary departures — the member simply disappears from the list.
 
 ### Push Notification Pipeline
 
 **Backend (Azure Functions):**
-1. Backend action (photo upload, circle join, timer) queries relevant members' push tokens from `push_tokens` table
+1. Backend action (photo upload, clique join, timer) queries relevant members' push tokens from `push_tokens` table
 2. Function sends push via FCM HTTP v1 API (`sendToMultipleTokens()`) with `notification` + `data` payloads
 3. Function creates notification records in `notifications` table for in-app display
 4. Failed token sends trigger stale token cleanup (`DELETE FROM push_tokens WHERE token = ANY($1)`)
@@ -575,7 +618,7 @@ FCM (Firebase Cloud Messaging) for push delivery to both Android and iOS. FCM is
 | App State | Handler | Display Mechanism |
 |-----------|---------|-------------------|
 | **Foreground** | `FirebaseMessaging.onMessage` in `main.dart` | `flutter_local_notifications.show()` — manually displays heads-up banner |
-| **Background** | Android auto-displays from FCM `notification` payload | `FirebaseMessaging.onMessageOpenedApp` handles tap → navigates to circle/event |
+| **Background** | Android auto-displays from FCM `notification` payload | `FirebaseMessaging.onMessageOpenedApp` handles tap → navigates to clique/event |
 | **Terminated** | Android auto-displays from FCM `notification` payload | `FirebaseMessaging.getInitialMessage()` handles cold-start tap → navigates |
 
 **Key design:** The `onMessage` listener is set up in `main.dart` immediately after `flutter_local_notifications` plugin initialization — not in a separate service class. This ensures the plugin is always ready when `show()` is called.
@@ -609,7 +652,7 @@ Referenced in AndroidManifest as `com.google.firebase.messaging.default_notifica
 
 All notification taps (foreground local notification, background FCM, terminated cold-start) navigate via GoRouter:
 - `data.event_id` → `router.push('/events/$eventId')`
-- `data.circle_id` → `router.push('/circles/$circleId')`
+- `data.clique_id` → `router.push('/cliques/$cliqueId')`
 
 Foreground taps use a static callback pattern: `main.dart`'s `onDidReceiveNotificationResponse` → `PushNotificationService.onNotificationTap` → GoRouter navigation.
 
@@ -635,13 +678,20 @@ Each photo record stores:
 
 ## Cleanup Process
 
-Timer-triggered Azure Function on a schedule (e.g., every 15 minutes):
+Timer-triggered Azure Function on a schedule (every 15 minutes):
 
 1. Query photos where `expires_at < now()` and `status = 'active'`
 2. Delete corresponding blobs (original + thumbnail) via managed identity
 3. Update photo records: set `status = 'deleted'`, set `deleted_at = now()`
-4. If all photos in an event are deleted, update event status to `expired`
-5. Log `expired_photos_deleted` telemetry event with count
+4. If all photos in an event are deleted, mark event `status = 'expired'`
+5. Mark DM threads as `read_only` for expired events
+6. Delete any remaining blobs for expired events (safety net)
+7. **Hard-delete expired event records** from the database — CASCADE removes:
+   - `photos` (FK `event_id` ON DELETE CASCADE)
+   - `reactions` (FK `photo_id` ON DELETE CASCADE, cascaded from photos)
+   - `event_dm_threads` (FK `event_id` ON DELETE CASCADE)
+   - `event_dm_messages` (FK `thread_id` ON DELETE CASCADE, cascaded from threads)
+8. Log `expired_photos_deleted` and `expired_events_deleted` telemetry events with counts
 
 ### Orphan Cleanup
 
@@ -654,6 +704,7 @@ Separate scheduled check for orphaned uploads:
 
 - Device-saved copies remain untouched — only cloud-managed copies are deleted
 - Users are notified 24 hours before expiration via push notification
+- Expired events are fully removed from the database, not soft-deleted
 
 ---
 
@@ -663,10 +714,10 @@ Separate scheduled check for orphaned uploads:
 
 Do not overbuild live infrastructure. The following is sufficient to feel responsive:
 
-- Push notification on new photo / circle join → user taps to open relevant screen
+- Push notification on new photo / clique join → user taps to open relevant screen
 - Refresh on app resume via `WidgetsBindingObserver` (`didChangeAppLifecycleState`)
 - Pull-to-refresh via `RefreshIndicator` on list and detail screens
-- 30-second polling via `Timer.periodic` while circle list/detail screens are active
+- 30-second polling via `Timer.periodic` while clique list/detail screens are active
 
 This three-layer approach (push + app-resume + polling) covers all cases: push for immediate alerting, app-resume for returning users, polling for actively-open screens. Most photo sharing happens in bursts (everyone at the same event, actively using the app).
 
@@ -680,7 +731,7 @@ If true real-time becomes a strong requirement post-v1, consider Azure Web PubSu
 
 ## Purpose
 
-Circle invites are core to the product loop. When a user taps an invite link (via SMS, social share, or QR code), the app must open directly to the invite acceptance screen.
+Clique invites are core to the product loop. When a user taps an invite link (via SMS, social share, or QR code), the app must open directly to the invite acceptance screen.
 
 ## Link Format
 
@@ -728,7 +779,7 @@ Unauthenticated users hitting `/invite/{code}` are redirected to `/login?redirec
 
 ## Flow
 
-1. **App installed + verified:** OS intercepts URL → app opens → `DeepLinkService` routes to `JoinCircleScreen` → auto-joins circle
+1. **App installed + verified:** OS intercepts URL → app opens → `DeepLinkService` routes to `JoinCliqueScreen` → auto-joins clique
 2. **App installed, not verified:** Browser loads `invite.html` → "Open in Clique Pix" button uses `intent://` (Android) → app opens
 3. **App not installed:** Browser loads `invite.html` → shows branded page with app store download buttons and invite code for manual entry
 
@@ -761,7 +812,7 @@ Store in Key Vault:
 
 Every API endpoint must enforce:
 - user is authenticated (valid Entra token verified by the Function)
-- user belongs to the circle/event they are accessing (membership check)
+- user belongs to the clique/event they are accessing (membership check)
 - user can only delete their own photos
 
 ## Blob Storage Security
@@ -783,6 +834,9 @@ Every API endpoint must enforce:
 - Auth tokens in `flutter_secure_storage` only
 - No tokens, credentials, or PII in debug logs
 - Clear all auth state and cancel background refresh jobs on logout
+- MSAL `browser_sign_out_enabled: true` in `msal_config.json` — clears browser session cookies on sign-out (prevents Google auto-login loop)
+- `Prompt.login` on interactive `acquireToken` — forces re-authentication even if residual browser session exists
+- `_pca = null` after sign-out — forces fresh MSAL instance on next login (prevents stale cached state)
 
 ---
 
@@ -806,7 +860,7 @@ Feature-based organization with clean separation of data, domain, and presentati
       /data
       /domain
       /presentation
-    /circles              # Circle CRUD, invites, membership
+    /cliques              # Clique CRUD, invites, membership
       /data
       /domain
       /presentation
@@ -834,6 +888,19 @@ Feature-based organization with clean separation of data, domain, and presentati
 ## State Management
 
 **Riverpod.** One approach, used consistently throughout.
+
+## Routing Architecture
+
+**GoRouter** with `StatefulShellRoute.indexedStack` for bottom tab navigation (Home, Cliques, Notifications, Profile). Each tab is a `StatefulShellBranch` with its own navigation stack.
+
+**Cross-shell navigation rule:** Screens outside the shell (e.g., Event Detail at `/events/:eventId`) must NOT push to routes inside a shell branch (e.g., `/cliques/:cliqueId`). Doing so causes broken back-navigation — the user gets stranded in the wrong tab instead of returning to the originating screen.
+
+**Solution:** Top-level routes that reuse the same widgets but live outside the shell:
+- `/view-clique/:cliqueId` → `CliqueDetailScreen` (for Event Detail → Clique)
+- `/invite-to-clique/:cliqueId` → `InviteScreen` (for post-creation invite flow)
+- Shell-internal routes (`/cliques/:cliqueId`, `/cliques/:cliqueId/invite`) remain for tab-based navigation
+
+**Post-creation invite prompt:** When creating an event with a NEW clique, `GoRouter.extra` passes `{cliqueId, cliqueName}` to Event Detail. On `initState`, a modal bottom sheet prompts the user to invite friends. `extra` is ephemeral (not in URL, not restorable from deep links) — the prompt fires once per creation.
 
 ## Networking
 
@@ -903,6 +970,7 @@ All resources for a given environment:
 | Key Vault | `kv-cliquepix-{env}` |
 | Front Door | `fd-cliquepix-{env}` |
 | API Management | `apim-cliquepix-{env}` |
+| Web PubSub | `wps-cliquepix-{env}` |
 
 ### Managed Identity Role Assignments
 
@@ -922,7 +990,7 @@ Function App system-assigned managed identity requires:
 
 Track these custom telemetry events:
 
-- `circle_created`, `circle_joined`, `circle_left`
+- `clique_created`, `clique_joined`, `clique_left`
 - `event_created`, `event_expired`, `event_deleted`
 - `photo_upload_started`, `photo_upload_completed`, `photo_upload_failed`
 - `photo_saved_to_device`
@@ -931,6 +999,8 @@ Track these custom telemetry events:
 - `expired_photos_deleted` (include count)
 - `orphaned_uploads_cleaned` (include count)
 - `token_refresh_success`, `token_refresh_failed` (include layer that triggered it)
+- `dm_thread_created`, `dm_message_sent`, `dm_message_send_failed`
+- `dm_push_sent`, `dm_thread_marked_read_only`
 
 ## Logging Rules
 
@@ -956,7 +1026,7 @@ Log enough to troubleshoot, not enough to leak:
 The v1 architecture leaves room to add:
 - Azure Service Bus (for async workflow orchestration)
 - Azure Cache for Redis (if feed performance demands it)
-- Azure SignalR / Web PubSub (if real-time feed updates are needed)
+- ~~Azure Web PubSub~~ (added in v1 for event DMs)
 - Azure Notification Hubs (if push orchestration grows complex)
 - Richer thumbnail pipeline (multiple sizes, lazy generation)
 

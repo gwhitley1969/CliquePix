@@ -45,7 +45,7 @@ A DM thread exists **inside the context of a specific event**.
 That means:
 
 - A thread is tied to a single `event_id`
-- Only users who are valid members of that event's circle can participate
+- Only users who are valid members of that event's clique can participate
 - The same two users may have a **different thread per event**
 - A thread does **not** become a permanent global DM relationship between two users
 
@@ -297,14 +297,14 @@ Every DM API and realtime token issuance path must enforce all of the following:
 
 1. user is authenticated
 2. user belongs to the thread they are accessing
-3. both participants are valid members of the event's circle while thread is active
+3. both participants are valid members of the event's clique while thread is active
 4. no new messages can be sent after thread becomes read-only
 
 ### Event membership rule
 
 A thread may be created only if:
 
-- both users are members of the circle that owns the event
+- both users are members of the clique that owns the event
 - the event is active
 
 ### Sender validation rule
@@ -314,7 +314,7 @@ A message send must fail if:
 - event is expired
 - thread is read-only / expired / deleted
 - sender is not one of the two participants
-- sender is no longer a valid member of the event's circle
+- sender is no longer a valid member of the event's clique
 
 ### Recipient validation rule
 
@@ -392,7 +392,7 @@ Request body:
 ```
 
 Behavior:
-- validate current user and target user are both circle members for the event
+- validate current user and target user are both clique members for the event
 - if thread already exists for this event + pair, return it
 - else create thread + 2 participant rows
 
@@ -464,29 +464,28 @@ Behavior:
 
 ## Web PubSub Design — Locked Direction
 
-## Channel / group model
+## Delivery model
 
-Use **thread-scoped groups**.
+Use **user-targeted delivery** via `sendToUser(recipientUserId, payload)`.
 
-Recommended group name format:
-
-```text
-dm-thread-{threadId}
-```
+This is simpler and more reliable than thread-scoped groups for 1:1 DMs:
+- No group membership management needed (no `addUser`/`removeUser` lifecycle)
+- Survives WebSocket reconnection without re-joining groups
+- One fewer server-side call per chat session
 
 When a user opens a thread:
 
-- client obtains negotiation token
-- client connects to Web PubSub
-- backend authorizes that user to join the specific thread group(s) they are permitted to access
+- client obtains negotiation token (includes userId claim)
+- client connects to Web PubSub via WebSocket (simple protocol, no subprotocol)
+- backend sends messages directly to the recipient's userId — no group subscription needed
 
-Do not let clients arbitrarily subscribe to any thread group.
+> **Previous approach (deprecated):** Thread-scoped groups (`dm-thread-{threadId}`) with `addUser`/`sendToAll`. This was fragile — if `addUserToThreadGroup` failed silently, the user never received messages. Switched to `sendToUser` in April 2026.
 
 ## Server event publishing
 
-When a message is created, the backend should publish an event to the specific thread group.
+When a message is created, the backend publishes directly to the recipient user via `sendToUser(recipientId, payload)`.
 
-Payload should include enough to render the message immediately, for example:
+Payload includes enough to render the message immediately:
 
 ```json
 {
@@ -497,6 +496,7 @@ Payload should include enough to render the message immediately, for example:
     "id": "uuid",
     "thread_id": "uuid",
     "sender_user_id": "uuid",
+    "sender_name": "Display Name",
     "body": "hello",
     "created_at": "2026-04-03T12:34:56Z"
   }
@@ -507,8 +507,9 @@ Payload should include enough to render the message immediately, for example:
 
 Keep it simple:
 
-- one user connection can receive events for the threads they are authorized to join
-- client should subscribe/unsubscribe as screens open/close if that is simpler than maintaining many joined groups
+- one WebSocket connection per user (singleton `DmRealtimeService`)
+- client filters incoming messages by `thread_id` to display in the active chat
+- on reconnect, the service re-negotiates a fresh URL (client access tokens expire after 1 hour)
 - do not implement presence yet
 - do not implement typing events yet
 
@@ -768,8 +769,8 @@ Implement in this order.
 ### Phase 3 — Realtime
 10. provision/configure Azure Web PubSub integration points
 11. add negotiate endpoint
-12. publish new message events to thread groups
-13. add Flutter realtime service and thread subscription behavior
+12. publish new message events to recipient via `sendToUser` (originally used thread groups, switched to user-targeted delivery)
+13. add Flutter realtime service with auto-reconnect and fresh URL negotiation
 
 ### Phase 4 — Notifications
 14. send FCM for DM messages

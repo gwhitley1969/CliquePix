@@ -6,17 +6,17 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_gradients.dart';
 import '../../../models/event_model.dart';
-import '../../../models/circle_model.dart';
+import '../../../models/clique_model.dart';
 import '../../../widgets/error_widget.dart';
 import '../../auth/domain/auth_state.dart';
 import '../../auth/presentation/auth_providers.dart';
 import '../../events/presentation/events_providers.dart';
-import '../../circles/presentation/circles_providers.dart';
+import '../../cliques/presentation/cliques_providers.dart';
 import 'widgets/how_it_works_card.dart';
 import 'widgets/active_event_card.dart';
-import 'widgets/circle_quick_start_chips.dart';
+import 'widgets/clique_quick_start_chips.dart';
 
-enum _HomeState { brandNew, hasCirclesNoActive, hasActiveEvents, onlyExpired }
+enum _HomeState { brandNew, hasCliquesNoActive, hasActiveEvents, onlyExpired }
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -63,14 +63,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
   }
 
-  _HomeState _computeState(List<EventModel> events, List<CircleModel> circles) {
+  _HomeState _computeState(List<EventModel> events, List<CliqueModel> cliques) {
     final activeEvents = events.where((e) => e.isActive).toList();
     if (activeEvents.isNotEmpty) return _HomeState.hasActiveEvents;
-    if (circles.isEmpty && events.isEmpty) return _HomeState.brandNew;
-    if (circles.isNotEmpty && activeEvents.isEmpty) {
-      return events.any((e) => e.isExpired) ? _HomeState.onlyExpired : _HomeState.hasCirclesNoActive;
+    if (cliques.isEmpty && events.isEmpty) return _HomeState.brandNew;
+    if (cliques.isNotEmpty && activeEvents.isEmpty) {
+      return events.any((e) => e.isExpired) ? _HomeState.onlyExpired : _HomeState.hasCliquesNoActive;
     }
-    // Events exist but no circles (shouldn't happen, but handle gracefully)
+    // Events exist but no cliques (shouldn't happen, but handle gracefully)
     return events.any((e) => e.isExpired) ? _HomeState.onlyExpired : _HomeState.brandNew;
   }
 
@@ -81,10 +81,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final eventsAsync = ref.watch(allEventsListProvider);
-    final circlesAsync = ref.watch(circlesListProvider);
+    final cliquesAsync = ref.watch(cliquesListProvider);
     final authState = ref.watch(authStateProvider);
 
     final userName = authState is AuthAuthenticated ? authState.user.displayName : '';
+
+    // Compute home state at build level so FAB can be conditionally hidden
+    _HomeState? homeState;
+    if (eventsAsync.hasValue && cliquesAsync.hasValue && _prefsLoaded) {
+      homeState = _computeState(eventsAsync.value!, cliquesAsync.value!);
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFF0E1525),
@@ -126,42 +132,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
 
           // Content — handle loading/error from both providers
-          _buildContent(eventsAsync, circlesAsync, userName),
+          _buildContent(eventsAsync, cliquesAsync, userName),
         ],
       ),
-      floatingActionButton: Container(
-        decoration: BoxDecoration(
-          gradient: AppGradients.primary,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.deepBlue.withValues(alpha: 0.4),
-              blurRadius: 16,
-              offset: const Offset(0, 6),
-            ),
-          ],
-        ),
-        child: FloatingActionButton.extended(
-          onPressed: () => context.go('/events/create'),
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          icon: const Icon(Icons.add_rounded, color: Colors.white, size: 22),
-          label: const Text(
-            'Create Event',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15),
-          ),
-        ),
-      ),
+      floatingActionButton: homeState == _HomeState.brandNew ? null : _buildFab(),
     );
   }
 
   Widget _buildContent(
     AsyncValue<List<EventModel>> eventsAsync,
-    AsyncValue<List<CircleModel>> circlesAsync,
+    AsyncValue<List<CliqueModel>> cliquesAsync,
     String userName,
   ) {
     // If either is loading, show loading
-    if (eventsAsync is AsyncLoading || circlesAsync is AsyncLoading || !_prefsLoaded) {
+    if (eventsAsync is AsyncLoading || cliquesAsync is AsyncLoading || !_prefsLoaded) {
       return const SliverFillRemaining(
         child: Center(child: CircularProgressIndicator(color: AppColors.electricAqua)),
       );
@@ -176,18 +160,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ),
       );
     }
-    if (circlesAsync is AsyncError) {
+    if (cliquesAsync is AsyncError) {
       return SliverFillRemaining(
         child: AppErrorWidget(
-          message: circlesAsync.error.toString(),
-          onRetry: () => ref.read(circlesListProvider.notifier).refresh(),
+          message: cliquesAsync.error.toString(),
+          onRetry: () => ref.read(cliquesListProvider.notifier).refresh(),
         ),
       );
     }
 
     final events = eventsAsync.value ?? [];
-    final circles = circlesAsync.value ?? [];
-    final homeState = _computeState(events, circles);
+    final cliques = cliquesAsync.value ?? [];
+    final homeState = _computeState(events, cliques);
 
     final activeEvents = events.where((e) => e.isActive).toList()
       ..sort((a, b) => a.expiresAt.compareTo(b.expiresAt));
@@ -197,12 +181,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     switch (homeState) {
       case _HomeState.brandNew:
         return _buildBrandNewState(userName);
-      case _HomeState.hasCirclesNoActive:
-        return _buildHasCirclesNoActive(circles, expiredEvents);
+      case _HomeState.hasCliquesNoActive:
+        return _buildHasCliquesNoActive(cliques, expiredEvents);
       case _HomeState.hasActiveEvents:
-        return _buildHasActiveEvents(userName, activeEvents, expiredEvents, circles);
+        return _buildHasActiveEvents(userName, activeEvents, expiredEvents, cliques);
       case _HomeState.onlyExpired:
-        return _buildOnlyExpired(circles, expiredEvents);
+        return _buildOnlyExpired(cliques, expiredEvents);
     }
   }
 
@@ -256,7 +240,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 12,
-                color: Colors.white.withValues(alpha: 0.3),
+                color: Colors.white.withValues(alpha: 0.55),
                 height: 1.5,
               ),
             ),
@@ -266,9 +250,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  // ── State B: Has circles, no active events ────────────────────────────
+  // ── State B: Has cliques, no active events ────────────────────────────
 
-  Widget _buildHasCirclesNoActive(List<CircleModel> circles, List<EventModel> expiredEvents) {
+  Widget _buildHasCliquesNoActive(List<CliqueModel> cliques, List<EventModel> expiredEvents) {
     return SliverPadding(
       padding: const EdgeInsets.fromLTRB(0, 16, 0, 100),
       sliver: SliverList(
@@ -290,13 +274,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Text(
-              'Pick a circle for your next event',
+              'Pick a clique for your next event',
               style: TextStyle(fontSize: 14, color: Colors.white.withValues(alpha: 0.45)),
             ),
           ),
           const SizedBox(height: 18),
-          // Circle chips
-          CircleQuickStartChips(circles: circles),
+          // Clique chips
+          CliqueQuickStartChips(cliques: cliques),
           const SizedBox(height: 28),
           // CTA
           Padding(
@@ -319,7 +303,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     String userName,
     List<EventModel> activeEvents,
     List<EventModel> expiredEvents,
-    List<CircleModel> circles,
+    List<CliqueModel> cliques,
   ) {
     return SliverPadding(
       padding: const EdgeInsets.fromLTRB(0, 12, 0, 100),
@@ -391,7 +375,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   // ── State D: Only expired events ──────────────────────────────────────
 
-  Widget _buildOnlyExpired(List<CircleModel> circles, List<EventModel> expiredEvents) {
+  Widget _buildOnlyExpired(List<CliqueModel> cliques, List<EventModel> expiredEvents) {
     return SliverPadding(
       padding: const EdgeInsets.fromLTRB(0, 16, 0, 100),
       sliver: SliverList(
@@ -423,18 +407,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               ],
             ),
           ),
-          // Circle chips (if they have circles)
-          if (circles.isNotEmpty) ...[
+          // Clique chips (if they have cliques)
+          if (cliques.isNotEmpty) ...[
             const SizedBox(height: 20),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Text(
-                'Pick a circle for your next event',
+                'Pick a clique for your next event',
                 style: TextStyle(fontSize: 14, color: Colors.white.withValues(alpha: 0.45)),
               ),
             ),
             const SizedBox(height: 12),
-            CircleQuickStartChips(circles: circles),
+            CliqueQuickStartChips(cliques: cliques),
           ],
           const SizedBox(height: 28),
           Padding(
@@ -452,6 +436,32 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   // ── Shared widgets ────────────────────────────────────────────────────
+
+  Widget _buildFab() {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: AppGradients.primary,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.deepBlue.withValues(alpha: 0.4),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: FloatingActionButton.extended(
+        onPressed: () => context.go('/events/create'),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        icon: const Icon(Icons.add_rounded, color: Colors.white, size: 22),
+        label: const Text(
+          'Create Event',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15),
+        ),
+      ),
+    );
+  }
 
   Widget _buildCreateEventCTA(String label) {
     return Container(

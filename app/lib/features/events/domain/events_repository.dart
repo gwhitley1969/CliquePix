@@ -5,8 +5,8 @@ class EventsRepository {
   final EventsApi api;
   EventsRepository(this.api);
 
-  Future<EventModel> createEvent(String circleId, String name, String? description, int retentionHours) async {
-    final data = await api.createEvent(circleId, name, description, retentionHours);
+  Future<EventModel> createEvent(String cliqueId, String name, String? description, int retentionHours) async {
+    final data = await api.createEvent(cliqueId, name, description, retentionHours);
     return EventModel.fromJson(data);
   }
 
@@ -15,8 +15,8 @@ class EventsRepository {
     return data.map((e) => EventModel.fromJson(e as Map<String, dynamic>)).toList();
   }
 
-  Future<List<EventModel>> listEvents(String circleId) async {
-    final data = await api.listEvents(circleId);
+  Future<List<EventModel>> listEvents(String cliqueId) async {
+    final data = await api.listEvents(cliqueId);
     return data.map((e) => EventModel.fromJson(e as Map<String, dynamic>)).toList();
   }
 

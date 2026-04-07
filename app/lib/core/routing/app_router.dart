@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../features/auth/presentation/login_screen.dart';
-import '../../features/circles/presentation/circles_list_screen.dart';
-import '../../features/circles/presentation/create_circle_screen.dart';
-import '../../features/circles/presentation/circle_detail_screen.dart';
-import '../../features/circles/presentation/invite_screen.dart';
-import '../../features/circles/presentation/join_circle_screen.dart';
+import '../../features/cliques/presentation/cliques_list_screen.dart';
+import '../../features/cliques/presentation/create_clique_screen.dart';
+import '../../features/cliques/presentation/clique_detail_screen.dart';
+import '../../features/cliques/presentation/invite_screen.dart';
+import '../../features/cliques/presentation/join_clique_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
 import '../../features/events/presentation/events_home_screen.dart';
 import '../../features/events/presentation/events_list_screen.dart';
@@ -16,6 +16,9 @@ import '../../features/photos/presentation/camera_capture_screen.dart';
 import '../../features/photos/presentation/photo_detail_screen.dart';
 import '../../features/notifications/presentation/notifications_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
+import '../../features/dm/presentation/dm_thread_list_screen.dart';
+import '../../features/dm/presentation/dm_chat_screen.dart';
+import '../../features/dm/presentation/dm_member_picker.dart';
 import '../../app/shell_screen.dart';
 import '../../features/auth/domain/auth_state.dart';
 import '../../features/auth/presentation/auth_providers.dart';
@@ -49,7 +52,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/invite/:inviteCode',
-        builder: (context, state) => JoinCircleScreen(
+        builder: (context, state) => JoinCliqueScreen(
           inviteCode: state.pathParameters['inviteCode']!,
         ),
       ),
@@ -68,7 +71,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                   GoRoute(
                     path: 'create',
                     builder: (context, state) => CreateEventScreen(
-                      circleId: state.uri.queryParameters['circleId'],
+                      cliqueId: state.uri.queryParameters['cliqueId'],
                     ),
                   ),
                   GoRoute(
@@ -79,33 +82,33 @@ final routerProvider = Provider<GoRouter>((ref) {
               ),
             ],
           ),
-          // Tab 2: Circles
+          // Tab 2: Cliques
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: '/circles',
-                builder: (context, state) => const CirclesListScreen(),
+                path: '/cliques',
+                builder: (context, state) => const CliquesListScreen(),
                 routes: [
                   GoRoute(
                     path: 'create',
-                    builder: (context, state) => const CreateCircleScreen(),
+                    builder: (context, state) => const CreateCliqueScreen(),
                   ),
                   GoRoute(
-                    path: ':circleId',
-                    builder: (context, state) => CircleDetailScreen(
-                      circleId: state.pathParameters['circleId']!,
+                    path: ':cliqueId',
+                    builder: (context, state) => CliqueDetailScreen(
+                      cliqueId: state.pathParameters['cliqueId']!,
                     ),
                     routes: [
                       GoRoute(
                         path: 'invite',
                         builder: (context, state) => InviteScreen(
-                          circleId: state.pathParameters['circleId']!,
+                          cliqueId: state.pathParameters['cliqueId']!,
                         ),
                       ),
                       GoRoute(
                         path: 'events',
                         builder: (context, state) => EventsListScreen(
-                          circleId: state.pathParameters['circleId']!,
+                          cliqueId: state.pathParameters['cliqueId']!,
                         ),
                       ),
                     ],
@@ -134,12 +137,30 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
         ],
       ),
+      // Top-level routes (outside shell for clean back-navigation)
+      GoRoute(
+        path: '/view-clique/:cliqueId',
+        builder: (context, state) => CliqueDetailScreen(
+          cliqueId: state.pathParameters['cliqueId']!,
+        ),
+      ),
+      GoRoute(
+        path: '/invite-to-clique/:cliqueId',
+        builder: (context, state) => InviteScreen(
+          cliqueId: state.pathParameters['cliqueId']!,
+        ),
+      ),
       // Event detail routes (outside shell for full-screen experience)
       GoRoute(
         path: '/events/:eventId',
-        builder: (context, state) => EventDetailScreen(
-          eventId: state.pathParameters['eventId']!,
-        ),
+        builder: (context, state) {
+          final extra = state.extra as Map<String, String>?;
+          return EventDetailScreen(
+            eventId: state.pathParameters['eventId']!,
+            promptInviteCliqueId: extra?['cliqueId'],
+            promptInviteCliqueName: extra?['cliqueName'],
+          );
+        },
         routes: [
           GoRoute(
             path: 'capture',
@@ -151,6 +172,26 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: 'photos/:photoId',
             builder: (context, state) => PhotoDetailScreen(
               photoId: state.pathParameters['photoId']!,
+            ),
+          ),
+          GoRoute(
+            path: 'dm-threads',
+            builder: (context, state) => DmThreadListScreen(
+              eventId: state.pathParameters['eventId']!,
+            ),
+          ),
+          GoRoute(
+            path: 'dm/new',
+            builder: (context, state) => DmMemberPickerScreen(
+              eventId: state.pathParameters['eventId']!,
+              cliqueId: state.uri.queryParameters['cliqueId'] ?? '',
+            ),
+          ),
+          GoRoute(
+            path: 'dm/:threadId',
+            builder: (context, state) => DmChatScreen(
+              threadId: state.pathParameters['threadId']!,
+              eventId: state.pathParameters['eventId']!,
             ),
           ),
         ],

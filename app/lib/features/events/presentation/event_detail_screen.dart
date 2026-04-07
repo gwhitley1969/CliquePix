@@ -13,7 +13,14 @@ import 'events_providers.dart';
 
 class EventDetailScreen extends ConsumerWidget {
   final String eventId;
-  const EventDetailScreen({super.key, required this.eventId});
+  final String? promptInviteCliqueId;
+  final String? promptInviteCliqueName;
+  const EventDetailScreen({
+    super.key,
+    required this.eventId,
+    this.promptInviteCliqueId,
+    this.promptInviteCliqueName,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -24,7 +31,12 @@ class EventDetailScreen extends ConsumerWidget {
       body: eventAsync.when(
         loading: () => const Center(child: CircularProgressIndicator(color: AppColors.electricAqua)),
         error: (err, _) => AppErrorWidget(message: err.toString()),
-        data: (event) => _EventDetailBody(event: event, eventId: eventId),
+        data: (event) => _EventDetailBody(
+          event: event,
+          eventId: eventId,
+          promptInviteCliqueId: promptInviteCliqueId,
+          promptInviteCliqueName: promptInviteCliqueName,
+        ),
       ),
     );
   }
@@ -33,7 +45,14 @@ class EventDetailScreen extends ConsumerWidget {
 class _EventDetailBody extends ConsumerStatefulWidget {
   final EventModel event;
   final String eventId;
-  const _EventDetailBody({required this.event, required this.eventId});
+  final String? promptInviteCliqueId;
+  final String? promptInviteCliqueName;
+  const _EventDetailBody({
+    required this.event,
+    required this.eventId,
+    this.promptInviteCliqueId,
+    this.promptInviteCliqueName,
+  });
 
   @override
   ConsumerState<_EventDetailBody> createState() => _EventDetailBodyState();
@@ -42,6 +61,35 @@ class _EventDetailBody extends ConsumerStatefulWidget {
 class _EventDetailBodyState extends ConsumerState<_EventDetailBody> {
   EventModel get event => widget.event;
   String get eventId => widget.eventId;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.promptInviteCliqueId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _showInvitePrompt();
+      });
+    }
+  }
+
+  void _showInvitePrompt() {
+    final cliqueId = widget.promptInviteCliqueId!;
+    final cliqueName = widget.promptInviteCliqueName ?? 'your clique';
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isDismissible: true,
+      enableDrag: true,
+      builder: (sheetContext) => _InvitePromptSheet(
+        cliqueName: cliqueName,
+        onInvite: () {
+          Navigator.pop(sheetContext);
+          context.push('/invite-to-clique/$cliqueId');
+        },
+        onSkip: () => Navigator.pop(sheetContext),
+      ),
+    );
+  }
 
   String get _timeRemaining {
     if (event.isExpired) return 'Expired';
@@ -88,7 +136,7 @@ class _EventDetailBodyState extends ConsumerState<_EventDetailBody> {
       try {
         await ref.read(eventsRepositoryProvider).deleteEvent(eventId);
         ref.invalidate(allEventsListProvider);
-        ref.invalidate(eventsListProvider(event.circleId));
+        ref.invalidate(eventsListProvider(event.cliqueId));
         if (mounted) {
           context.go('/events');
           ScaffoldMessenger.of(context).showSnackBar(
@@ -141,6 +189,17 @@ class _EventDetailBodyState extends ConsumerState<_EventDetailBody> {
           ),
           centerTitle: true,
           actions: [
+            IconButton(
+              icon: const Icon(Icons.group_rounded),
+              tooltip: 'View Clique',
+              onPressed: () => context.push('/view-clique/${event.cliqueId}'),
+            ),
+            if (event.isActive)
+              IconButton(
+                icon: const Icon(Icons.message_rounded),
+                tooltip: 'Messages',
+                onPressed: () => context.push('/events/$eventId/dm-threads'),
+              ),
             if (isOrganizer)
               IconButton(
                 icon: const Icon(Icons.delete_outline_rounded),
@@ -206,18 +265,23 @@ class _EventDetailBodyState extends ConsumerState<_EventDetailBody> {
                   ),
                 const SizedBox(height: 4),
 
-                // Circle name
-                if (event.circleName != null)
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.group_rounded, size: 14, color: colors[0].withValues(alpha: 0.6)),
-                      const SizedBox(width: 5),
-                      Text(
-                        event.circleName!,
-                        style: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.5)),
-                      ),
-                    ],
+                // Clique name
+                if (event.cliqueName != null)
+                  GestureDetector(
+                    onTap: () => context.push('/view-clique/${event.cliqueId}'),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.group_rounded, size: 14, color: colors[0].withValues(alpha: 0.7)),
+                        const SizedBox(width: 5),
+                        Text(
+                          event.cliqueName!,
+                          style: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.7)),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(Icons.chevron_right_rounded, size: 16, color: Colors.white.withValues(alpha: 0.5)),
+                      ],
+                    ),
                   ),
                 const SizedBox(height: 16),
 
@@ -276,6 +340,37 @@ class _EventDetailBodyState extends ConsumerState<_EventDetailBody> {
                     ),
                   ),
 
+                // Messages button
+                if (event.isActive) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    width: double.infinity,
+                    height: 50,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: AppColors.electricAqua.withValues(alpha: 0.4)),
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () => context.push('/events/$eventId/dm-threads'),
+                        borderRadius: BorderRadius.circular(14),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.message_rounded, color: AppColors.electricAqua, size: 20),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Messages',
+                              style: TextStyle(color: AppColors.electricAqua, fontWeight: FontWeight.w700, fontSize: 16),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+
                 const SizedBox(height: 8),
 
                 // Divider
@@ -290,6 +385,115 @@ class _EventDetailBodyState extends ConsumerState<_EventDetailBody> {
           child: EventFeedScreen(eventId: eventId),
         ),
       ],
+    );
+  }
+}
+
+class _InvitePromptSheet extends StatelessWidget {
+  final String cliqueName;
+  final VoidCallback onInvite;
+  final VoidCallback onSkip;
+
+  const _InvitePromptSheet({
+    required this.cliqueName,
+    required this.onInvite,
+    required this.onSkip,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Color(0xFF1A2035),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Drag handle
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(height: 24),
+          // Icon
+          Container(
+            width: 64,
+            height: 64,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: AppGradients.primary,
+            ),
+            child: const Icon(Icons.group_add_rounded, color: Colors.white, size: 32),
+          ),
+          const SizedBox(height: 20),
+          // Clique name
+          ShaderMask(
+            shaderCallback: (bounds) => AppGradients.primary.createShader(bounds),
+            child: Text(
+              cliqueName,
+              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Colors.white),
+              textAlign: TextAlign.center,
+            ),
+          ),
+          const SizedBox(height: 8),
+          // Message
+          Text(
+            'Your clique is ready! Invite friends so they can join your events and share photos together.',
+            style: TextStyle(fontSize: 15, color: Colors.white.withValues(alpha: 0.6), height: 1.4),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 28),
+          // Invite button
+          Container(
+            width: double.infinity,
+            height: 52,
+            decoration: BoxDecoration(
+              gradient: AppGradients.primary,
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.deepBlue.withValues(alpha: 0.3),
+                  blurRadius: 16,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: onInvite,
+                borderRadius: BorderRadius.circular(14),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.person_add_rounded, color: Colors.white, size: 20),
+                    SizedBox(width: 8),
+                    Text(
+                      'Invite Friends',
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          // Skip button
+          TextButton(
+            onPressed: onSkip,
+            child: Text(
+              'Skip for Now',
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 15, fontWeight: FontWeight.w500),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

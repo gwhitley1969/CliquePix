@@ -138,7 +138,7 @@ class EventsHomeScreen extends ConsumerWidget {
                           const SizedBox(height: 20),
                           Text(
                             'Events let you share photos with friends.\nPhotos auto-delete when the event ends.',
-                            style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.35), height: 1.5),
+                            style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.55), height: 1.5),
                             textAlign: TextAlign.center,
                           ),
                         ],
@@ -161,29 +161,31 @@ class EventsHomeScreen extends ConsumerWidget {
           ),
         ],
       ),
-      floatingActionButton: Container(
-        decoration: BoxDecoration(
-          gradient: AppGradients.primary,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.deepBlue.withValues(alpha: 0.4),
-              blurRadius: 16,
-              offset: const Offset(0, 6),
+      floatingActionButton: (eventsAsync.valueOrNull?.isEmpty ?? false)
+          ? null
+          : Container(
+              decoration: BoxDecoration(
+                gradient: AppGradients.primary,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.deepBlue.withValues(alpha: 0.4),
+                    blurRadius: 16,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: FloatingActionButton.extended(
+                onPressed: () => context.go('/events/create'),
+                backgroundColor: Colors.transparent,
+                elevation: 0,
+                icon: const Icon(Icons.add_rounded, color: Colors.white, size: 22),
+                label: const Text(
+                  'Create Event',
+                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15),
+                ),
+              ),
             ),
-          ],
-        ),
-        child: FloatingActionButton.extended(
-          onPressed: () => context.go('/events/create'),
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          icon: const Icon(Icons.add_rounded, color: Colors.white, size: 22),
-          label: const Text(
-            'Create Event',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15),
-          ),
-        ),
-      ),
     );
   }
 }
@@ -295,13 +297,13 @@ class _EventCard extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 4),
-                        if (event.circleName != null)
+                        if (event.cliqueName != null)
                           Row(
                             children: [
                               Icon(Icons.group_rounded, size: 13, color: colors[0].withValues(alpha: 0.6)),
                               const SizedBox(width: 4),
                               Text(
-                                event.circleName!,
+                                event.cliqueName!,
                                 style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.5)),
                               ),
                               if (event.memberCount != null) ...[

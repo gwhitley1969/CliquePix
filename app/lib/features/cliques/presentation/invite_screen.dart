@@ -6,15 +6,15 @@ import 'package:share_plus/share_plus.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_gradients.dart';
 import '../../../widgets/error_widget.dart';
-import 'circles_providers.dart';
+import 'cliques_providers.dart';
 
 class InviteScreen extends ConsumerWidget {
-  final String circleId;
-  const InviteScreen({super.key, required this.circleId});
+  final String cliqueId;
+  const InviteScreen({super.key, required this.cliqueId});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final circleAsync = ref.watch(circleDetailProvider(circleId));
+    final cliqueAsync = ref.watch(cliqueDetailProvider(cliqueId));
 
     return Scaffold(
       backgroundColor: const Color(0xFF0E1525),
@@ -27,13 +27,13 @@ class InviteScreen extends ConsumerWidget {
         ),
         centerTitle: true,
       ),
-      body: circleAsync.when(
+      body: cliqueAsync.when(
         loading: () => const Center(
           child: CircularProgressIndicator(color: AppColors.electricAqua),
         ),
         error: (err, _) => AppErrorWidget(message: err.toString()),
-        data: (circle) {
-          final inviteUrl = 'https://clique-pix.com/invite/${circle.inviteCode}';
+        data: (clique) {
+          final inviteUrl = 'https://clique-pix.com/invite/${clique.inviteCode}';
 
           return SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
@@ -43,7 +43,7 @@ class InviteScreen extends ConsumerWidget {
                 ShaderMask(
                   shaderCallback: (bounds) => AppGradients.primary.createShader(bounds),
                   child: Text(
-                    'Invite to ${circle.name}',
+                    'Invite to ${clique.name}',
                     style: const TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.w800,
@@ -96,7 +96,7 @@ class InviteScreen extends ConsumerWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        circle.inviteCode,
+                        clique.inviteCode,
                         style: const TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.w800,
@@ -157,7 +157,7 @@ class InviteScreen extends ConsumerWidget {
                     child: InkWell(
                       onTap: () {
                         Share.share(
-                          'Join my circle "${circle.name}" on Clique Pix!\n$inviteUrl',
+                          'Join my clique "${clique.name}" on Clique Pix!\n$inviteUrl',
                         );
                       },
                       borderRadius: BorderRadius.circular(14),

@@ -92,11 +92,15 @@ class PushNotificationService {
     try {
       final router = _ref.read(routerProvider);
       final eventId = data['event_id'] as String?;
-      final circleId = data['circle_id'] as String?;
-      if (eventId != null) {
+      final cliqueId = data['clique_id'] as String?;
+      final threadId = data['thread_id'] as String?;
+      final type = data['type'] as String?;
+      if (type == 'dm_message' && threadId != null && eventId != null) {
+        router.push('/events/$eventId/dm/$threadId');
+      } else if (eventId != null) {
         router.push('/events/$eventId');
-      } else if (circleId != null) {
-        router.push('/circles/$circleId');
+      } else if (cliqueId != null) {
+        router.push('/cliques/$cliqueId');
       }
     } catch (e) {
       debugPrint('[CliquePix] Notification navigation failed: $e');

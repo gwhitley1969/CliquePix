@@ -10,7 +10,7 @@ If anything in this file conflicts with PRD.md or ARCHITECTURE.md, this file tak
 
 ## Product Identity
 
-Clique Pix is a **private, event-based photo sharing** mobile app. Users create Circles (persistent groups), start Events (temporary photo sessions), and share photos that auto-expire from the cloud.
+Clique Pix is a **private, event-based photo sharing** mobile app. Users create Cliques (persistent groups), start Events (temporary photo sessions), and share photos that auto-expire from the cloud.
 
 **It is not** a social network, messaging app, content discovery platform, or photo editing suite.
 
@@ -19,7 +19,7 @@ Clique Pix is a **private, event-based photo sharing** mobile app. Users create 
 Every line of code must serve this loop:
 
 1. User signs in
-2. User creates an Event (picks or creates a Circle during creation)
+2. User creates an Event (picks or creates a Clique during creation)
 3. User takes or uploads a photo
 4. User edits the photo (crop, draw, stickers, filters)
 5. Photo is compressed on-device and uploaded directly to Blob Storage
@@ -38,9 +38,9 @@ If a feature does not directly support this loop, it does not belong in v1.
 
 - Authentication via Entra External ID (email OTP / magic link, minimal friction)
 - 5-layer token refresh defense for the Entra 12-hour timeout bug
-- Circles: create, join via invite link / SMS / QR, list, view members, leave
-- Deep linking for Circle invites (Universal Links on iOS, App Links on Android)
-- Events: create Event first (pick or create Circle during creation), duration locked to three presets (24h / 3 days / 7 days default), list, expire, manual deletion by event organizer (with confirmation dialog)
+- Cliques: create, join via invite link / SMS / QR, list, view members, leave
+- Deep linking for Clique invites (Universal Links on iOS, App Links on Android)
+- Events: create Event first (pick or create Clique during creation), duration locked to three presets (24h / 3 days / 7 days default), list, expire, manual deletion by event organizer (with confirmation dialog)
 - In-app camera capture
 - Upload from camera roll
 - Client-side image compression before upload (strip EXIF, resize to max 2048px, JPEG quality 80, convert HEIC to JPEG)
@@ -56,7 +56,7 @@ If a feature does not directly support this loop, it does not belong in v1.
 
 ### Do Not Build
 
-- Chat, comments, or threads
+- ~~Chat, comments, or threads~~ (event-centric 1:1 DMs implemented — no group chat, no global inbox, no attachments)
 - Followers / following
 - Public feeds or discovery
 - Custom photo editor UI (use `pro_image_editor` package — do not build editor from scratch)
@@ -68,7 +68,7 @@ If a feature does not directly support this loop, it does not belong in v1.
 - Read receipts or typing indicators
 - Stories or ephemeral content beyond the event model
 - Firebase backend services (Auth, Firestore, etc.) — FCM is used for push transport only
-- Redis, SignalR, Web PubSub, Service Bus, Notification Hubs
+- Redis, SignalR, Service Bus, Notification Hubs (Web PubSub is now used for DMs)
 
 ### When In Doubt
 
@@ -108,6 +108,7 @@ Do not introduce dependencies not listed here without discussing the tradeoff fi
 | Identity (infra) | System-assigned managed identity | Function App → Blob Storage, Key Vault |
 | Secrets | Azure Key Vault | DB connection string, FCM credentials |
 | Observability | Application Insights | Telemetry, errors, dependencies |
+| Realtime messaging | Azure Web PubSub | Real-time DM delivery via WebSocket |
 
 ### Architecture Pattern
 
@@ -135,7 +136,7 @@ Front Door and APIM are included from day one. This matches the production patte
       /data
       /domain
       /presentation
-    /circles              # Circle CRUD, invites, membership
+    /cliques              # Clique CRUD, invites, membership
       /data
       /domain
       /presentation
@@ -231,17 +232,17 @@ POST   /api/auth/verify
 GET    /api/users/me
 DELETE /api/users/me
 
-POST   /api/circles
-GET    /api/circles
-GET    /api/circles/{circleId}
-POST   /api/circles/{circleId}/invite
-POST   /api/circles/{circleId}/join
-GET    /api/circles/{circleId}/members
-DELETE /api/circles/{circleId}/members/me
-DELETE /api/circles/{circleId}/members/{userId}
+POST   /api/cliques
+GET    /api/cliques
+GET    /api/cliques/{cliqueId}
+POST   /api/cliques/{cliqueId}/invite
+POST   /api/cliques/{cliqueId}/join
+GET    /api/cliques/{cliqueId}/members
+DELETE /api/cliques/{cliqueId}/members/me
+DELETE /api/cliques/{cliqueId}/members/{userId}
 
-POST   /api/circles/{circleId}/events
-GET    /api/circles/{circleId}/events
+POST   /api/cliques/{cliqueId}/events
+GET    /api/cliques/{cliqueId}/events
 GET    /api/events/{eventId}
 DELETE /api/events/{eventId}
 
@@ -259,6 +260,14 @@ PATCH  /api/notifications/{notificationId}/read
 DELETE /api/notifications/{notificationId}
 DELETE /api/notifications
 POST   /api/push-tokens
+
+POST   /api/events/{eventId}/dm-threads
+GET    /api/events/{eventId}/dm-threads
+GET    /api/dm-threads/{threadId}
+GET    /api/dm-threads/{threadId}/messages
+POST   /api/dm-threads/{threadId}/messages
+PATCH  /api/dm-threads/{threadId}/read
+POST   /api/realtime/dm/negotiate
 ```
 
 ### Upload Flow
@@ -267,8 +276,8 @@ POST   /api/push-tokens
 
 1. Client compresses image (see Image Handling Pipeline)
 2. Client calls `POST /api/events/{eventId}/photos/upload-url`
-3. Function validates Entra token and confirms user is a member of the event's circle
-4. Function generates a photo ID and blob path (`photos/{circleId}/{eventId}/{photoId}/original.jpg`), creates a photo record with status `pending`
+3. Function validates Entra token and confirms user is a member of the event's clique
+4. Function generates a photo ID and blob path (`photos/{cliqueId}/{eventId}/{photoId}/original.jpg`), creates a photo record with status `pending`
 5. Function uses managed identity to request a **User Delegation Key**, generates a **write-only User Delegation SAS** scoped to that exact blob path, 5-minute expiry
 6. Function returns the SAS upload URL and photo ID to the client
 7. Client uploads compressed image directly to Blob Storage using the SAS URL
@@ -308,8 +317,8 @@ Error:
 {
   "data": null,
   "error": {
-    "code": "CIRCLE_NOT_FOUND",
-    "message": "The requested circle does not exist."
+    "code": "CLIQUE_NOT_FOUND",
+    "message": "The requested clique does not exist."
   }
 }
 ```
@@ -324,11 +333,11 @@ Use consistent error codes. Never return raw exception messages or stack traces 
 
 **users**: id (UUID PK), external_auth_id, display_name, email_or_phone, avatar_url (nullable), created_at, updated_at
 
-**circles**: id (UUID PK), name, invite_code (unique), created_by_user_id (FK → users), created_at, updated_at
+**cliques**: id (UUID PK), name, invite_code (unique), created_by_user_id (FK → users), created_at, updated_at
 
-**circle_members**: id (UUID PK), circle_id (FK), user_id (FK), role (owner/member), joined_at — unique constraint on (circle_id, user_id)
+**clique_members**: id (UUID PK), clique_id (FK), user_id (FK), role (owner/member), joined_at — unique constraint on (clique_id, user_id)
 
-**events**: id (UUID PK), circle_id (FK), name, description (nullable), created_by_user_id (FK), retention_hours (24/72/168 — three presets only), status (active/expired), created_at, expires_at (computed: created_at + retention_hours)
+**events**: id (UUID PK), clique_id (FK), name, description (nullable), created_by_user_id (FK), retention_hours (24/72/168 — three presets only), status (active/expired), created_at, expires_at (computed: created_at + retention_hours)
 
 **photos**: id (UUID PK, generated server-side at upload-url step), event_id (FK), uploaded_by_user_id (FK), blob_path, thumbnail_blob_path (nullable until generated), original_filename, mime_type (JPEG/PNG), width, height, file_size_bytes, status (pending/active/deleted), created_at, expires_at (inherits from event), deleted_at (nullable)
 
@@ -347,8 +356,8 @@ Use consistent error codes. Never return raw exception messages or stack traces 
 Single container named `photos` with virtual path hierarchy:
 
 ```
-photos/{circleId}/{eventId}/{photoId}/original.jpg
-photos/{circleId}/{eventId}/{photoId}/thumb.jpg
+photos/{cliqueId}/{eventId}/{photoId}/original.jpg
+photos/{cliqueId}/{eventId}/{photoId}/thumb.jpg
 ```
 
 ---
@@ -492,9 +501,9 @@ The Function never touches photo bytes during the upload flow. At the confirmati
 
 ---
 
-## Deep Linking — Circle Invites
+## Deep Linking — Clique Invites
 
-Circle invites are core to the product loop. When a user taps an invite link, the app must open directly to the invite acceptance screen.
+Clique invites are core to the product loop. When a user taps an invite link, the app must open directly to the invite acceptance screen.
 
 ### Link Format
 
@@ -522,7 +531,7 @@ Serve from Azure Front Door or a simple static web app. Static JSON files that r
 
 ### Flow
 
-1. **App installed:** open app, route to invite acceptance screen, call `POST /api/circles/{circleId}/join` with invite code
+1. **App installed:** open app, route to invite acceptance screen, call `POST /api/cliques/{cliqueId}/join` with invite code
 2. **App not installed:** open App Store / Play Store listing. Deferred deep linking is a post-v1 enhancement.
 
 ---
@@ -531,7 +540,7 @@ Serve from Azure Front Door or a simple static web app. Static JSON files that r
 
 ### API Authorization — Every Endpoint Must Enforce:
 - User is authenticated (valid Entra token verified by the Function)
-- User belongs to the circle/event they are accessing (membership check)
+- User belongs to the clique/event they are accessing (membership check)
 - User can only delete their own photos
 
 ### Blob Storage Access — RBAC + User Delegation SAS:
@@ -580,15 +589,18 @@ Serve from Azure Front Door or a simple static web app. Static JSON files that r
 
 ## Expiration & Cleanup
 
-### Photo Expiration
+### Event & Photo Expiration
 
 Timer-triggered Azure Function (every 15 minutes):
 
 1. Query photos where `expires_at < now()` and `status = 'active'`
 2. Delete blobs (original + thumbnail) via managed identity
 3. Update photo records: `status = 'deleted'`, `deleted_at = now()`
-4. If all photos in event are deleted, update event `status = 'expired'`
-5. Log `expired_photos_deleted` telemetry with count
+4. If all photos in event are deleted, mark event `status = 'expired'`
+5. Mark DM threads as `read_only` for expired events
+6. Delete any remaining blobs for expired events (safety net)
+7. **Hard-delete expired event records** — CASCADE removes photos, reactions, DM threads, and DM messages
+8. Log `expired_photos_deleted` and `expired_events_deleted` telemetry with counts
 
 ### Orphan Cleanup
 
@@ -601,7 +613,9 @@ Separate scheduled check:
 
 ### Important
 
-Device-saved copies remain untouched. Only cloud-managed copies are deleted. Users are notified 24 hours before expiration via push.
+- Device-saved copies remain untouched — only cloud-managed copies are deleted
+- Users are notified 24 hours before expiration via push
+- Expired events are fully removed from the database, not soft-deleted
 
 ---
 
@@ -615,17 +629,17 @@ FCM (Firebase Cloud Messaging) for push delivery to both Android and iOS. FCM is
 
 | Trigger | Notification Type | Recipients | Payload |
 |---------|------------------|------------|---------|
-| Photo uploaded to event | `new_photo` | All event circle members except uploader | `{ event_id, photo_id }` |
-| Someone joins a circle | `member_joined` | All existing circle members except joiner | `{ circle_id, circle_name, joined_user_name }` |
-| Event expiring in 24h | `event_expiring` | All event circle members | `{ event_id }` |
-| Event expired | `event_expired` | All event circle members | `{ event_id }` |
-| Event deleted by organizer | `event_deleted` | All circle members except deleter | `{ event_id, event_name }` |
+| Photo uploaded to event | `new_photo` | All event clique members except uploader | `{ event_id, photo_id }` |
+| Someone joins a clique | `member_joined` | All existing clique members except joiner | `{ clique_id, clique_name, joined_user_name }` |
+| Event expiring in 24h | `event_expiring` | All event clique members | `{ event_id }` |
+| Event expired | `event_expired` | All event clique members | `{ event_id }` |
+| Event deleted by organizer | `event_deleted` | All clique members except deleter | `{ event_id, event_name }` |
 
 **No notifications sent** for member removals or voluntary departures.
 
 ### Backend Flow
 
-1. Backend action (photo upload, circle join, timer) queries relevant members' push tokens
+1. Backend action (photo upload, clique join, timer) queries relevant members' push tokens
 2. Function sends push via FCM HTTP v1 API using `sendToMultipleTokens()` with `notification` + `data` payloads
 3. Function creates notification records in `notifications` table for in-app display
 4. Failed token sends trigger stale token cleanup
@@ -659,7 +673,7 @@ Created programmatically in `main.dart` at startup:
 
 All taps navigate via GoRouter using `data` payload:
 - `event_id` → `router.push('/events/$eventId')`
-- `circle_id` → `router.push('/circles/$circleId')`
+- `clique_id` → `router.push('/cliques/$cliqueId')`
 
 Foreground taps use a static callback: `main.dart` `onDidReceiveNotificationResponse` → `PushNotificationService.onNotificationTap` → GoRouter
 
@@ -669,11 +683,11 @@ Foreground taps use a static callback: `main.dart` `onDidReceiveNotificationResp
 
 ### v1 Approach
 
-- Push notification on new photo / circle join → user taps to open relevant screen
+- Push notification on new photo / clique join → user taps to open relevant screen
 - Refresh on app resume via `WidgetsBindingObserver` (`didChangeAppLifecycleState`)
 - Pull-to-refresh via `RefreshIndicator` on all list/detail screens
-- 30-second polling via `Timer.periodic` while circle list/detail screens are active
-- This pattern applies to: event feed, circles list, circle detail (members)
+- 30-second polling via `Timer.periodic` while clique list/detail screens are active
+- This pattern applies to: event feed, cliques list, clique detail (members)
 
 This is sufficient. Most photo sharing happens in bursts during active events. Do not introduce SignalR, Web PubSub, or event streaming for v1.
 
@@ -708,8 +722,8 @@ This is sufficient. Most photo sharing happens in bursts during active events. D
 
 ### Application Insights Telemetry Events
 
-- `circle_created`, `circle_joined`, `circle_left`
-- `event_created`, `event_expired`, `event_deleted`
+- `clique_created`, `clique_joined`, `clique_left`
+- `event_created`, `event_expired`, `event_deleted`, `expired_events_deleted`
 - `photo_upload_started`, `photo_upload_completed`, `photo_upload_failed`
 - `photo_saved_to_device`
 - `reaction_added`, `reaction_removed`
@@ -718,6 +732,8 @@ This is sufficient. Most photo sharing happens in bursts during active events. D
 - `orphaned_uploads_cleaned` (include count)
 - `token_refresh_success`, `token_refresh_failed` (include layer that triggered it)
 - `account_deleted`
+- `dm_thread_created`, `dm_message_sent`, `dm_message_send_failed`
+- `dm_push_sent`, `dm_thread_marked_read_only`
 
 ### Logging Rules
 - Always log: correlation IDs, error codes, function execution duration
@@ -740,12 +756,12 @@ Configure Dio with:
 ### Iteration Order
 1. **Scaffold** the full project structure and navigation shell
 2. **Auth flow** end-to-end (signup → login → token management → 5-layer refresh)
-3. **Circles** CRUD and invite flow with deep linking
+3. **Cliques** CRUD and invite flow with deep linking
 4. **Events** creation and listing with duration presets
 5. **Photo upload** pipeline (capture → compress → upload-url → blob upload → confirm)
 6. **Event feed** with thumbnails and real-time-ish updates
 7. **Reactions** and **save/download**
-8. **Push notifications** (FCM token registration, new photo alerts, circle join alerts, expiration alerts)
+8. **Push notifications** (FCM token registration, new photo alerts, clique join alerts, expiration alerts)
 9. **Auto-deletion** cleanup job and orphan cleanup
 10. **Polish** UI, transitions, error states, empty states
 
@@ -836,7 +852,7 @@ Bicep is preferred but must not delay the MVP. Manual deployment is acceptable f
 
 A user can:
 1. Sign up and log in with minimal friction
-2. Create a Circle and invite friends via link, SMS, or QR code
+2. Create a Clique and invite friends via link, SMS, or QR code
 3. Tap an invite link and land in the app at the right screen
 4. Start an Event with a chosen duration (24h / 3 days / 7 days)
 5. Take a photo or pick one from their gallery

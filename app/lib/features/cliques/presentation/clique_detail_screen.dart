@@ -9,19 +9,19 @@ import '../../../widgets/avatar_widget.dart';
 import '../../../widgets/error_widget.dart';
 import '../../auth/domain/auth_state.dart';
 import '../../auth/presentation/auth_providers.dart';
-import 'circles_providers.dart';
+import 'cliques_providers.dart';
 
-class CircleDetailScreen extends ConsumerStatefulWidget {
-  final String circleId;
-  const CircleDetailScreen({super.key, required this.circleId});
+class CliqueDetailScreen extends ConsumerStatefulWidget {
+  final String cliqueId;
+  const CliqueDetailScreen({super.key, required this.cliqueId});
 
   @override
-  ConsumerState<CircleDetailScreen> createState() => _CircleDetailScreenState();
+  ConsumerState<CliqueDetailScreen> createState() => _CliqueDetailScreenState();
 }
 
-class _CircleDetailScreenState extends ConsumerState<CircleDetailScreen>
+class _CliqueDetailScreenState extends ConsumerState<CliqueDetailScreen>
     with WidgetsBindingObserver {
-  String get circleId => widget.circleId;
+  String get cliqueId => widget.cliqueId;
   Timer? _pollTimer;
   bool _navigatingAway = false;
 
@@ -44,15 +44,15 @@ class _CircleDetailScreenState extends ConsumerState<CircleDetailScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      ref.invalidate(circleDetailProvider(circleId));
-      ref.invalidate(circleMembersProvider(circleId));
+      ref.invalidate(cliqueDetailProvider(cliqueId));
+      ref.invalidate(cliqueMembersProvider(cliqueId));
     }
   }
 
   Future<void> _refresh() async {
-    ref.invalidate(circleDetailProvider(circleId));
-    ref.invalidate(circleMembersProvider(circleId));
-    await ref.read(circleMembersProvider(circleId).future);
+    ref.invalidate(cliqueDetailProvider(cliqueId));
+    ref.invalidate(cliqueMembersProvider(cliqueId));
+    await ref.read(cliqueMembersProvider(cliqueId).future);
   }
 
   Future<void> _showRemoveMemberDialog(String memberName, String memberId) async {
@@ -63,7 +63,7 @@ class _CircleDetailScreenState extends ConsumerState<CircleDetailScreen>
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Remove Member', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
         content: Text(
-          'Remove $memberName from this circle?',
+          'Remove $memberName from this clique?',
           style: TextStyle(color: Colors.white.withValues(alpha: 0.7)),
         ),
         actions: [
@@ -81,8 +81,8 @@ class _CircleDetailScreenState extends ConsumerState<CircleDetailScreen>
 
     if (confirmed == true && mounted) {
       try {
-        await ref.read(circlesRepositoryProvider).removeMember(circleId, memberId);
-        ref.invalidate(circleMembersProvider(circleId));
+        await ref.read(cliquesRepositoryProvider).removeMember(cliqueId, memberId);
+        ref.invalidate(cliqueMembersProvider(cliqueId));
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('$memberName has been removed'), backgroundColor: const Color(0xFF1A2035)),
@@ -98,15 +98,15 @@ class _CircleDetailScreenState extends ConsumerState<CircleDetailScreen>
     }
   }
 
-  Future<void> _showLeaveCircleDialog(String circleName) async {
+  Future<void> _showLeaveCliqueDialog(String cliqueName) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF1A2035),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Leave Circle', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+        title: const Text('Leave Clique', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
         content: Text(
-          'Leave $circleName? You will no longer have access to its events and photos.',
+          'Leave $cliqueName? You will no longer have access to its events and photos.',
           style: TextStyle(color: Colors.white.withValues(alpha: 0.7)),
         ),
         actions: [
@@ -124,28 +124,28 @@ class _CircleDetailScreenState extends ConsumerState<CircleDetailScreen>
 
     if (confirmed == true && mounted) {
       try {
-        await ref.read(circlesRepositoryProvider).leaveCircle(circleId);
-        ref.invalidate(circlesListProvider);
-        if (mounted) context.go('/circles');
+        await ref.read(cliquesRepositoryProvider).leaveClique(cliqueId);
+        ref.invalidate(cliquesListProvider);
+        if (mounted) context.go('/cliques');
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to leave circle: $e'), backgroundColor: const Color(0xFFEF4444)),
+            SnackBar(content: Text('Failed to leave clique: $e'), backgroundColor: const Color(0xFFEF4444)),
           );
         }
       }
     }
   }
 
-  Future<void> _showDeleteCircleDialog(String circleName) async {
+  Future<void> _showDeleteCliqueDialog(String cliqueName) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF1A2035),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Delete Circle', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+        title: const Text('Delete Clique', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
         content: Text(
-          'Delete $circleName? This will permanently remove the circle and all its events and photos.',
+          'Delete $cliqueName? This will permanently remove the clique and all its events and photos.',
           style: TextStyle(color: Colors.white.withValues(alpha: 0.7)),
         ),
         actions: [
@@ -163,13 +163,13 @@ class _CircleDetailScreenState extends ConsumerState<CircleDetailScreen>
 
     if (confirmed == true && mounted) {
       try {
-        await ref.read(circlesRepositoryProvider).leaveCircle(circleId);
-        ref.invalidate(circlesListProvider);
-        if (mounted) context.go('/circles');
+        await ref.read(cliquesRepositoryProvider).leaveClique(cliqueId);
+        ref.invalidate(cliquesListProvider);
+        if (mounted) context.go('/cliques');
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to delete circle: $e'), backgroundColor: const Color(0xFFEF4444)),
+            SnackBar(content: Text('Failed to delete clique: $e'), backgroundColor: const Color(0xFFEF4444)),
           );
         }
       }
@@ -178,8 +178,8 @@ class _CircleDetailScreenState extends ConsumerState<CircleDetailScreen>
 
   @override
   Widget build(BuildContext context) {
-    final circleAsync = ref.watch(circleDetailProvider(circleId));
-    final membersAsync = ref.watch(circleMembersProvider(circleId));
+    final cliqueAsync = ref.watch(cliqueDetailProvider(cliqueId));
+    final membersAsync = ref.watch(cliqueMembersProvider(cliqueId));
 
     final authState = ref.watch(authStateProvider);
     final currentUserId = authState is AuthAuthenticated ? authState.user.id : null;
@@ -189,10 +189,10 @@ class _CircleDetailScreenState extends ConsumerState<CircleDetailScreen>
       appBar: AppBar(
         backgroundColor: const Color(0xFF0E1525),
         foregroundColor: Colors.white,
-        title: circleAsync.when(
+        title: cliqueAsync.when(
           data: (c) => Text(c.name, style: const TextStyle(fontWeight: FontWeight.w700)),
-          loading: () => const Text('Circle'),
-          error: (_, __) => const Text('Circle'),
+          loading: () => const Text('Clique'),
+          error: (_, __) => const Text('Clique'),
         ),
         centerTitle: true,
         actions: [
@@ -203,22 +203,22 @@ class _CircleDetailScreenState extends ConsumerState<CircleDetailScreen>
           ),
           IconButton(
             icon: const Icon(Icons.share_rounded),
-            onPressed: () => context.go('/circles/$circleId/invite'),
+            onPressed: () => context.go('/cliques/$cliqueId/invite'),
           ),
         ],
       ),
-      body: circleAsync.when(
+      body: cliqueAsync.when(
         loading: () => const Center(child: CircularProgressIndicator(color: AppColors.electricAqua)),
         error: (err, _) {
           if (!_navigatingAway && err is DioException && err.response?.statusCode == 404) {
             _navigatingAway = true;
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (mounted) {
-                ref.invalidate(circlesListProvider);
-                context.go('/circles');
+                ref.invalidate(cliquesListProvider);
+                context.go('/cliques');
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    content: Text('You are no longer a member of this circle'),
+                    content: Text('You are no longer a member of this clique'),
                     backgroundColor: Color(0xFF1A2035),
                   ),
                 );
@@ -228,9 +228,9 @@ class _CircleDetailScreenState extends ConsumerState<CircleDetailScreen>
           }
           return AppErrorWidget(message: err.toString());
         },
-        data: (circle) {
-          final isOwner = circle.createdByUserId == currentUserId;
-          final memberCount = membersAsync.valueOrNull?.length ?? circle.memberCount;
+        data: (clique) {
+          final isOwner = clique.createdByUserId == currentUserId;
+          final memberCount = membersAsync.valueOrNull?.length ?? clique.memberCount;
 
           return RefreshIndicator(
             color: AppColors.electricAqua,
@@ -246,7 +246,7 @@ class _CircleDetailScreenState extends ConsumerState<CircleDetailScreen>
                   Material(
                     color: Colors.transparent,
                     child: InkWell(
-                      onTap: () => context.go('/circles/$circleId/events'),
+                      onTap: () => context.go('/cliques/$cliqueId/events'),
                       borderRadius: BorderRadius.circular(16),
                       child: Container(
                         padding: const EdgeInsets.all(16),
@@ -430,7 +430,7 @@ class _CircleDetailScreenState extends ConsumerState<CircleDetailScreen>
                     child: Material(
                       color: Colors.transparent,
                       child: InkWell(
-                        onTap: () => context.go('/circles/$circleId/invite'),
+                        onTap: () => context.go('/cliques/$cliqueId/invite'),
                         borderRadius: BorderRadius.circular(14),
                         child: const Row(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -451,16 +451,16 @@ class _CircleDetailScreenState extends ConsumerState<CircleDetailScreen>
                   if (!isOwner) ...[
                     const SizedBox(height: 16),
                     _buildDestructiveButton(
-                      label: 'Leave Circle',
+                      label: 'Leave Clique',
                       icon: Icons.exit_to_app_rounded,
-                      onTap: () => _showLeaveCircleDialog(circle.name),
+                      onTap: () => _showLeaveCliqueDialog(clique.name),
                     ),
                   ] else if (isOwner && memberCount <= 1) ...[
                     const SizedBox(height: 16),
                     _buildDestructiveButton(
-                      label: 'Delete Circle',
+                      label: 'Delete Clique',
                       icon: Icons.delete_outline_rounded,
-                      onTap: () => _showDeleteCircleDialog(circle.name),
+                      onTap: () => _showDeleteCliqueDialog(clique.name),
                     ),
                   ],
                 ],

@@ -1,4 +1,4 @@
-class CircleModel {
+class CliqueModel {
   final String id;
   final String name;
   final String inviteCode;
@@ -6,7 +6,7 @@ class CircleModel {
   final int memberCount;
   final DateTime createdAt;
 
-  const CircleModel({
+  const CliqueModel({
     required this.id,
     required this.name,
     required this.inviteCode,
@@ -15,8 +15,8 @@ class CircleModel {
     required this.createdAt,
   });
 
-  factory CircleModel.fromJson(Map<String, dynamic> json) {
-    return CircleModel(
+  factory CliqueModel.fromJson(Map<String, dynamic> json) {
+    return CliqueModel(
       id: json['id'] as String,
       name: json['name'] as String,
       inviteCode: json['invite_code'] as String,
@@ -27,14 +27,14 @@ class CircleModel {
   }
 }
 
-class CircleMemberModel {
+class CliqueMemberModel {
   final String userId;
   final String displayName;
   final String? avatarUrl;
   final String role;
   final DateTime joinedAt;
 
-  const CircleMemberModel({
+  const CliqueMemberModel({
     required this.userId,
     required this.displayName,
     this.avatarUrl,
@@ -42,8 +42,8 @@ class CircleMemberModel {
     required this.joinedAt,
   });
 
-  factory CircleMemberModel.fromJson(Map<String, dynamic> json) {
-    return CircleMemberModel(
+  factory CliqueMemberModel.fromJson(Map<String, dynamic> json) {
+    return CliqueMemberModel(
       userId: json['user_id'] as String,
       displayName: json['display_name'] as String,
       avatarUrl: json['avatar_url'] as String?,

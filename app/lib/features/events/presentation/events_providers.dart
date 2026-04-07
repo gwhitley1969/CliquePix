@@ -30,9 +30,9 @@ class AllEventsNotifier extends AsyncNotifier<List<EventModel>> {
   }
 }
 
-final eventsListProvider = FutureProvider.family<List<EventModel>, String>((ref, circleId) async {
+final eventsListProvider = FutureProvider.family<List<EventModel>, String>((ref, cliqueId) async {
   final repo = ref.watch(eventsRepositoryProvider);
-  return repo.listEvents(circleId);
+  return repo.listEvents(cliqueId);
 });
 
 final eventDetailProvider = FutureProvider.family<EventModel, String>((ref, eventId) async {

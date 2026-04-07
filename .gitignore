@@ -54,6 +54,8 @@ local.settings.json
 !.env.example
 *.pem
 *.key
+*.p8
+AuthKey_*
 *.p12
 *.pfx
 google-services.json
@@ -61,6 +63,12 @@ GoogleService-Info.plist
 firebase_app_id_file.json
 firebase-service-account.json
 *-firebase-adminsdk-*.json
+
+# ----- Web deploy bundles -----
+website-deploy*.zip
+
+# ----- Local dev screenshots directory (optional convention) -----
+/screenshots/
 
 # ----- IDE -----
 .idea/

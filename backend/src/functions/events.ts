@@ -15,37 +15,37 @@ interface EventWithPhotoCount extends Event {
   created_by_name: string;
 }
 
-interface EventWithCircleName extends EventWithPhotoCount {
-  circle_name: string;
+interface EventWithCliqueName extends EventWithPhotoCount {
+  clique_name: string;
   member_count: number;
 }
 
-async function checkCircleMembership(circleId: string, userId: string): Promise<void> {
+async function checkCliqueMembership(cliqueId: string, userId: string): Promise<void> {
   const member = await queryOne(
-    'SELECT id FROM circle_members WHERE circle_id = $1 AND user_id = $2',
-    [circleId, userId],
+    'SELECT id FROM clique_members WHERE clique_id = $1 AND user_id = $2',
+    [cliqueId, userId],
   );
   if (!member) {
-    throw new ForbiddenError('You are not a member of this circle.');
+    throw new ForbiddenError('You are not a member of this clique.');
   }
 }
 
 async function createEvent(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   try {
     const authUser = await authenticateRequest(req);
-    const circleId = req.params.circleId;
+    const cliqueId = req.params.cliqueId;
 
-    if (!circleId || !isValidUUID(circleId)) {
-      throw new ValidationError('A valid circle ID is required.');
+    if (!cliqueId || !isValidUUID(cliqueId)) {
+      throw new ValidationError('A valid clique ID is required.');
     }
 
-    // Verify circle exists
-    const circle = await queryOne('SELECT id FROM circles WHERE id = $1', [circleId]);
-    if (!circle) {
-      throw new NotFoundError('circle');
+    // Verify clique exists
+    const clique = await queryOne('SELECT id FROM cliques WHERE id = $1', [cliqueId]);
+    if (!clique) {
+      throw new NotFoundError('clique');
     }
 
-    await checkCircleMembership(circleId, authUser.id);
+    await checkCliqueMembership(cliqueId, authUser.id);
 
     const body = (await req.json()) as Record<string, unknown>;
     const name = validateRequiredString(body.name, 'name', 100);
@@ -53,15 +53,15 @@ async function createEvent(req: HttpRequest, context: InvocationContext): Promis
     const retentionHours = validateRetentionHours(body.retention_hours);
 
     const event = await queryOne<Event>(
-      `INSERT INTO events (circle_id, name, description, created_by_user_id, retention_hours, status, expires_at)
+      `INSERT INTO events (clique_id, name, description, created_by_user_id, retention_hours, status, expires_at)
        VALUES ($1, $2, $3, $4, $5, 'active', NOW() + make_interval(hours => $5))
        RETURNING *`,
-      [circleId, name, description, authUser.id, retentionHours],
+      [cliqueId, name, description, authUser.id, retentionHours],
     );
 
     trackEvent('event_created', {
       eventId: event!.id,
-      circleId,
+      cliqueId,
       retentionHours: String(retentionHours),
       userId: authUser.id,
     });
@@ -75,19 +75,19 @@ async function createEvent(req: HttpRequest, context: InvocationContext): Promis
 async function listEvents(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   try {
     const authUser = await authenticateRequest(req);
-    const circleId = req.params.circleId;
+    const cliqueId = req.params.cliqueId;
 
-    if (!circleId || !isValidUUID(circleId)) {
-      throw new ValidationError('A valid circle ID is required.');
+    if (!cliqueId || !isValidUUID(cliqueId)) {
+      throw new ValidationError('A valid clique ID is required.');
     }
 
-    // Verify circle exists
-    const circle = await queryOne('SELECT id FROM circles WHERE id = $1', [circleId]);
-    if (!circle) {
-      throw new NotFoundError('circle');
+    // Verify clique exists
+    const clique = await queryOne('SELECT id FROM cliques WHERE id = $1', [cliqueId]);
+    if (!clique) {
+      throw new NotFoundError('clique');
     }
 
-    await checkCircleMembership(circleId, authUser.id);
+    await checkCliqueMembership(cliqueId, authUser.id);
 
     const events = await query<EventWithPhotoCount>(
       `SELECT e.*, u.display_name AS created_by_name,
@@ -95,10 +95,10 @@ async function listEvents(req: HttpRequest, context: InvocationContext): Promise
        FROM events e
        JOIN users u ON u.id = e.created_by_user_id
        LEFT JOIN photos p ON p.event_id = e.id AND p.status = 'active'
-       WHERE e.circle_id = $1
+       WHERE e.clique_id = $1
        GROUP BY e.id, u.display_name
        ORDER BY e.created_at DESC`,
-      [circleId],
+      [cliqueId],
     );
 
     return successResponse(events);
@@ -131,7 +131,7 @@ async function getEvent(req: HttpRequest, context: InvocationContext): Promise<H
       throw new NotFoundError('event');
     }
 
-    await checkCircleMembership(event.circle_id, authUser.id);
+    await checkCliqueMembership(event.clique_id, authUser.id);
 
     return successResponse(event);
   } catch (error) {
@@ -143,15 +143,15 @@ async function listAllEvents(req: HttpRequest, context: InvocationContext): Prom
   try {
     const authUser = await authenticateRequest(req);
 
-    const events = await query<EventWithCircleName>(
+    const events = await query<EventWithCliqueName>(
       `SELECT e.*,
-              c.name AS circle_name,
+              c.name AS clique_name,
               u.display_name AS created_by_name,
               COALESCE(COUNT(p.id), 0)::int AS photo_count,
-              (SELECT COUNT(*)::int FROM circle_members cm2 WHERE cm2.circle_id = e.circle_id) AS member_count
+              (SELECT COUNT(*)::int FROM clique_members cm2 WHERE cm2.clique_id = e.clique_id) AS member_count
        FROM events e
-       JOIN circle_members cm ON cm.circle_id = e.circle_id AND cm.user_id = $1
-       JOIN circles c ON c.id = e.circle_id
+       JOIN clique_members cm ON cm.clique_id = e.clique_id AND cm.user_id = $1
+       JOIN cliques c ON c.id = e.clique_id
        JOIN users u ON u.id = e.created_by_user_id
        LEFT JOIN photos p ON p.event_id = e.id AND p.status = 'active'
        GROUP BY e.id, c.name, u.display_name
@@ -186,7 +186,7 @@ async function deleteEvent(req: HttpRequest, context: InvocationContext): Promis
       throw new ForbiddenError('Only the event organizer can delete this event.');
     }
 
-    await checkCircleMembership(event.circle_id, authUser.id);
+    await checkCliqueMembership(event.clique_id, authUser.id);
 
     // Delete blobs BEFORE cascade DB delete (blobs are not auto-deleted)
     const photos = await query<{ blob_path: string; thumbnail_blob_path: string | null }>(
@@ -204,12 +204,12 @@ async function deleteEvent(req: HttpRequest, context: InvocationContext): Promis
     // CASCADE deletes photos and reactions
     await execute('DELETE FROM events WHERE id = $1', [eventId]);
 
-    // Notify circle members (except the deleter)
+    // Notify clique members (except the deleter)
     const tokens = await query<{ token: string }>(
       `SELECT pt.token FROM push_tokens pt
-       JOIN circle_members cm ON cm.user_id = pt.user_id
-       WHERE cm.circle_id = $1 AND pt.user_id != $2`,
-      [event.circle_id, authUser.id],
+       JOIN clique_members cm ON cm.user_id = pt.user_id
+       WHERE cm.clique_id = $1 AND pt.user_id != $2`,
+      [event.clique_id, authUser.id],
     );
 
     if (tokens.length > 0) {
@@ -224,9 +224,9 @@ async function deleteEvent(req: HttpRequest, context: InvocationContext): Promis
       await execute(
         `INSERT INTO notifications (id, user_id, type, payload_json)
          SELECT gen_random_uuid(), cm.user_id, 'event_deleted', $1::jsonb
-         FROM circle_members cm
-         WHERE cm.circle_id = $2 AND cm.user_id != $3`,
-        [JSON.stringify({ event_id: eventId, event_name: event.name }), event.circle_id, authUser.id],
+         FROM clique_members cm
+         WHERE cm.clique_id = $2 AND cm.user_id != $3`,
+        [JSON.stringify({ event_id: eventId, event_name: event.name }), event.clique_id, authUser.id],
       );
 
       if (failedTokens.length > 0) {
@@ -236,7 +236,7 @@ async function deleteEvent(req: HttpRequest, context: InvocationContext): Promis
 
     trackEvent('event_deleted', {
       eventId,
-      circleId: event.circle_id,
+      cliqueId: event.clique_id,
       userId: authUser.id,
       photoCount: String(photos.length),
     });
@@ -257,14 +257,14 @@ app.http('listAllEvents', {
 app.http('createEvent', {
   methods: ['POST'],
   authLevel: 'anonymous',
-  route: 'circles/{circleId}/events',
+  route: 'cliques/{cliqueId}/events',
   handler: createEvent,
 });
 
 app.http('listEvents', {
   methods: ['GET'],
   authLevel: 'anonymous',
-  route: 'circles/{circleId}/events',
+  route: 'cliques/{cliqueId}/events',
   handler: listEvents,
 });
 

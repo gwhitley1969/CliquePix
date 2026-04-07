@@ -5,9 +5,9 @@ class EventsApi {
   final Dio dio;
   EventsApi(this.dio);
 
-  Future<Map<String, dynamic>> createEvent(String circleId, String name, String? description, int retentionHours) async {
+  Future<Map<String, dynamic>> createEvent(String cliqueId, String name, String? description, int retentionHours) async {
     final response = await dio.post(
-      ApiEndpoints.circleEvents(circleId),
+      ApiEndpoints.cliqueEvents(cliqueId),
       data: {
         'name': name,
         'description': description,
@@ -22,8 +22,8 @@ class EventsApi {
     return response.data['data'] as List<dynamic>;
   }
 
-  Future<List<dynamic>> listEvents(String circleId) async {
-    final response = await dio.get(ApiEndpoints.circleEvents(circleId));
+  Future<List<dynamic>> listEvents(String cliqueId) async {
+    final response = await dio.get(ApiEndpoints.cliqueEvents(cliqueId));
     return response.data['data'] as List<dynamic>;
   }
 

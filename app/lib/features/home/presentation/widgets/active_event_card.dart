@@ -112,8 +112,8 @@ class ActiveEventCard extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 14),
-                  // Circle info row
-                  if (event.circleName != null)
+                  // Clique info row
+                  if (event.cliqueName != null)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 8),
                       child: Row(
@@ -121,7 +121,7 @@ class ActiveEventCard extends StatelessWidget {
                           Icon(Icons.group_rounded, size: 14, color: colors[0].withValues(alpha: 0.6)),
                           const SizedBox(width: 5),
                           Text(
-                            event.circleName!,
+                            event.cliqueName!,
                             style: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.6)),
                           ),
                           if (event.memberCount != null) ...[

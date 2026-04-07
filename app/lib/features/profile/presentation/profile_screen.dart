@@ -199,7 +199,7 @@ class ProfileScreen extends ConsumerWidget {
                             ),
                           );
                           if (confirm == true) {
-                            ref.read(authStateProvider.notifier).signOut();
+                            await ref.read(authStateProvider.notifier).signOut();
                           }
                         },
                       ),
@@ -223,7 +223,7 @@ class ProfileScreen extends ConsumerWidget {
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                               title: const Text('Delete Account?', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
                               content: Text(
-                                'This will permanently delete your account, remove you from all circles, and delete all your photos. This action cannot be undone.',
+                                'This will permanently delete your account, remove you from all cliques, and delete all your photos. This action cannot be undone.',
                                 style: TextStyle(color: Colors.white.withValues(alpha: 0.7)),
                               ),
                               actions: [

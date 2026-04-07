@@ -50,6 +50,7 @@ class AuthRepository {
 
     final result = await pca.acquireToken(
       scopes: _scopes,
+      prompt: Prompt.login,
       loginHint: loginHint,
     );
 
@@ -107,9 +108,10 @@ class AuthRepository {
     } catch (_) {
       // MSAL sign out may fail if no active session — continue cleanup
     }
-    await alarmRefreshService?.cancelRefresh();
-    await backgroundTokenService?.cancel();
-    await tokenStorage.clearAll();
+    _pca = null; // Force fresh PCA on next sign-in
+    try { await alarmRefreshService?.cancelRefresh(); } catch (_) {}
+    try { await backgroundTokenService?.cancel(); } catch (_) {}
+    try { await tokenStorage.clearAll(); } catch (_) {}
   }
 
   Future<void> deleteAccount() async {
@@ -119,9 +121,10 @@ class AuthRepository {
       final pca = await _getOrCreatePca();
       await pca.signOut();
     } catch (_) {}
-    await alarmRefreshService?.cancelRefresh();
-    await backgroundTokenService?.cancel();
-    await tokenStorage.clearAll();
+    _pca = null; // Force fresh PCA on next sign-in
+    try { await alarmRefreshService?.cancelRefresh(); } catch (_) {}
+    try { await backgroundTokenService?.cancel(); } catch (_) {}
+    try { await tokenStorage.clearAll(); } catch (_) {}
   }
 
   /// Clear MSAL cached account and force fresh PCA on next attempt.

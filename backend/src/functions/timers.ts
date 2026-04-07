@@ -51,6 +51,43 @@ async function cleanupExpired(myTimer: Timer, context: InvocationContext): Promi
     trackEvent('event_expired', { count: String(expiredEventRows.length) });
   }
 
+  // Mark DM threads as read_only for expired events
+  const dmReadOnlyCount = await execute(
+    `UPDATE event_dm_threads SET status = 'read_only'
+     WHERE status = 'active'
+     AND event_id IN (SELECT id FROM events WHERE status = 'expired')`,
+  );
+  if (dmReadOnlyCount > 0) {
+    trackEvent('dm_thread_marked_read_only', { count: String(dmReadOnlyCount) });
+  }
+
+  // Hard-delete expired events (CASCADE removes photos, reactions, DM threads/messages)
+  const expiredEvents = await query<{ id: string }>(
+    `SELECT id FROM events WHERE status = 'expired'`,
+  );
+
+  if (expiredEvents.length > 0) {
+    // Safety net: delete any remaining blobs before cascade-deleting DB records
+    for (const event of expiredEvents) {
+      const remainingPhotos = await query<{ blob_path: string; thumbnail_blob_path: string | null }>(
+        `SELECT blob_path, thumbnail_blob_path FROM photos WHERE event_id = $1`,
+        [event.id],
+      );
+      for (const photo of remainingPhotos) {
+        try {
+          await deleteBlob(photo.blob_path);
+          if (photo.thumbnail_blob_path) await deleteBlob(photo.thumbnail_blob_path);
+        } catch (_) { /* blob may already be deleted */ }
+      }
+    }
+
+    const deleteCount = await execute(
+      `DELETE FROM events WHERE status = 'expired'`,
+    );
+    trackEvent('expired_events_deleted', { count: String(deleteCount) });
+    context.log(`Deleted ${deleteCount} expired events`);
+  }
+
   trackEvent('expired_photos_deleted', { count: String(deletedCount) });
   context.log(`Cleaned up ${deletedCount} expired photos`);
 }
@@ -90,7 +127,7 @@ async function notifyExpiring(myTimer: Timer, context: InvocationContext): Promi
   context.log('Running expiration notification check');
 
   const expiringEvents = await query<any>(
-    `SELECT e.id, e.name, e.circle_id, e.expires_at
+    `SELECT e.id, e.name, e.clique_id, e.expires_at
      FROM events e
      WHERE e.status = 'active'
        AND e.expires_at > NOW() + INTERVAL '23 hours'
@@ -113,9 +150,9 @@ async function notifyExpiring(myTimer: Timer, context: InvocationContext): Promi
     try {
       const tokens = await query<{ token: string; user_id: string }>(
         `SELECT pt.token, pt.user_id FROM push_tokens pt
-         JOIN circle_members cm ON cm.user_id = pt.user_id
-         WHERE cm.circle_id = $1`,
-        [event.circle_id],
+         JOIN clique_members cm ON cm.user_id = pt.user_id
+         WHERE cm.clique_id = $1`,
+        [event.clique_id],
       );
 
       if (tokens.length > 0) {
