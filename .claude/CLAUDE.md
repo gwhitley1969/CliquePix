@@ -10,13 +10,15 @@ If anything in this file conflicts with PRD.md or ARCHITECTURE.md, this file tak
 
 ## Product Identity
 
-Clique Pix is a **private, event-based photo sharing** mobile app. Users create Cliques (persistent groups), start Events (temporary photo sessions), and share photos that auto-expire from the cloud.
+Clique Pix is a **private, event-based photo and video sharing** mobile app. Users create Cliques (persistent groups), start Events (temporary media sessions), and share photos and videos that auto-expire from the cloud.
 
 **It is not** a social network, messaging app, content discovery platform, or photo editing suite.
 
-### The Core Loop
+### The Core Loops
 
-Every line of code must serve this loop:
+Every line of code must serve one of these two loops. Photos and videos are both first-class media types but have asymmetric processing needs, so they have parallel sub-loops.
+
+#### Photo Loop
 
 1. User signs in
 2. User creates an Event (picks or creates a Clique during creation)
@@ -28,7 +30,21 @@ Every line of code must serve this loop:
 8. Members view, react, save to device, or share externally
 9. Photos auto-delete from the cloud after the event duration expires
 
-If a feature does not directly support this loop, it does not belong in v1.
+#### Video Loop
+
+1. User signs in
+2. User creates or opens an Event
+3. User captures (in-app camera) or uploads a video from device library
+4. Client-side validation (extension, duration ≤ 5 min, file size estimate). **No in-app editing in v1** — videos skip the editor entirely
+5. Video uploads to Blob Storage via resumable block uploads (native Azure multi-part)
+6. Backend validates server-side, dispatches transcoding to a Container Apps Job (FFmpeg container)
+7. Backend marks media as `processing` and renders a placeholder card in the event feed
+8. When transcoding completes, backend marks media as `ready`, poster is generated, push notification sent to event members
+9. Members tap the card to open the in-app player; playback streams via HLS with MP4 fallback
+10. Members can react, save to device, or share externally — same model as photos
+11. Video assets (original master + HLS delivery assets + MP4 fallback + poster) auto-delete with the event
+
+If a feature does not directly support one of these loops, it does not belong in v1.
 
 ---
 
@@ -36,23 +52,36 @@ If a feature does not directly support this loop, it does not belong in v1.
 
 ### Build These
 
+**Core + Photos (existing)**
 - Authentication via Entra External ID (email OTP / magic link, minimal friction)
 - 5-layer token refresh defense for the Entra 12-hour timeout bug
 - Cliques: create, join via invite link / SMS / QR, list, view members, leave
 - Deep linking for Clique invites (Universal Links on iOS, App Links on Android)
 - Events: create Event first (pick or create Clique during creation), duration locked to three presets (24h / 3 days / 7 days default), list, expire, manual deletion by event organizer (with confirmation dialog)
-- In-app camera capture
-- Upload from camera roll
+- In-app camera capture (photo + video)
+- Upload from camera roll (photo + video)
 - Client-side image compression before upload (strip EXIF, resize to max 2048px, JPEG quality 80, convert HEIC to JPEG)
 - Photo upload via User Delegation SAS (two-phase: get upload URL, then confirm)
-- Event feed: vertical scroll, large photo cards, user attribution, timestamp, thumbnails
-- Lightweight reactions: ❤️ 😂 🔥 😮 (unique constraint per user per photo per type)
-- Save individual photo to device, multi-select batch download with progress
+- Event feed: vertical scroll, large photo/video cards, user attribution, timestamp, thumbnails/posters
+- Lightweight reactions: ❤️ 😂 🔥 😮 (unique constraint per user per media item per type)
+- Save individual photo/video to device, multi-select batch download with progress
 - External share via native OS share sheet (no direct third-party API integrations)
 - Auto-deletion: timer-triggered cloud cleanup when event duration expires
-- Orphan cleanup: pending uploads not confirmed within 10 minutes
-- Push notifications via FCM: new photo added, event expiring in 24 hours
-- Thumbnail generation (async, blob-triggered or queue-triggered, 400px longest edge, JPEG quality 70)
+- Orphan cleanup: pending uploads not confirmed within 10 minutes (photos) / 30 minutes (videos — larger files need more time)
+- Push notifications via FCM: new photo added, new video ready, event expiring in 24 hours
+- Thumbnail generation (in-process `sharp`, 400px longest edge, JPEG quality 70)
+
+**Video (v1)**
+- Video upload: in-app camera recording and upload from device library
+- Client-side video validation: extension (MP4, MOV), duration ≤ 5 min, file size estimation
+- Server-side authoritative video validation: container, codec, duration, HDR metadata via ffprobe
+- Video transcoding pipeline: HDR→SDR normalization, max 1080p output, H.264 HLS package + MP4 fallback, poster frame extraction. Runs in Container Apps Job with FFmpeg container
+- Resumable video uploads using Azure Blob block uploads (4MB blocks, client-side block state persistence for resume-on-restart)
+- Video playback: in-app player using `video_player` + `chewie`, HLS preferred, MP4 fallback
+- Video processing-state UX: placeholder card in the event feed while transcoding, push notification + Web PubSub signal when ready
+- Processing-state propagation: Web PubSub `video_ready` event (foreground) + FCM push (backgrounded)
+- HLS delivery via User Delegation SAS: backend rewrites `.m3u8` manifests at request time with per-segment signed URLs (60s in-Function cache, 15-min SAS expiry per segment)
+- Video assets auto-delete with the event: original master + HLS package (prefix-delete) + MP4 fallback + poster
 
 ### Do Not Build
 
@@ -60,7 +89,15 @@ If a feature does not directly support this loop, it does not belong in v1.
 - Followers / following
 - Public feeds or discovery
 - Custom photo editor UI (use `pro_image_editor` package — do not build editor from scratch)
-- Video capture or playback
+- ~~Video capture or playback~~ (promoted to v1 — see Video Loop above and `docs/VIDEO_ARCHITECTURE_DECISIONS.md`)
+- Video editing (trim, crop, filters, captions, effects) — videos in v1 are upload-and-share, no in-app modification
+- 4K video delivery
+- HDR video playback preservation (HDR sources are normalized to SDR)
+- Live streaming
+- Video DM attachments (event DMs stay text-only)
+- Per-video adaptive bitrate ladders beyond what's required for reliable 1080p delivery (two-rung 720p+1080p is a post-v1 upgrade)
+- Background upload continuation when app is backgrounded (foreground service Android, `URLSession` iOS) — v1 requires keeping app open during video upload; block-upload resumability handles connection drops
+- True managed video services (Cloudflare Stream, Mux, Azure Media Services) — v1 is self-hosted on Azure Container Apps Jobs for data sovereignty
 - AI features of any kind
 - Monetization, subscriptions, or paywalls
 - Printed albums
@@ -68,7 +105,7 @@ If a feature does not directly support this loop, it does not belong in v1.
 - Read receipts or typing indicators
 - Stories or ephemeral content beyond the event model
 - Firebase backend services (Auth, Firestore, etc.) — FCM is used for push transport only
-- Redis, SignalR, Service Bus, Notification Hubs (Web PubSub is now used for DMs)
+- Redis, SignalR, Service Bus, Notification Hubs (Web PubSub is used for DMs and video processing-state push)
 
 ### When In Doubt
 
@@ -82,13 +119,15 @@ Leave it out. A missing feature can be added later. A cluttered v1 cannot be un-
 - **Flutter** (Dart) — single codebase for iOS and Android
 - **State management:** Riverpod
 - **HTTP client:** Dio
-- **Image picker:** image_picker
+- **Image picker:** image_picker (also handles video picking — unified media picker)
 - **Image compression:** flutter_image_compress
 - **Secure token storage:** flutter_secure_storage
 - **Non-sensitive flags:** shared_preferences
 - **Push notifications:** firebase_messaging (FCM transport only)
 - **Image caching:** cached_network_image
-- **Image editor:** pro_image_editor (^5.1.4 — crop, draw, stickers, filters, text). **Callback rule:** v5.x calls `onCloseEditor` after `onImageEditingComplete` completes. Only pop in `onCloseEditor`, never in `onImageEditingComplete`, or you get a double-pop.
+- **Image editor:** pro_image_editor (^5.1.4 — crop, draw, stickers, filters, text). **Callback rule:** v5.x calls `onCloseEditor` after `onImageEditingComplete` completes. Only pop in `onCloseEditor`, never in `onImageEditingComplete`, or you get a double-pop. **Photos only** — videos skip the editor in v1.
+- **Video player:** `video_player` (official) + `chewie` (UI controls). HLS via AVPlayer (iOS) and ExoPlayer (Android). Versions pinned during implementation.
+- **Video metadata probing (client-side validation):** `video_player` plus a small duration/dimension pre-check, or `video_compress` if deeper metadata is needed. Final choice locked during implementation.
 - **Deep links:** app_links
 - **QR code generation:** qr_flutter
 - **MSAL authentication:** msal_auth (^3.3.0, v2 embedding, custom API scope `access_as_user`)
@@ -101,20 +140,29 @@ Do not introduce dependencies not listed here without discussing the tradeoff fi
 |-------|---------|---------|
 | Entry point | Azure Front Door | Global load balancing, SSL termination, WAF |
 | API gateway | Azure API Management | Rate limiting, API versioning, policy enforcement |
-| Compute | Azure Functions (TypeScript, Node.js) | REST API, timer cleanup, thumbnail generation |
+| Compute (API) | Azure Functions (TypeScript, Node.js) | REST API, timer cleanup, photo thumbnail generation, video upload orchestration |
+| Compute (video transcode) | Azure Container Apps Jobs | Runs FFmpeg transcoder per-video (HDR→SDR, 1080p HLS package, MP4 fallback, poster). Scale-to-zero. See `docs/VIDEO_ARCHITECTURE_DECISIONS.md` Decision 0. |
+| Container registry | Azure Container Registry (Basic SKU) | Hosts the FFmpeg transcoder image (`acr-cliquepix` / `cracliquepix`) |
+| Job dispatch | Azure Storage Queue | Queues video transcoding jobs. Triggered by video upload-confirm endpoint; polled by Container Apps Job |
 | Database | PostgreSQL Flexible Server | Relational data |
-| Object storage | Azure Blob Storage | Photo originals and thumbnails |
+| Object storage | Azure Blob Storage | Photo and video originals, photo thumbnails, HLS segments, MP4 fallbacks, video posters |
 | Identity (consumer) | Microsoft Entra External ID | User auth (email OTP / magic link) |
-| Identity (infra) | System-assigned managed identity | Function App → Blob Storage, Key Vault |
+| Identity (infra) | System-assigned managed identity | Function App + Container Apps Job → Blob Storage, Key Vault |
 | Secrets | Azure Key Vault | DB connection string, FCM credentials |
-| Observability | Application Insights | Telemetry, errors, dependencies |
-| Realtime messaging | Azure Web PubSub | Real-time DM delivery via WebSocket |
+| Observability | Application Insights | Telemetry, errors, dependencies (shared by Function App and Container Apps Job) |
+| Realtime messaging | Azure Web PubSub | Real-time DM delivery + video processing-state push (`video_ready` event) via WebSocket |
 
 ### Architecture Pattern
 
 All API traffic flows: **Flutter → Front Door → APIM → Azure Functions → PostgreSQL / Blob Storage**
 
-No exceptions. No direct Function App URLs exposed to the client. APIM is the single published API surface.
+No exceptions for the API control plane. No direct Function App URLs exposed to the client. APIM is the single published API surface.
+
+**Async video transcoding path (control plane stays inside the pattern):**
+Function API endpoint (`POST /api/events/{eventId}/videos`) → enqueues message on Azure Storage Queue → Container Apps Job triggered → FFmpeg transcodes → Job calls back to internal Function endpoint with results → Function updates DB, pushes `video_ready` via Web PubSub + FCM. The client only talks to the Function API; the Container Apps Job is an internal backend component.
+
+**Video playback path:**
+Client calls `GET /api/videos/{videoId}/playback` → Function reads stored HLS manifest from Blob, rewrites segment URLs with fresh 15-minute User Delegation SAS per segment, returns rewritten manifest. Client plays HLS through `video_player`. Manifest is cached in-Function for 60 seconds to amortize blob reads across concurrent viewers.
 
 Front Door and APIM are included from day one. This matches the production pattern used in My AI Bartender and avoids the pain of retrofitting API gateway infrastructure after the fact.
 
@@ -144,7 +192,11 @@ Front Door and APIM are included from day one. This matches the production patte
       /data
       /domain
       /presentation
-    /photos               # Upload pipeline, feed, reactions, save, share
+    /photos               # Photo upload pipeline, feed, reactions, save, share
+      /data
+      /domain
+      /presentation
+    /videos               # Video upload (block-based), player, processing-state UI, save, share
       /data
       /domain
       /presentation
@@ -252,8 +304,19 @@ GET    /api/events/{eventId}/photos
 GET    /api/photos/{photoId}
 DELETE /api/photos/{photoId}
 
+POST   /api/events/{eventId}/videos/upload-url    # returns block-upload URLs + commit URL
+POST   /api/events/{eventId}/videos               # confirm upload, enqueue transcoding job
+GET    /api/events/{eventId}/videos
+GET    /api/videos/{videoId}                       # metadata + processing status
+GET    /api/videos/{videoId}/playback              # returns rewritten HLS manifest URL + MP4 fallback URL + poster URL (15-min SAS)
+DELETE /api/videos/{videoId}
+
+POST   /api/internal/video-processing-complete     # Container Apps Job callback (managed-identity authenticated)
+
 POST   /api/photos/{photoId}/reactions
 DELETE /api/photos/{photoId}/reactions/{reactionId}
+POST   /api/videos/{videoId}/reactions
+DELETE /api/videos/{videoId}/reactions/{reactionId}
 
 GET    /api/notifications
 PATCH  /api/notifications/{notificationId}/read
@@ -270,11 +333,11 @@ PATCH  /api/dm-threads/{threadId}/read
 POST   /api/realtime/dm/negotiate
 ```
 
-### Upload Flow
+### Photo Upload Flow
 
 **User Delegation SAS — RBAC-backed, no storage account keys.**
 
-1. Client compresses image (see Image Handling Pipeline)
+1. Client compresses image (see Media Handling Pipeline)
 2. Client calls `POST /api/events/{eventId}/photos/upload-url`
 3. Function validates Entra token and confirms user is a member of the event's clique
 4. Function generates a photo ID and blob path (`photos/{cliqueId}/{eventId}/{photoId}/original.jpg`), creates a photo record with status `pending`
@@ -283,17 +346,46 @@ POST   /api/realtime/dm/negotiate
 7. Client uploads compressed image directly to Blob Storage using the SAS URL
 8. Client calls `POST /api/events/{eventId}/photos` with photo ID and metadata (dimensions, MIME type)
 9. Function verifies blob exists, reads blob properties (content type, file size), updates photo record to status `active`
-10. Function triggers async thumbnail generation
+10. Function triggers async thumbnail generation (in-process via `sharp`)
 11. Function sends push notifications to event members
 12. Function returns complete photo record to client
 
 If the client does not confirm upload (step 8) within 10 minutes, the orphan cleanup process removes the blob and pending record.
 
+### Video Upload Flow
+
+**Multi-block upload via User Delegation SAS per block. No storage account keys. Resumable at block boundary.**
+
+1. Client performs local validation: extension (MP4/MOV), duration ≤ 5 min, approximate file size
+2. Client calls `POST /api/events/{eventId}/videos/upload-url` with video metadata (filename, size, duration)
+3. Function validates Entra token and clique membership, generates a video ID and blob path (`photos/{cliqueId}/{eventId}/{videoId}/original.mp4` — container name `photos` retained for all media), creates a `photos` table row with `media_type='video'` and `status='pending'`
+4. Function calculates block count = `ceil(file_size / 4MB)`, generates a **block-level write-only User Delegation SAS** for each block with a 30-minute expiry, returns the ordered array of block upload URLs + a commit URL
+5. Client uploads each 4MB block via individual HTTP PUT with retry-on-failure. Client persists block-success state to local storage as it goes — if the app is killed or connection drops, resume picks up at the next incomplete block
+6. On all blocks uploaded, client calls the commit URL: `POST /api/events/{eventId}/videos` with the video ID and its block list. Function calls `Put Block List` on blob storage to stitch the final blob
+7. Function runs server-side authoritative validation via ffprobe equivalent in a separate job step (queued alongside transcoding): container, codec, duration, HDR metadata. If validation fails, the video record is marked `rejected` and the blob is deleted
+8. Function enqueues a message on the transcoder Storage Queue with `{video_id, blob_path, event_id, clique_id}`
+9. Function marks the video row as `processing` and returns the record to the client
+10. **Container Apps Job** is triggered by the queue message, pulls the original blob via managed identity, runs FFmpeg:
+   - HDR→SDR normalization (if source is HDR)
+   - Downscale to max 1080p (preserves aspect ratio, no upscaling)
+   - Encode H.264 HLS with 4-second segments, single rendition (no ladder in v1)
+   - Produce MP4 fallback (single file, progressive download)
+   - Extract poster frame (first I-frame or 1-second mark)
+11. Container Apps Job writes HLS segments, manifest, MP4 fallback, and poster to blob storage at `photos/{cliqueId}/{eventId}/{videoId}/{hls/|fallback.mp4|poster.jpg}`
+12. Container Apps Job calls `POST /api/internal/video-processing-complete` with results (managed identity authenticated)
+13. Function updates video row to `status='active'`, stores manifest/fallback/poster blob paths, pushes `video_ready` event via Web PubSub + sends FCM push to event members
+14. Client receives push → navigates to event feed → video card transitions from placeholder to ready state
+
+If the client does not call the commit URL (step 6) within **30 minutes** (longer than photo's 10 min because video uploads take longer), the orphan cleanup process deletes any uploaded blocks and the pending record.
+
 **User Delegation SAS Rules:**
-- SAS expiry: 5 minutes maximum
+- Photo upload SAS expiry: 5 minutes maximum
+- Video block upload SAS expiry: 30 minutes (covers slow connections mid-upload)
+- Photo view SAS expiry: 5 minutes
+- Video HLS segment view SAS expiry: 15 minutes (covers longer playback sessions)
 - Upload SAS permissions: write-only (client cannot read, list, or delete)
-- View SAS permissions: read-only (client cannot write, list, or delete)
-- SAS scope: single blob path only, never container-level
+- View SAS permissions: read-only
+- SAS scope: single blob path only, never container-level, even for HLS (manifest rewriting signs each segment individually)
 - User Delegation Key: cache and reuse for up to 1 hour (valid for up to 7 days, but rotate frequently)
 
 ### Photo View / Download
@@ -301,6 +393,16 @@ If the client does not confirm upload (step 8) within 10 minutes, the orphan cle
 - Feed endpoints return photo metadata with short-lived read-only User Delegation SAS URLs for both thumbnail and original
 - Feed cards load thumbnails only
 - Full-size loads on photo detail view / full-screen tap
+
+### Video Playback
+
+- Feed endpoints return video metadata with: poster SAS URL, duration, processing status, and a `playback_url` pointing at `/api/videos/{videoId}/playback`
+- Feed cards show the poster image + duration overlay + play icon
+- Tapping a video opens the in-app player (`video_player` + `chewie`)
+- Player fetches the playback manifest by calling `/api/videos/{videoId}/playback` — Function reads the stored HLS manifest, rewrites each segment URL with a fresh 15-minute User Delegation SAS, returns the rewritten manifest
+- Player attempts HLS first; on any HLS failure, falls back to the MP4 progressive URL (also a fresh 15-minute SAS)
+- If the 15-minute SAS expires mid-playback (long session, paused for 20 minutes), the player errors → client re-calls `/playback` → receives a fresh manifest → reloads player at current position
+- Manifest rewrite cost is amortized by a 60-second in-Function cache keyed on `video_id`
 
 ### Response Format
 
@@ -339,26 +441,49 @@ Use consistent error codes. Never return raw exception messages or stack traces 
 
 **events**: id (UUID PK), clique_id (FK), name, description (nullable), created_by_user_id (FK), retention_hours (24/72/168 — three presets only), status (active/expired), created_at, expires_at (computed: created_at + retention_hours)
 
-**photos**: id (UUID PK, generated server-side at upload-url step), event_id (FK), uploaded_by_user_id (FK), blob_path, thumbnail_blob_path (nullable until generated), original_filename, mime_type (JPEG/PNG), width, height, file_size_bytes, status (pending/active/deleted), created_at, expires_at (inherits from event), deleted_at (nullable)
+**photos** (hosts both photo and video rows — the name is historical; will be renamed to `media` post-v1 once dust settles):
+- Core: id (UUID PK, generated server-side at upload-url step), event_id (FK), uploaded_by_user_id (FK), blob_path, original_filename, mime_type, width, height, file_size_bytes, status (pending/active/deleted/processing/rejected), created_at, expires_at (inherits from event), deleted_at (nullable)
+- **media_type** enum: `'photo' | 'video'` — NEW for video v1
+- Photo-specific: thumbnail_blob_path (nullable until generated)
+- Video-specific (all nullable for photo rows): duration_seconds, source_container (mp4/mov), source_video_codec (h264/hevc), source_audio_codec, is_hdr_source (boolean), normalized_to_sdr (boolean), hls_manifest_blob_path, mp4_fallback_blob_path, poster_blob_path, processing_status (pending/queued/running/complete/failed), processing_error (nullable text)
 
-**reactions**: id (UUID PK), photo_id (FK), user_id (FK), reaction_type (heart/laugh/fire/wow), created_at — unique constraint on (photo_id, user_id, reaction_type)
+**reactions**: id (UUID PK), media_id (FK → photos.id — works for both photos and videos since they share the table), user_id (FK), reaction_type (heart/laugh/fire/wow), created_at — unique constraint on (media_id, user_id, reaction_type)
 
 **push_tokens**: id (UUID PK), user_id (FK), platform (ios/android), token (FCM registration token), created_at, updated_at
 
-**notifications**: id (UUID PK), user_id (FK), type (new_photo/event_expiring/event_expired/member_joined/event_deleted), payload_json (JSONB), is_read (boolean, default false), created_at
+**notifications**: id (UUID PK), user_id (FK), type (new_photo/new_video/video_ready/event_expiring/event_expired/member_joined/event_deleted), payload_json (JSONB), is_read (boolean, default false), created_at
 
-### Photo Status Flow
+### Media Status Flow
 
-`pending` (upload-url issued) → `active` (client confirmed upload) → `deleted` (cleanup job ran)
+**Photo:** `pending` (upload-url issued) → `active` (client confirmed upload) → `deleted` (cleanup job ran)
+
+**Video:** `pending` (upload-url issued) → `processing` (blocks committed, transcoding in progress) → `active` (Container Apps Job reported success, manifest/fallback/poster stored) → `deleted` (cleanup job ran). Alternative terminal state: `rejected` (server-side ffprobe validation failed — bad codec, corrupt, etc.)
 
 ### Blob Storage
 
-Single container named `photos` with virtual path hierarchy:
+Single container named `photos` (hosts both photos and videos — name is historical) with virtual path hierarchy:
 
 ```
-photos/{cliqueId}/{eventId}/{photoId}/original.jpg
-photos/{cliqueId}/{eventId}/{photoId}/thumb.jpg
+photos/{cliqueId}/{eventId}/{photoId}/original.jpg         # photo original
+photos/{cliqueId}/{eventId}/{photoId}/thumb.jpg            # photo thumbnail
+
+photos/{cliqueId}/{eventId}/{videoId}/original.mp4         # video master (Cool tier)
+photos/{cliqueId}/{eventId}/{videoId}/hls/manifest.m3u8    # HLS playlist
+photos/{cliqueId}/{eventId}/{videoId}/hls/segment_000.ts   # HLS segments
+photos/{cliqueId}/{eventId}/{videoId}/hls/segment_001.ts
+...
+photos/{cliqueId}/{eventId}/{videoId}/fallback.mp4         # progressive MP4
+photos/{cliqueId}/{eventId}/{videoId}/poster.jpg           # video poster frame
 ```
+
+**Storage tiering:**
+- Photo originals + thumbnails: Hot tier (frequently read from feed)
+- Video HLS segments + MP4 fallback + poster: Hot tier (active playback)
+- Video originals (master): **Cool tier** — written once, read essentially never (only for reprocessing scenarios). Cool is ~50% cheaper than Hot for storage with a small per-read cost we'll basically never pay. Archive tier rejected due to retrieval latency.
+
+**Expiration cleanup:**
+- Photo cleanup: delete `original.jpg` + `thumb.jpg` (two blob deletes per photo)
+- Video cleanup: **prefix-delete** all blobs under `photos/{cliqueId}/{eventId}/{videoId}/` — this includes HLS manifest + all segments (possibly 30+ files) + MP4 fallback + poster + original master. The timer Function must enumerate and delete, not just target specific paths.
 
 ---
 
@@ -453,11 +578,11 @@ Full implementation details, code samples, and debug log tags are in `ENTRA_REFR
 
 ---
 
-## Image Handling Pipeline
+## Media Handling Pipeline
 
-Photo uploads are the most performance-critical path in Clique Pix. Uncompressed phone photos are 5–12MB each. Without client-side compression, a 10-photo event eats 50–120MB of Blob Storage and takes ages on mobile data.
+Media uploads are the most performance-critical path in Clique Pix. Photos and videos have radically different shapes — photos can be compressed cheaply client-side to 500KB–1.5MB, while videos are 50–150MB even after sensible encoding and must be transcoded server-side.
 
-### Client Side (Before Upload)
+### Photo Pipeline — Client Side (Before Upload)
 1. User selects or captures photo
 2. Strip EXIF data (removes GPS coordinates, device info, timestamps)
 3. Resize: longest edge max 2048px, maintain aspect ratio
@@ -466,7 +591,7 @@ Photo uploads are the most performance-critical path in Clique Pix. Uncompressed
 6. Reject files over 10MB after compression (safety net)
 7. Use `flutter_image_compress` for this pipeline
 
-### Why These Numbers
+### Photo Pipeline — Why These Numbers
 
 | Setting | Value | Rationale |
 |---------|-------|-----------|
@@ -475,7 +600,7 @@ Photo uploads are the most performance-critical path in Clique Pix. Uncompressed
 | Max file size | 10MB | Post-compression safety net. At 2048px / quality 80, photos land around 500KB–1.5MB. |
 | Format | JPEG | Universal compatibility. HEIC converted client-side. |
 
-### Server Side (After Client Upload to Blob)
+### Photo Pipeline — Server Side (After Client Upload to Blob)
 
 The Function never touches photo bytes during the upload flow. At the confirmation step:
 
@@ -484,20 +609,63 @@ The Function never touches photo bytes during the upload flow. At the confirmati
 3. Update photo metadata in PostgreSQL
 4. Trigger async thumbnail generation
 
-### Thumbnail Generation
+### Photo Thumbnail Generation
 
-- Triggered by blob upload event or queue message
-- Function reads original blob via managed identity (`DefaultAzureCredential`), generates a 400px longest edge / JPEG quality 70 thumbnail, writes it back to Blob Storage
-- Updates `thumbnail_blob_path` in photo record
+- Triggered inline (fire-and-forget async) inside the upload-confirm endpoint — see `backend/src/functions/photos.ts`
+- Function reads original blob via managed identity (`DefaultAzureCredential`), uses `sharp` to generate a 400px longest edge / JPEG quality 70 thumbnail, writes it back to Blob Storage
+- Updates `thumbnail_blob_path` in the record
 - Target thumbnail size: ~30–80KB
 - If thumbnail generation fails, the feed falls back to loading the original (slower but not broken)
 
+### Video Pipeline — Client Side (Before Upload)
+
+Videos cannot be meaningfully compressed on the client (mobile transcoding is slow, battery-killing, and unpredictable). The client's job is validation only.
+
+1. User selects or records video
+2. Extract basic metadata: extension, approximate duration, file size
+3. Reject if extension is not MP4 or MOV
+4. Reject if duration exceeds 5 minutes
+5. Show estimated upload time to the user ("~3 min on WiFi, ~12 min on LTE") before starting
+6. No EXIF-equivalent stripping in v1 — video metadata isn't stripped client-side (could be added later)
+
+### Video Pipeline — Why These Numbers
+
+| Setting | Value | Rationale |
+|---------|-------|-----------|
+| Max duration | 5 minutes | Matches the spec. Balances "long enough for meaningful moments" against transcoding cost and storage. |
+| Accepted containers | MP4, MOV | Covers 99% of phone captures. iPhone records MOV (QuickTime), Android records MP4. |
+| Accepted source codecs | H.264, HEVC | Modern phones default to H.264 or HEVC. Other codecs (VP9, AV1) rejected server-side. |
+| Max output resolution | 1080p | No 4K delivery in v1. Source above 1080p is downscaled; source below is not upscaled. |
+| Output codec | H.264 | Best compatibility across `video_player` platforms and HLS clients. |
+| HDR policy | Normalize to SDR | Consistent playback across devices; HDR preservation is a post-v1 concern. |
+
+### Video Pipeline — Server Side (After Client Commits Upload)
+
+1. Function verifies all blocks committed successfully (blob exists with expected size)
+2. Function enqueues a transcoding job on Azure Storage Queue
+3. **Container Apps Job** picks up the queue message and runs FFmpeg:
+   - ffprobe first: authoritative validation of container/codec/duration/HDR. Reject if invalid.
+   - `-c:v libx264 -preset medium -crf 23 -c:a aac -b:a 128k -vf scale=-2:min(ih\,1080)` (or similar locked parameters — see `docs/VIDEO_ARCHITECTURE_DECISIONS.md`)
+   - Produce HLS manifest + segments in a `hls/` subdirectory
+   - Produce progressive MP4 fallback
+   - Extract poster frame
+4. Container Apps Job writes all outputs to blob storage via managed identity
+5. Container Apps Job calls `POST /api/internal/video-processing-complete` with the results
+6. Function updates video row, pushes `video_ready` via Web PubSub + FCM
+
 ### Feed Display
 
+**Photos:**
 - Feed cards load thumbnails only
 - Full-size loads on photo detail view / full-screen tap
 - Use `cached_network_image` for client-side image caching
 - Placeholder shimmer animation while images load
+
+**Videos:**
+- Feed cards load posters only + duration overlay + play icon
+- Tap opens the in-app player (`video_player` + `chewie`)
+- While processing, card shows a placeholder with a spinner and "Processing…" label; transitions to the poster state when `video_ready` arrives (via Web PubSub or feed refresh)
+- Player prefers HLS; falls back to MP4 on HLS failure
 
 ---
 
@@ -589,33 +757,36 @@ Serve from Azure Front Door or a simple static web app. Static JSON files that r
 
 ## Expiration & Cleanup
 
-### Event & Photo Expiration
+### Event & Media Expiration
 
 Timer-triggered Azure Function (every 15 minutes):
 
-1. Query photos where `expires_at < now()` and `status = 'active'`
-2. Delete blobs (original + thumbnail) via managed identity
-3. Update photo records: `status = 'deleted'`, `deleted_at = now()`
-4. If all photos in event are deleted, mark event `status = 'expired'`
+1. Query media (photos + videos) where `expires_at < now()` and `status = 'active'`
+2. For each media row, delete associated blobs via managed identity:
+   - **Photo:** `blob_path` (original) + `thumbnail_blob_path` (thumbnail)
+   - **Video:** `blob_path` (original master), `mp4_fallback_blob_path`, `poster_blob_path`, plus **prefix-delete** all blobs under the HLS directory (`photos/{cliqueId}/{eventId}/{videoId}/hls/*` — may be 30+ segment files)
+3. Update media records: `status = 'deleted'`, `deleted_at = now()`
+4. If all media in an event are deleted, mark event `status = 'expired'`
 5. Mark DM threads as `read_only` for expired events
-6. Delete any remaining blobs for expired events (safety net)
-7. **Hard-delete expired event records** — CASCADE removes photos, reactions, DM threads, and DM messages
-8. Log `expired_photos_deleted` and `expired_events_deleted` telemetry with counts
+6. Delete any remaining blobs for expired events under `photos/{cliqueId}/{eventId}/*` (safety net covering both photo and video paths)
+7. **Hard-delete expired event records** — CASCADE removes photos, videos (same table), reactions, DM threads, and DM messages
+8. Log `expired_media_deleted` (with count split by type) and `expired_events_deleted` telemetry with counts
 
 ### Orphan Cleanup
 
-Separate scheduled check:
+Separate scheduled check (every 15 minutes):
 
-1. Query photos where `status = 'pending'` and `created_at < now() - 10 minutes`
-2. Delete orphaned blob if it exists
-3. Delete pending record
-4. Log `orphaned_uploads_cleaned` telemetry with count
+1. **Photos:** Query photos where `media_type = 'photo'` AND `status = 'pending'` AND `created_at < now() - 10 minutes`. Delete orphaned blob and pending record.
+2. **Videos:** Query photos where `media_type = 'video'` AND `status = 'pending'` AND `created_at < now() - 30 minutes`. Delete any uploaded blob/blocks and pending record. Longer window because video uploads take longer.
+3. **Video processing failures:** Query photos where `media_type = 'video'` AND `processing_status = 'failed'` AND `created_at < now() - 1 hour`. Prefix-delete any partially-written HLS outputs, delete the record.
+4. Log `orphaned_uploads_cleaned` and `failed_video_processing_cleaned` telemetry with counts
 
 ### Important
 
 - Device-saved copies remain untouched — only cloud-managed copies are deleted
 - Users are notified 24 hours before expiration via push
 - Expired events are fully removed from the database, not soft-deleted
+- Video expiration is more expensive than photo expiration because of the HLS prefix-delete — budget accordingly and batch deletes where possible
 
 ---
 
@@ -630,12 +801,19 @@ FCM (Firebase Cloud Messaging) for push delivery to both Android and iOS. FCM is
 | Trigger | Notification Type | Recipients | Payload |
 |---------|------------------|------------|---------|
 | Photo uploaded to event | `new_photo` | All event clique members except uploader | `{ event_id, photo_id }` |
+| Video upload started (processing) | *(no push — only feed placeholder update)* | — | — |
+| Video ready to play | `video_ready` | All event clique members except uploader | `{ event_id, video_id }` |
+| Video processing failed | `video_processing_failed` | Uploader only | `{ event_id, video_id, reason }` |
 | Someone joins a clique | `member_joined` | All existing clique members except joiner | `{ clique_id, clique_name, joined_user_name }` |
 | Event expiring in 24h | `event_expiring` | All event clique members | `{ event_id }` |
 | Event expired | `event_expired` | All event clique members | `{ event_id }` |
 | Event deleted by organizer | `event_deleted` | All clique members except deleter | `{ event_id, event_name }` |
 
-**No notifications sent** for member removals or voluntary departures.
+**No notifications sent** for member removals, voluntary departures, or video upload initiation (the feed placeholder card is enough signal to the uploader; other members are notified when the video is ready to play, not when it starts transcoding).
+
+**Video processing-state propagation has two channels:**
+- Foreground (app is running and connected to Web PubSub): backend pushes `video_ready` as a Web PubSub event → client updates the feed in-place without a push notification
+- Backgrounded/terminated: standard FCM push as `video_ready` type → tap navigates to the video in the event feed
 
 ### Backend Flow
 
@@ -674,6 +852,7 @@ Created programmatically in `main.dart` at startup:
 All taps navigate via GoRouter using `data` payload:
 - `event_id` → `router.push('/events/$eventId')`
 - `clique_id` → `router.push('/cliques/$cliqueId')`
+- `video_id` + `event_id` (from `video_ready`) → `router.push('/events/$eventId?mediaId=$videoId')` (deep-links into the event feed scrolled to the video)
 
 Foreground taps use a static callback: `main.dart` `onDidReceiveNotificationResponse` → `PushNotificationService.onNotificationTap` → GoRouter
 
@@ -696,10 +875,14 @@ This is sufficient. Most photo sharing happens in bursts during active events. D
 ## Performance Expectations
 
 - Photo capture to visible in feed: < 5 seconds on good connectivity
-- Feed scroll: 60fps, no jank
+- Video upload completion to transcoding job started: < 10 seconds after client commits (queue dispatch latency)
+- Video transcoding completion for 5-minute 1080p source: **target ≤ 5 minutes**, hard ceiling ≤ 15 minutes (Container Apps Job timeout)
+- Video processing-complete notification to visible "ready" state in feed: < 5 seconds
+- Video playback start (tap to first frame): < 3 seconds on WiFi, < 6 seconds on LTE
+- Feed scroll: 60fps, no jank (poster images only on feed cards, full video only loads on tap)
 - App cold start to usable: < 3 seconds
-- Thumbnail loads: < 500ms on 4G
-- Never block the UI thread with image processing or network calls
+- Thumbnail / poster loads: < 500ms on 4G
+- Never block the UI thread with image processing, video decoding, or network calls
 
 ---
 
@@ -722,22 +905,47 @@ This is sufficient. Most photo sharing happens in bursts during active events. D
 
 ### Application Insights Telemetry Events
 
+**Cliques, Events, Auth, Notifications:**
 - `clique_created`, `clique_joined`, `clique_left`
 - `event_created`, `event_expired`, `event_deleted`, `expired_events_deleted`
-- `photo_upload_started`, `photo_upload_completed`, `photo_upload_failed`
-- `photo_saved_to_device`
-- `reaction_added`, `reaction_removed`
-- `notification_sent`, `notification_send_failed`
-- `expired_photos_deleted` (include count)
-- `orphaned_uploads_cleaned` (include count)
 - `token_refresh_success`, `token_refresh_failed` (include layer that triggered it)
 - `account_deleted`
+- `notification_sent`, `notification_send_failed`
+
+**Photos:**
+- `photo_upload_started`, `photo_upload_completed`, `photo_upload_failed`
+- `photo_saved_to_device`
+- `expired_photos_deleted` (include count)
+- `orphaned_uploads_cleaned` (include count)
+
+**Videos (new in v1):**
+- `video_upload_started` (with file_size_bytes, source_duration_seconds, source_container)
+- `video_upload_block_failed` (with block_index, retry_count) — fires per block, not per video
+- `video_upload_committed` (with total_block_count, total_time_seconds)
+- `video_upload_failed` (with reason)
+- `video_validation_rejected` (with reason: duration / container / codec / corrupt)
+- `video_transcoding_queued`
+- `video_transcoding_started` (Container Apps Job begins)
+- `video_transcoding_completed` (with duration_seconds, output_size_bytes)
+- `video_transcoding_failed` (with error_class, ffmpeg_exit_code)
+- `video_played` (with playback_mode: hls | mp4_fallback)
+- `video_playback_stall` (with position_seconds, reason)
+- `video_saved_to_device`
+- `video_hls_manifest_cache_hit`, `video_hls_manifest_cache_miss` — track cache effectiveness
+- `expired_video_hls_prefix_deleted` (with blob_count, total_bytes)
+- `failed_video_processing_cleaned` (with count)
+
+**Reactions (shared across media types):**
+- `reaction_added`, `reaction_removed` (with media_type)
+
+**DMs:**
 - `dm_thread_created`, `dm_message_sent`, `dm_message_send_failed`
 - `dm_push_sent`, `dm_thread_marked_read_only`
 
 ### Logging Rules
 - Always log: correlation IDs, error codes, function execution duration
-- Never log: auth tokens, storage credentials, user PII, raw photo content
+- Never log: auth tokens, storage credentials, user PII, raw photo/video bytes
+- Container Apps Job logs flow to the same App Insights instance as the Function App via the `APPLICATIONINSIGHTS_CONNECTION_STRING` env var set on the job
 
 ---
 
@@ -763,7 +971,20 @@ Configure Dio with:
 7. **Reactions** and **save/download**
 8. **Push notifications** (FCM token registration, new photo alerts, clique join alerts, expiration alerts)
 9. **Auto-deletion** cleanup job and orphan cleanup
-10. **Polish** UI, transitions, error states, empty states
+10. **Event DMs** (done — 1:1 chat per event, Web PubSub delivery)
+11. **Video v1** — backend first:
+    1. Schema migration (media_type + video columns on photos table)
+    2. ACR provisioned, FFmpeg container image built + pushed
+    3. Container Apps Environment + Job provisioned
+    4. Storage Queue for transcoder dispatch
+    5. Video upload-url endpoint (block SAS generation)
+    6. Video upload-confirm endpoint (queue dispatch)
+    7. Video processing-complete callback endpoint
+    8. Video playback endpoint with manifest rewriting
+    9. Timer Function updates for prefix-delete on video expiration
+    10. Flutter client: video upload (block-based, resumable) + player + processing-state UI
+    11. Push notification wiring for video_ready
+12. **Polish** UI, transitions, error states, empty states
 
 Do not perfect one screen before the next exists. Get the full loop working end-to-end first, then refine.
 
@@ -808,32 +1029,49 @@ Use Flutter flavor/environment mechanisms. Do not hardcode environment-specific 
 | Key Vault | `kv-cliquepix-{env}` |
 | Front Door | `fd-cliquepix-prod` |
 | APIM | `apim-cliquepix-002` |
+| Web PubSub | `wps-cliquepix-prod` |
+| Container Registry | `cracliquepix` (ACR names disallow hyphens) — **new for video v1** |
+| Container Apps Environment | `cae-cliquepix-prod` — **new for video v1** |
+| Container Apps Job (transcoder) | `caj-cliquepix-transcoder` — **new for video v1** |
+| Storage Queue (transcoder dispatch) | `video-transcode-queue` inside `stcliquepixprod` — **new for video v1** |
 
 ### Managed Identity & RBAC Role Assignments
 
-Function App system-assigned managed identity requires:
+**Function App** system-assigned managed identity requires:
 
 | Role | Scope | Purpose |
 |------|-------|---------|
-| `Storage Blob Data Contributor` | Storage account | Server-side blob read/write/delete (thumbnails, cleanup, validation) |
+| `Storage Blob Data Contributor` | Storage account | Server-side blob read/write/delete (thumbnails, cleanup, validation, HLS manifest read for playback rewriting) |
 | `Storage Blob Delegator` | Storage account | Generate User Delegation Keys for SAS tokens |
+| `Storage Queue Data Contributor` | Storage account | Enqueue video transcoding jobs on `video-transcode-queue` |
 | `Key Vault Secrets User` | Key Vault | Read connection strings and credentials |
 
-No storage account keys anywhere. `allowSharedKeyAccess: false` on the storage account. Use `DefaultAzureCredential` in all Azure SDK calls. PostgreSQL connection string stored in Key Vault, referenced via Key Vault reference in Function App settings.
+**Container Apps Job (transcoder)** system-assigned managed identity requires:
+
+| Role | Scope | Purpose |
+|------|-------|---------|
+| `Storage Blob Data Contributor` | Storage account | Read video originals, write HLS manifest/segments, MP4 fallback, poster |
+| `Storage Queue Data Message Processor` | Storage account | Dequeue and process transcoding job messages |
+| `AcrPull` | Container Registry | Pull the FFmpeg transcoder image |
+| *(Callback auth to Function)* | — | Via managed identity token for the Function App's audience — Function validates the caller's managed identity token on `/api/internal/video-processing-complete` |
+
+No storage account keys anywhere. `allowSharedKeyAccess: false` on the storage account. Use `DefaultAzureCredential` in all Azure SDK calls (Function App Node.js + Container Apps Job Python/Node). PostgreSQL connection string stored in Key Vault, referenced via Key Vault reference in Function App settings.
 
 ### Key Vault Contents
 
 Store in Key Vault:
 - PostgreSQL connection string
 - FCM server key / service account credentials
+- Web PubSub connection string (or use managed identity once WPS supports it fully)
 
 Not stored (managed identity eliminates the need):
 - Storage account keys (disabled entirely)
 - Storage account connection strings
+- ACR credentials (Container Apps Job uses AcrPull via managed identity)
 
 ### IaC
 
-Bicep is preferred but must not delay the MVP. Manual deployment is acceptable for initial setup — document what was provisioned.
+Bicep is preferred but must not delay the MVP. Manual deployment is acceptable for initial setup — document what was provisioned. The video v1 infrastructure additions (ACR, Container Apps Environment, Container Apps Job, Storage Queue) should be captured in Bicep during implementation.
 
 ---
 
@@ -855,15 +1093,17 @@ A user can:
 2. Create a Clique and invite friends via link, SMS, or QR code
 3. Tap an invite link and land in the app at the right screen
 4. Start an Event with a chosen duration (24h / 3 days / 7 days)
-5. Take a photo or pick one from their gallery
+5. Take a photo or record a video, or pick either from their gallery
 6. See the photo appear in the event feed within seconds
-7. React to others' photos
-8. Save a photo to their device
-9. Share a photo externally via the OS share sheet
-10. Receive push notifications when new photos are added
-11. See photos automatically disappear from the cloud when the event expires
+7. See the video upload reliably (even with connection drops), show a processing placeholder, then transition to playable within minutes
+8. Play back a video cleanly via HLS with MP4 fallback
+9. React to others' photos and videos
+10. Save a photo or video to their device
+11. Share a photo or video externally via the OS share sheet
+12. Receive push notifications when new photos are added and when videos finish processing
+13. See photos and videos automatically disappear from the cloud when the event expires
 
-If all eleven of these work cleanly on both iOS and Android, v1 is done.
+If all thirteen of these work cleanly on both iOS and Android, v1 is done.
 
 ---
 
@@ -871,6 +1111,9 @@ If all eleven of these work cleanly on both iOS and Android, v1 is done.
 
 | Document | Purpose |
 |----------|---------|
-| `PRD.md` | Product requirements, feature definitions, UX principles, branding |
-| `ARCHITECTURE.md` | Full technical architecture, data model, security, deployment strategy |
-| `ENTRA_REFRESH_TOKEN_WORKAROUND.md` | Complete 5-layer token refresh implementation (code samples, debug tags, test procedures) |
+| `docs/PRD.md` | Product requirements, feature definitions, UX principles, branding |
+| `docs/ARCHITECTURE.md` | Full technical architecture, data model, security, deployment strategy |
+| `docs/ENTRA_REFRESH_TOKEN_WORKAROUND.md` | Complete 5-layer token refresh implementation (code samples, debug tags, test procedures) |
+| `docs/EVENT_DM_CHAT_ARCHITECTURE.md` | Event-centric 1:1 DM design: Web PubSub delivery, schema, auth rules |
+| `docs/CliquePix_Video_Feature_Spec.md` | Generic video feature spec (handoff doc — requirements, acceptance criteria) |
+| `docs/VIDEO_ARCHITECTURE_DECISIONS.md` | CliquePix-specific video architecture decisions: transcoder host, HLS SAS delivery, schema, player, upload UX |
