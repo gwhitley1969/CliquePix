@@ -142,7 +142,7 @@ Do not introduce dependencies not listed here without discussing the tradeoff fi
 | API gateway | Azure API Management | Rate limiting, API versioning, policy enforcement |
 | Compute (API) | Azure Functions (TypeScript, Node.js) | REST API, timer cleanup, photo thumbnail generation, video upload orchestration |
 | Compute (video transcode) | Azure Container Apps Jobs | Runs FFmpeg transcoder per-video (HDR→SDR, 1080p HLS package, MP4 fallback, poster). Scale-to-zero. See `docs/VIDEO_ARCHITECTURE_DECISIONS.md` Decision 0. |
-| Container registry | Azure Container Registry (Basic SKU) | Hosts the FFmpeg transcoder image (`acr-cliquepix` / `cracliquepix`) |
+| Container registry | Azure Container Registry (Standard SKU) | Hosts the FFmpeg transcoder image (`cracliquepix`). Standard chosen over Basic for throughput headroom (3x ReadOps/min) and 10x storage (100 GB vs 10 GB) — performance insurance at ~$15/month premium over Basic. |
 | Job dispatch | Azure Storage Queue | Queues video transcoding jobs. Triggered by video upload-confirm endpoint; polled by Container Apps Job |
 | Database | PostgreSQL Flexible Server | Relational data |
 | Object storage | Azure Blob Storage | Photo and video originals, photo thumbnails, HLS segments, MP4 fallbacks, video posters |

@@ -38,7 +38,7 @@ Where does FFmpeg actually run?
 
 **A. Azure Container Apps Jobs + Azure Container Registry** — **CHOSEN**
 - Custom FFmpeg container image, launched per job, destroyed on completion
-- ACR Basic SKU hosts the image
+- ACR Standard SKU hosts the image (chosen over Basic for throughput headroom — see "ACR SKU selection" below)
 - Container Apps Environment (consumption-billed)
 - Dispatched via Storage Queue message from the upload-confirm Function
 - Scale to zero when idle; up to 1-hour per-job runtime
@@ -82,7 +82,7 @@ Where does FFmpeg actually run?
 
 5. **Easy parallelism without reconfiguration.** If upload volume spikes, Container Apps Jobs schedules multiple parallel jobs automatically. Premium's scale-out model requires provisioning additional $126/month instances.
 
-6. **Scale to zero when idle.** No baseline cost beyond ~$5/month ACR. You only pay vCPU-seconds of actual transcoding work.
+6. **Scale to zero when idle.** No baseline cost beyond ~$20/month ACR (Standard SKU). You only pay vCPU-seconds of actual transcoding work.
 
 ### Trade-offs accepted
 
@@ -138,10 +138,34 @@ Function App (callback handler, managed-identity auth)
 Client (updated feed + optional push notification)
 ```
 
+### ACR SKU selection
+
+ACR has three SKUs: Basic (~$5/mo), Standard (~$20/mo), Premium (~$50/mo). **CliquePix uses Standard.**
+
+**What matters for this workload:** only image pull latency when a Container Apps Job cold-starts. Container Apps caches pulled images on the environment infrastructure, so ACR is only touched on the first cold start after cache eviction — not on every transcode job.
+
+**Why not Basic:**
+- Basic's ~1,000 ReadOps/min ceiling is technically sufficient at MVP scale
+- But throughput headroom is cheap insurance against future scale and burst scenarios (e.g., 10 users uploading videos within the same minute, all cold-starting jobs in parallel)
+- Basic's 10 GB storage ceiling is tight if image versions accumulate over time
+
+**Why not Premium:**
+- Premium's extra features (geo-replication, private endpoints, content trust, customer-managed keys, retention policies) are for enterprise / compliance scenarios CliquePix doesn't need
+- CliquePix runs in East US only, so geo-replication is wasted
+- No VNet setup exists, so private endpoints don't apply
+- $30/month premium over Standard for features that won't get exercised
+
+**Standard gives:**
+- 3x ReadOps/min throughput vs Basic (~3,000 vs ~1,000)
+- 10x included storage (100 GB vs 10 GB)
+- 5x webhook quota (10 vs 2) — useful if CI/CD automation is added later
+
+**Upgrade path:** ACR SKU upgrades are non-destructive. `az acr update --name cracliquepix --sku Premium` works instantly without recreating the registry or re-pushing images. If Standard ever becomes insufficient, Premium is one command away.
+
 ### Open follow-ups for implementation
 
 - **Container image base:** `jrottenberg/ffmpeg:6-alpine` (pre-built, trusted maintainer, well-known) vs custom Dockerfile built on `alpine:3` with FFmpeg static binary. First pass will try `jrottenberg/ffmpeg:6-alpine` and swap only if size or supply-chain concerns arise.
-- **ACR name:** `cracliquepix` (no hyphens — ACR naming rule) or `cliquepixacr`. First pass: `cracliquepix`.
+- **ACR name:** `cracliquepix` (no hyphens — ACR naming rule). SKU: **Standard**.
 - **Container Apps Environment name:** `cae-cliquepix-prod`
 - **Container Apps Job name:** `caj-cliquepix-transcoder`
 - **Storage Queue name:** `video-transcode-queue` (inside existing `stcliquepixprod` storage account)
