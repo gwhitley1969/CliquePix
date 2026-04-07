@@ -121,6 +121,18 @@ az containerapp job create \
 
 **Image is a placeholder** (`aci-helloworld`). Phase 3 builds and pushes the real FFmpeg transcoder image and updates the job to use it.
 
+**Critical follow-up step (Phase 3):** Even with the AcrPull RBAC role on the job's MI, the job needs an explicit registry binding before it can pull from ACR. Without this, `az containerapp job update --image` returns `UNAUTHORIZED: authentication required`. The fix:
+
+```bash
+az containerapp job registry set \
+  --name caj-cliquepix-transcoder \
+  --resource-group rg-cliquepix-prod \
+  --server cracliquepix.azurecr.io \
+  --identity system
+```
+
+This binds the ACR registry to the job and tells it to use system-assigned managed identity for pulls. Run this AFTER the job is created and AFTER the AcrPull role is assigned, BEFORE the first image update.
+
 **Key parameters:**
 - `--trigger-type Event` — KEDA scaler-based triggering
 - `--replica-timeout 900` — kill any replica running longer than 15 minutes
