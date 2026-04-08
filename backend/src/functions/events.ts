@@ -94,7 +94,7 @@ async function listEvents(req: HttpRequest, context: InvocationContext): Promise
               COALESCE(COUNT(p.id), 0)::int AS photo_count
        FROM events e
        JOIN users u ON u.id = e.created_by_user_id
-       LEFT JOIN photos p ON p.event_id = e.id AND p.status = 'active'
+       LEFT JOIN photos p ON p.event_id = e.id AND p.status = 'active' AND p.media_type = 'photo'
        WHERE e.clique_id = $1
        GROUP BY e.id, u.display_name
        ORDER BY e.created_at DESC`,
@@ -121,7 +121,7 @@ async function getEvent(req: HttpRequest, context: InvocationContext): Promise<H
               COALESCE(COUNT(p.id), 0)::int AS photo_count
        FROM events e
        JOIN users u ON u.id = e.created_by_user_id
-       LEFT JOIN photos p ON p.event_id = e.id AND p.status = 'active'
+       LEFT JOIN photos p ON p.event_id = e.id AND p.status = 'active' AND p.media_type = 'photo'
        WHERE e.id = $1
        GROUP BY e.id, u.display_name`,
       [eventId],
@@ -153,7 +153,7 @@ async function listAllEvents(req: HttpRequest, context: InvocationContext): Prom
        JOIN clique_members cm ON cm.clique_id = e.clique_id AND cm.user_id = $1
        JOIN cliques c ON c.id = e.clique_id
        JOIN users u ON u.id = e.created_by_user_id
-       LEFT JOIN photos p ON p.event_id = e.id AND p.status = 'active'
+       LEFT JOIN photos p ON p.event_id = e.id AND p.status = 'active' AND p.media_type = 'photo'
        GROUP BY e.id, c.name, u.display_name
        ORDER BY e.created_at DESC`,
       [authUser.id],

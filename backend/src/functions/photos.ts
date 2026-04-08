@@ -139,9 +139,10 @@ async function confirmUpload(req: HttpRequest, context: InvocationContext): Prom
     const height = typeof body.height === 'number' && body.height > 0 ? Math.round(body.height) : null;
     const originalFilename = typeof body.original_filename === 'string' ? body.original_filename.slice(0, 255) : null;
 
-    // Fetch the pending photo record
+    // Fetch the pending photo record (must be media_type='photo' — videos have
+    // their own upload flow via videos.ts commitVideoUpload)
     const photo = await queryOne<Photo>(
-      'SELECT * FROM photos WHERE id = $1 AND event_id = $2',
+      "SELECT * FROM photos WHERE id = $1 AND event_id = $2 AND media_type = 'photo'",
       [photoId, eventId],
     );
 
@@ -281,14 +282,17 @@ async function listPhotos(req: HttpRequest, context: InvocationContext): Promise
       }
     }
 
-    // Fetch photos with cursor-based pagination
+    // Fetch photos with cursor-based pagination.
+    // Filter by media_type='photo' so videos don't leak into the photos list
+    // (the photos table hosts both now — videos have their own listVideos endpoint).
     let photos: Photo[];
     if (cursorParam) {
       photos = await query<Photo & { uploaded_by_name: string }>(
         `SELECT p.*, u.display_name AS uploaded_by_name
          FROM photos p
          JOIN users u ON p.uploaded_by_user_id = u.id
-         WHERE p.event_id = $1 AND p.status = 'active' AND p.created_at < $2
+         WHERE p.event_id = $1 AND p.status = 'active' AND p.media_type = 'photo'
+           AND p.created_at < $2
          ORDER BY p.created_at DESC
          LIMIT $3`,
         [eventId, cursorParam, limit],
@@ -298,7 +302,7 @@ async function listPhotos(req: HttpRequest, context: InvocationContext): Promise
         `SELECT p.*, u.display_name AS uploaded_by_name
          FROM photos p
          JOIN users u ON p.uploaded_by_user_id = u.id
-         WHERE p.event_id = $1 AND p.status = 'active'
+         WHERE p.event_id = $1 AND p.status = 'active' AND p.media_type = 'photo'
          ORDER BY p.created_at DESC
          LIMIT $2`,
         [eventId, limit],
@@ -388,7 +392,7 @@ async function getPhoto(req: HttpRequest, context: InvocationContext): Promise<H
     }
 
     const photo = await queryOne<Photo>(
-      "SELECT * FROM photos WHERE id = $1 AND status = 'active'",
+      "SELECT * FROM photos WHERE id = $1 AND status = 'active' AND media_type = 'photo'",
       [photoId],
     );
 
@@ -426,8 +430,10 @@ async function deletePhoto(req: HttpRequest, context: InvocationContext): Promis
       throw new ValidationError('A valid photo ID is required.');
     }
 
+    // Only allow deleting photos via this endpoint — videos have their own DELETE /api/videos/{id}
+    // with prefix-delete logic for HLS segments.
     const photo = await queryOne<Photo>(
-      "SELECT * FROM photos WHERE id = $1 AND status = 'active'",
+      "SELECT * FROM photos WHERE id = $1 AND status = 'active' AND media_type = 'photo'",
       [photoId],
     );
 
