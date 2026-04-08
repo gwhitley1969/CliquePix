@@ -85,6 +85,11 @@ class PhotoCardWidget extends StatelessWidget {
                       tag: 'photo_${photo.id}',
                       child: CachedNetworkImage(
                         imageUrl: photo.thumbnailUrl ?? photo.originalUrl ?? '',
+                        // Stable cache key keyed on the photo ID. The backend
+                        // regenerates fresh SAS URLs every feed refetch — without
+                        // this, CachedNetworkImage cache-misses on every poll and
+                        // the thumbnail flickers.
+                        cacheKey: 'photo_thumb_${photo.id}',
                         width: double.infinity,
                         fit: BoxFit.cover,
                         placeholder: (_, __) => const LoadingShimmer(height: 300),

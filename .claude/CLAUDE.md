@@ -75,13 +75,21 @@ If a feature does not directly support one of these loops, it does not belong in
 - Video upload: in-app camera recording and upload from device library
 - Client-side video validation: extension (MP4, MOV), duration ≤ 5 min, file size estimation
 - Server-side authoritative video validation: container, codec, duration, HDR metadata via ffprobe
-- Video transcoding pipeline: HDR→SDR normalization, max 1080p output, H.264 HLS package + MP4 fallback, poster frame extraction. Runs in Container Apps Job with FFmpeg container
+- Video transcoding pipeline: TWO paths chosen by `canStreamCopy(probeResult)`:
+  - **Fast path (`remuxHlsAndMp4`):** stream-copy compatible sources (H.264 SDR ≤1080p mp4/mov AAC) directly to HLS + MP4 with `-c copy -f tee`. ~2-5 sec wall-clock. Covers ~95% of phone uploads.
+  - **Slow path (`transcodeHlsAndMp4`):** full re-encode for HDR / HEVC / >1080p / non-AAC sources. Includes `zscale + tonemap=hable` HDR→SDR pipeline, `-pix_fmt yuv420p`, `-profile:v high -level 4.0`, `-colorspace bt709 -color_primaries bt709 -color_trc bt709`. preset=`veryfast`. ~21 sec for an 11s HDR HEVC source.
+  - Both paths use the same single tee-muxer FFmpeg invocation (HLS + MP4 from one pass).
+  - Runs in Container Apps Job with `jrottenberg/ffmpeg:6-alpine` base image. KEDA polling 5s, min-executions=1.
+- **Instant preview for the uploader:** commit endpoint returns a 15-min read SAS for the original blob in `preview_url`. Uploader's processing card is tappable ("Tap to preview") and plays the original MP4 immediately. When transcode completes, Web PubSub `video_ready` upgrades the card silently. See `docs/VIDEO_ARCHITECTURE_DECISIONS.md` Decision 9.
 - Resumable video uploads using Azure Blob block uploads (4MB blocks, client-side block state persistence for resume-on-restart)
-- Video playback: in-app player using `video_player` + `chewie`, HLS preferred, MP4 fallback
+- Video playback: in-app player using `video_player` + `chewie`, HLS preferred (with `formatHint: VideoFormat.hls` via `VideoPlayerController.networkUrl(Uri.file(...))`), MP4 fallback. **`VideoPlayerController.file()` does NOT support `formatHint` — must use `.networkUrl` even for local file:// URIs.**
+- **Video delete UI:** PopupMenuButton in the video player AppBar, mirroring `photo_detail_screen.dart:43-124`. Delete-only for now (Save/Share deferred). Calls `videosRepositoryProvider.deleteVideo` and invalidates `eventVideosProvider(eventId)` so the card disappears immediately.
 - Video processing-state UX: placeholder card in the event feed while transcoding, push notification + Web PubSub signal when ready
-- Processing-state propagation: Web PubSub `video_ready` event (foreground) + FCM push (backgrounded)
+- Processing-state propagation: Web PubSub `video_ready` event (foreground, **including the uploader** so their instant-preview card upgrades) + FCM push (backgrounded, **excluding the uploader** to avoid redundant notification noise about their own upload)
 - HLS delivery via User Delegation SAS: backend rewrites `.m3u8` manifests at request time with per-segment signed URLs (60s in-Function cache, 15-min SAS expiry per segment)
 - Video assets auto-delete with the event: original master + HLS package (prefix-delete) + MP4 fallback + poster
+- **Per-user video cap:** `PER_USER_VIDEO_LIMIT = 10` (originally 5; bumped 2026-04-08 — see Decision Q7 in `docs/VIDEO_ARCHITECTURE_DECISIONS.md`). Counts videos in `pending`/`processing`/`active`. Backend enforces at the upload-url endpoint with `VIDEO_LIMIT_REACHED` error code.
+- **Backend error code propagation to client:** the Flutter `_friendlyError` in `video_upload_screen.dart` reads `e.response?.data['error']['code']` from a `DioException` and switches on the structured backend error code — NOT on `e.toString()` (which only contains the message field). Pattern: switch on the canonical code, fall through to `errorMap['message']` for unknown codes, then to network/socket checks, then to a generic fallback. Mirror this pattern wherever client UX maps backend error codes.
 
 ### Do Not Build
 
@@ -642,16 +650,29 @@ Videos cannot be meaningfully compressed on the client (mobile transcoding is sl
 ### Video Pipeline — Server Side (After Client Commits Upload)
 
 1. Function verifies all blocks committed successfully (blob exists with expected size)
-2. Function enqueues a transcoding job on Azure Storage Queue
-3. **Container Apps Job** picks up the queue message and runs FFmpeg:
+2. Function generates a 15-min read SAS for the original blob and returns it as `preview_url` in the commit response (instant preview for the uploader — Decision 9)
+3. Function enqueues a transcoding job on Azure Storage Queue
+4. **Container Apps Job** picks up the queue message (KEDA polling 5s, min-executions=1) and runs FFmpeg:
    - ffprobe first: authoritative validation of container/codec/duration/HDR. Reject if invalid.
-   - `-c:v libx264 -preset medium -crf 23 -c:a aac -b:a 128k -vf scale=-2:min(ih\,1080)` (or similar locked parameters — see `docs/VIDEO_ARCHITECTURE_DECISIONS.md`)
-   - Produce HLS manifest + segments in a `hls/` subdirectory
-   - Produce progressive MP4 fallback
-   - Extract poster frame
-4. Container Apps Job writes all outputs to blob storage via managed identity
-5. Container Apps Job calls `POST /api/internal/video-processing-complete` with the results
-6. Function updates video row, pushes `video_ready` via Web PubSub + FCM
+   - `canStreamCopy(probeResult)` predicate decides between fast and slow path:
+     - **Fast path (`remuxHlsAndMp4`)** for H.264 SDR ≤1080p mp4/mov AAC sources: `ffmpeg -c copy -c:a copy -map 0:v:0 -map 0:a:0? -f tee "[f=hls...]manifest.m3u8|[f=mp4:movflags=+faststart]fallback.mp4"` — bit-exact remux, ~2-5s wall-clock, no re-encode. On failure, falls through to slow path.
+     - **Slow path (`transcodeHlsAndMp4`)** for HDR / HEVC / >1080p / non-AAC: `-c:v libx264 -preset veryfast -crf 23 -profile:v high -level 4.0 -pix_fmt yuv420p -colorspace bt709 -color_primaries bt709 -color_trc bt709 -c:a aac -b:a 128k -vf "<HDR_CHAIN>scale=-2:min(ih\,1080),format=yuv420p" -map 0:v? -map 0:a? -f tee "[f=hls...]manifest.m3u8|[f=mp4:movflags=+faststart]fallback.mp4"`. The HDR chain is `zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,` (only when `probeResult.isHdr`; empty for SDR).
+   - Both paths produce HLS manifest + segments + MP4 fallback from a SINGLE FFmpeg invocation via the tee muxer.
+   - Extract poster frame separately (`-ss 1 -vframes 1`).
+5. Container Apps Job writes all outputs to blob storage via managed identity, plus a separate call to set the original master to Cool tier
+6. Container Apps Job calls `POST /api/internal/video-processing-complete` with results, including `processing_mode: 'transcode' | 'stream_copy'` and `fast_path_failure_reason?: string | null` for telemetry
+7. Function updates video row, pushes `video_ready` via Web PubSub to ALL clique members **including the uploader** (so their instant-preview card upgrades) + FCM push to OTHER members only
+
+**Locked parameters (do not change without measuring):**
+- libx264 preset: `veryfast` (slow path only — fast path uses `-c copy`)
+- CRF: 23
+- AAC bitrate: 128k
+- HLS segment duration: 4 seconds (variable in fast path, exactly 4 in slow path)
+- Forced 8-bit output: `-pix_fmt yuv420p` — REQUIRED on the slow path or HDR sources produce 10-bit High10 H.264 that mobile devices can't decode
+- Profile/level: high/4.0 — universal mobile compatibility from ~2015+
+- Color metadata: bt709 — explicit SDR tags in the H.264 VUI parameters
+
+The full ffmpeg invocations and parameter rationale live in `docs/VIDEO_ARCHITECTURE_DECISIONS.md` Decision 3 (post-launch state) and Decisions 8-12.
 
 ### Feed Display
 
@@ -798,22 +819,24 @@ FCM (Firebase Cloud Messaging) for push delivery to both Android and iOS. FCM is
 
 ### Push Triggers
 
-| Trigger | Notification Type | Recipients | Payload |
-|---------|------------------|------------|---------|
-| Photo uploaded to event | `new_photo` | All event clique members except uploader | `{ event_id, photo_id }` |
-| Video upload started (processing) | *(no push — only feed placeholder update)* | — | — |
-| Video ready to play | `video_ready` | All event clique members except uploader | `{ event_id, video_id }` |
-| Video processing failed | `video_processing_failed` | Uploader only | `{ event_id, video_id, reason }` |
-| Someone joins a clique | `member_joined` | All existing clique members except joiner | `{ clique_id, clique_name, joined_user_name }` |
-| Event expiring in 24h | `event_expiring` | All event clique members | `{ event_id }` |
-| Event expired | `event_expired` | All event clique members | `{ event_id }` |
-| Event deleted by organizer | `event_deleted` | All clique members except deleter | `{ event_id, event_name }` |
+| Trigger | Notification Type | Web PubSub Recipients | FCM Recipients | Payload |
+|---------|------------------|-----------------------|----------------|---------|
+| Photo uploaded to event | `new_photo` | — | All event clique members except uploader | `{ event_id, photo_id }` |
+| Video upload started (processing) | *(no push — only feed placeholder update)* | — | — | — |
+| Video ready to play | `video_ready` | **All event clique members INCLUDING uploader** | All event clique members **except uploader** | `{ event_id, video_id }` |
+| Video processing failed | `video_processing_failed` | — | Uploader only | `{ event_id, video_id, reason }` |
+| Someone joins a clique | `member_joined` | — | All existing clique members except joiner | `{ clique_id, clique_name, joined_user_name }` |
+| Event expiring in 24h | `event_expiring` | — | All event clique members | `{ event_id }` |
+| Event expired | `event_expired` | — | All event clique members | `{ event_id }` |
+| Event deleted by organizer | `event_deleted` | — | All clique members except deleter | `{ event_id, event_name }` |
 
 **No notifications sent** for member removals, voluntary departures, or video upload initiation (the feed placeholder card is enough signal to the uploader; other members are notified when the video is ready to play, not when it starts transcoding).
 
-**Video processing-state propagation has two channels:**
-- Foreground (app is running and connected to Web PubSub): backend pushes `video_ready` as a Web PubSub event → client updates the feed in-place without a push notification
-- Backgrounded/terminated: standard FCM push as `video_ready` type → tap navigates to the video in the event feed
+**Video processing-state propagation has two channels with split recipient lists:**
+- **Web PubSub** (foreground, app running and connected): backend pushes `video_ready` to ALL clique members including the uploader. The uploader needs this signal so their instant-preview card upgrades from "processing + Tap to preview" to the standard active state with poster + play icon. Without it, the uploader keeps seeing the processing card until the 30-second feed poll fires.
+- **FCM** (backgrounded/terminated): backend sends `video_ready` push to OTHER clique members only. The uploader is excluded because they already saw the upload complete and know what they uploaded — a push notification about their own video would be redundant noise.
+
+See `pushVideoReady` in `backend/src/functions/videos.ts:284-348` and `docs/VIDEO_ARCHITECTURE_DECISIONS.md` Decision 10.
 
 ### Backend Flow
 
@@ -875,14 +898,20 @@ This is sufficient. Most photo sharing happens in bursts during active events. D
 ## Performance Expectations
 
 - Photo capture to visible in feed: < 5 seconds on good connectivity
-- Video upload completion to transcoding job started: < 10 seconds after client commits (queue dispatch latency)
-- Video transcoding completion for 5-minute 1080p source: **target ≤ 5 minutes**, hard ceiling ≤ 15 minutes (Container Apps Job timeout)
-- Video processing-complete notification to visible "ready" state in feed: < 5 seconds
+- Video upload completion to transcoding job started (queue dispatch latency): < 10 seconds (KEDA polling 5s + ~5s container scheduling)
+- **Video uploader's perceived "polishing" wait: ~zero** — instant preview lets the uploader play the original blob the moment commit returns
+- Video transcoding for compatible source (~95% of phone uploads, fast path): **2-5 seconds FFmpeg work, ~15-25 seconds total wall-clock** including queue dispatch and container cold start
+- Video transcoding for HDR / HEVC / >1080p source (slow path with HDR pipeline): **~21 seconds FFmpeg work, ~55-65 seconds total wall-clock** for an 11.5s 1080p HEVC HDR source on 2 vCPU
+- Video transcoding for 5-minute 1080p source: target ≤ 5 minutes, hard ceiling ≤ 15 minutes (Container Apps Job timeout)
+- Video processing-complete signal to visible "ready" state in feed (other members): < 5 seconds via Web PubSub when foregrounded
 - Video playback start (tap to first frame): < 3 seconds on WiFi, < 6 seconds on LTE
 - Feed scroll: 60fps, no jank (poster images only on feed cards, full video only loads on tap)
+- Feed images stable across 30-second poll cycles — no flicker. Achieved via stable `cacheKey` on `CachedNetworkImage` (see Decision 11). `cacheKey: 'video_poster_${video.id}'` and `cacheKey: 'photo_thumb_${photo.id}'`.
 - App cold start to usable: < 3 seconds
 - Thumbnail / poster loads: < 500ms on 4G
 - Never block the UI thread with image processing, video decoding, or network calls
+
+**Container Apps Jobs cold start (~15-25s on Consumption profile)** is the biggest remaining bottleneck on the slow path. Migrating from Container Apps Jobs to a long-running Container Apps Service queue processor would eliminate it. Deferred to v1.5.
 
 ---
 
@@ -926,14 +955,44 @@ This is sufficient. Most photo sharing happens in bursts during active events. D
 - `video_validation_rejected` (with reason: duration / container / codec / corrupt)
 - `video_transcoding_queued`
 - `video_transcoding_started` (Container Apps Job begins)
-- `video_transcoding_completed` (with duration_seconds, output_size_bytes)
+- `video_transcoding_completed` (with `durationSeconds`, `processingMode: 'transcode' | 'stream_copy'`, `fastPathFailureReason: <error or "none">`)
 - `video_transcoding_failed` (with error_class, ffmpeg_exit_code)
+- `video_preview_sas_failed` (instant-preview SAS generation failed in commit endpoint)
 - `video_played` (with playback_mode: hls | mp4_fallback)
 - `video_playback_stall` (with position_seconds, reason)
 - `video_saved_to_device`
 - `video_hls_manifest_cache_hit`, `video_hls_manifest_cache_miss` — track cache effectiveness
 - `expired_video_hls_prefix_deleted` (with blob_count, total_bytes)
 - `failed_video_processing_cleaned` (with count)
+- `video_ready_push_sent` (with `recipientCount` — includes the uploader on the Web PubSub channel since 2026-04-08)
+- `video_deleted` (uploader-initiated delete via the player AppBar PopupMenu)
+- `video_commit_size_mismatch` (client/server byte-count divergence — client upload bug)
+- `video_commit_block_list_failed` (Put Block List failure on commit)
+
+**Useful App Insights queries:**
+
+```kql
+// Stream-copy fast path adoption rate (target ~95% on phone uploads)
+customEvents
+| where name == "video_transcoding_completed"
+| summarize count() by tostring(customDimensions.processingMode)
+```
+
+```kql
+// Fast-path failure fall-throughs (target empty)
+customEvents
+| where name == "video_transcoding_completed"
+| where customDimensions.fastPathFailureReason != "none"
+```
+
+```kql
+// Slow-path FFmpeg encoding time (target p50 < 25s for HDR HEVC 1080p)
+customEvents
+| where name == "video_transcoding_completed"
+| extend dur = todouble(customDimensions.durationSeconds), mode = tostring(customDimensions.processingMode)
+| where mode == "transcode"
+| summarize percentiles(dur, 50, 95)
+```
 
 **Reactions (shared across media types):**
 - `reaction_added`, `reaction_removed` (with media_type)
@@ -1095,15 +1154,18 @@ A user can:
 4. Start an Event with a chosen duration (24h / 3 days / 7 days)
 5. Take a photo or record a video, or pick either from their gallery
 6. See the photo appear in the event feed within seconds
-7. See the video upload reliably (even with connection drops), show a processing placeholder, then transition to playable within minutes
-8. Play back a video cleanly via HLS with MP4 fallback
-9. React to others' photos and videos
-10. Save a photo or video to their device
-11. Share a photo or video externally via the OS share sheet
-12. Receive push notifications when new photos are added and when videos finish processing
-13. See photos and videos automatically disappear from the cloud when the event expires
+7. See the video upload reliably (even with connection drops), show a processing placeholder, then transition to playable within ~15-25s for compatible sources or ~55-65s for HDR HEVC sources
+8. **Tap their own processing video card immediately and play the original via instant preview** while the transcoder runs in the background (uploader-only)
+9. Play back a video cleanly via HLS with MP4 fallback
+10. React to others' photos and videos
+11. Save a photo to their device (video save deferred to v1.5 — see Decision 9 follow-ups)
+12. Share a photo externally via the OS share sheet (video share deferred to v1.5)
+13. **Delete their own video** via the PopupMenu in the video player AppBar (works even when the player fails to init on a broken blob)
+14. Receive push notifications when new photos are added and when videos finish processing (uploader gets the Web PubSub signal but NOT the FCM push for their own video)
+15. See backend error codes mapped to friendly messages on the upload screen (`VIDEO_LIMIT_REACHED`, `DURATION_EXCEEDED`, etc. — read from `e.response.data.error.code` on a `DioException`)
+16. See photos and videos automatically disappear from the cloud when the event expires
 
-If all thirteen of these work cleanly on both iOS and Android, v1 is done.
+If all sixteen of these work cleanly on both iOS and Android, v1 is done.
 
 ---
 
@@ -1116,4 +1178,6 @@ If all thirteen of these work cleanly on both iOS and Android, v1 is done.
 | `docs/ENTRA_REFRESH_TOKEN_WORKAROUND.md` | Complete 5-layer token refresh implementation (code samples, debug tags, test procedures) |
 | `docs/EVENT_DM_CHAT_ARCHITECTURE.md` | Event-centric 1:1 DM design: Web PubSub delivery, schema, auth rules |
 | `docs/CliquePix_Video_Feature_Spec.md` | Generic video feature spec (handoff doc — requirements, acceptance criteria) |
-| `docs/VIDEO_ARCHITECTURE_DECISIONS.md` | CliquePix-specific video architecture decisions: transcoder host, HLS SAS delivery, schema, player, upload UX |
+| `docs/VIDEO_ARCHITECTURE_DECISIONS.md` | CliquePix-specific video architecture decisions (12 decisions, including post-launch additions): transcoder host, HLS SAS delivery, schema, player, upload UX, stream-copy fast path, instant preview, HDR pipeline, KEDA tuning, image cache keys |
+| `docs/VIDEO_INFRASTRUCTURE_RUNBOOK.md` | As-built runbook for the Azure infra (ACR, Container Apps Environment, Container Apps Job, Storage Queue, RBAC roles, KEDA scaler config). Source of truth until Bicep IaC catches up. |
+| `docs/NOTIFICATION_SYSTEM.md` | Push notification architecture details (FCM transport, channel setup, payload routing) |

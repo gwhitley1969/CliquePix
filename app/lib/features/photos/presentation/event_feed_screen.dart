@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_constants.dart';
@@ -10,6 +9,8 @@ import '../../../models/video_model.dart';
 import '../../../services/storage_service.dart';
 import '../../../widgets/error_widget.dart';
 import '../../../widgets/loading_shimmer.dart';
+import '../../dm/domain/dm_realtime_service.dart';
+import '../../dm/presentation/dm_providers.dart';
 import '../../videos/presentation/videos_providers.dart';
 import '../../videos/presentation/video_card_widget.dart';
 import 'photos_providers.dart';
@@ -46,6 +47,7 @@ class EventFeedScreen extends ConsumerStatefulWidget {
 
 class _EventFeedScreenState extends ConsumerState<EventFeedScreen> {
   Timer? _pollTimer;
+  StreamSubscription<VideoReadyEvent>? _videoReadySub;
   bool _isDownloading = false;
   int _downloadProgress = 0;
   int _downloadTotal = 0;
@@ -60,10 +62,35 @@ class _EventFeedScreenState extends ConsumerState<EventFeedScreen> {
         ref.invalidate(eventVideosProvider(widget.eventId));
       },
     );
+    _setupVideoReadyListener();
+  }
+
+  /// Subscribe to the Web PubSub `video_ready` stream so the feed refreshes
+  /// in-place the instant a video finishes transcoding (no waiting for the
+  /// 30-second poll timer). Mirrors the DM realtime setup in dm_chat_screen.
+  Future<void> _setupVideoReadyListener() async {
+    try {
+      final realtimeService = ref.read(dmRealtimeServiceProvider);
+      realtimeService.onNegotiate = () => ref.read(dmRepositoryProvider).negotiate();
+      if (!realtimeService.isConnected) {
+        final url = await ref.read(dmRepositoryProvider).negotiate();
+        await realtimeService.connect(url);
+      }
+      _videoReadySub = realtimeService.onVideoReady.listen((event) {
+        if (event.eventId == widget.eventId && mounted) {
+          debugPrint('[CliquePix EventFeed] video_ready: invalidating feed for ${event.videoId}');
+          ref.invalidate(eventVideosProvider(widget.eventId));
+          ref.invalidate(eventPhotosProvider(widget.eventId));
+        }
+      });
+    } catch (e) {
+      debugPrint('[CliquePix EventFeed] Video realtime setup failed: $e');
+    }
   }
 
   @override
   void dispose() {
+    _videoReadySub?.cancel();
     _pollTimer?.cancel();
     super.dispose();
   }

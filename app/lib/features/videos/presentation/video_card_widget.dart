@@ -89,7 +89,7 @@ class VideoCardWidget extends StatelessWidget {
 
   Widget _buildBody(BuildContext context) {
     if (video.isProcessing) {
-      return _buildProcessingPlaceholder();
+      return _buildProcessingPlaceholder(context);
     }
     if (video.isFailed) {
       return _buildFailedState();
@@ -110,41 +110,68 @@ class VideoCardWidget extends StatelessWidget {
   ///
   /// Tone: "Almost ready..." conveys progress without overpromising speed.
   /// The subtitle "Polishing your video" is conversational without being twee.
-  Widget _buildProcessingPlaceholder() {
-    return Container(
-      height: 240,
-      width: double.infinity,
-      color: AppColors.softAquaBackground.withValues(alpha: 0.15),
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const SizedBox(
-              width: 40,
-              height: 40,
-              child: CircularProgressIndicator(
-                strokeWidth: 3,
-                valueColor: AlwaysStoppedAnimation<Color>(AppColors.electricAqua),
+  ///
+  /// 2026-04-08: when `video.previewUrl != null` (uploader viewing their own
+  /// processing video), the card becomes tappable AND shows "Tap to preview"
+  /// instead of "Polishing your video". Tap opens the player against the
+  /// original blob, so the uploader has zero perceived wait.
+  Widget _buildProcessingPlaceholder(BuildContext context) {
+    final hasPreview = video.previewUrl != null && !isSelecting;
+    final subtitle = hasPreview ? 'Tap to preview' : 'Polishing your video';
+
+    return GestureDetector(
+      onTap: hasPreview
+          ? () => context.push(
+                '/events/$eventId/videos/${video.id}',
+                extra: video.previewUrl,
+              )
+          : null,
+      child: Container(
+        height: 240,
+        width: double.infinity,
+        color: AppColors.softAquaBackground.withValues(alpha: 0.15),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (hasPreview)
+                Container(
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.black.withValues(alpha: 0.55),
+                  ),
+                  child: const Icon(Icons.play_arrow, color: Colors.white, size: 40),
+                )
+              else
+                const SizedBox(
+                  width: 40,
+                  height: 40,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 3,
+                    valueColor: AlwaysStoppedAnimation<Color>(AppColors.electricAqua),
+                  ),
+                ),
+              const SizedBox(height: 16),
+              const Text(
+                'Almost ready...',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Almost ready...',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
+              const SizedBox(height: 4),
+              Text(
+                subtitle,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.white.withValues(alpha: 0.7),
+                ),
               ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Polishing your video',
-              style: TextStyle(
-                fontSize: 13,
-                color: Colors.white.withValues(alpha: 0.7),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -209,6 +236,13 @@ class VideoCardWidget extends StatelessWidget {
             tag: 'video_${video.id}',
             child: CachedNetworkImage(
               imageUrl: video.posterUrl ?? '',
+              // Stable cache key keyed on the video ID, not the URL. The
+              // backend regenerates fresh User Delegation SAS query params
+              // every time the feed provider invalidates (every 30s via
+              // poll), so the imageUrl changes constantly. Without an
+              // explicit cacheKey, CachedNetworkImage treats each new URL
+              // as a new image and re-fetches/re-decodes — visible flicker.
+              cacheKey: 'video_poster_${video.id}',
               width: double.infinity,
               fit: BoxFit.cover,
               placeholder: (_, __) => const LoadingShimmer(height: 300),

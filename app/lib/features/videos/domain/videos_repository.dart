@@ -12,11 +12,12 @@ class VideosRepository {
   VideosRepository(this.api, this.uploader);
 
   /// Full upload flow: get upload URL → upload all blocks → commit.
-  /// Returns the video_id once committed.
+  /// Returns the video_id and an optional preview_url (instant-preview SAS
+  /// for the uploader's own device) once committed.
   ///
   /// On any failure mid-upload, the resume cache remains so the next call
   /// with the same file (and a new upload URL) can pick up where it left off.
-  Future<String> uploadVideo({
+  Future<({String videoId, String? previewUrl})> uploadVideo({
     required String eventId,
     required File file,
     required int durationSeconds,
@@ -56,14 +57,15 @@ class VideosRepository {
 
     // 3. Commit the upload — server commits the block list and dispatches
     onProgress(0.95);
-    await api.commitUpload(
+    final commitResponse = await api.commitUpload(
       eventId,
       videoId: videoId,
       blockIds: blockUrls.map((b) => b.blockId).toList(),
     );
 
+    final previewUrl = commitResponse['preview_url'] as String?;
     onProgress(1.0);
-    return videoId;
+    return (videoId: videoId, previewUrl: previewUrl);
   }
 
   Future<List<VideoModel>> listVideos(String eventId) async {

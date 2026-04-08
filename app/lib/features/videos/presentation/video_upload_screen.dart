@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -46,7 +47,7 @@ class _VideoUploadScreenState extends ConsumerState<VideoUploadScreen> {
 
     try {
       final repo = await ref.read(videosRepositoryProvider.future);
-      final videoId = await repo.uploadVideo(
+      final result = await repo.uploadVideo(
         eventId: widget.eventId,
         file: widget.videoFile,
         durationSeconds: widget.durationSeconds,
@@ -60,7 +61,7 @@ class _VideoUploadScreenState extends ConsumerState<VideoUploadScreen> {
           notifier.updateProgress(p, statusText);
         },
       );
-      notifier.succeed(videoId);
+      notifier.succeed(result.videoId, previewUrl: result.previewUrl);
 
       // Invalidate the feed so the placeholder card appears
       ref.invalidate(eventVideosProvider(widget.eventId));
@@ -77,16 +78,42 @@ class _VideoUploadScreenState extends ConsumerState<VideoUploadScreen> {
   }
 
   String _friendlyError(Object e) {
+    // Prefer the structured backend error code from the response body.
+    // Dio has no validateStatus override, so 4xx responses reject to the
+    // error path with .response.data populated from the parsed JSON body
+    // { data: null, error: { code, message } }. Reading .error.code here is
+    // more robust than string-matching on e.toString() (which only includes
+    // DioException.message, set to the user-facing text — not the code).
+    if (e is DioException) {
+      final data = e.response?.data;
+      if (data is Map && data['error'] is Map) {
+        final errorMap = data['error'] as Map;
+        final code = errorMap['code'] as String?;
+        final backendMessage = errorMap['message'] as String?;
+        switch (code) {
+          case 'VIDEO_LIMIT_REACHED':
+            return "You've reached the 5-video limit for this event. Delete a video to upload another.";
+          case 'DURATION_EXCEEDED':
+            return "Videos must be 5 minutes or shorter.";
+          case 'FILE_TOO_LARGE':
+            return "This video is too large. Videos must be under 500MB.";
+          case 'UNSUPPORTED_CONTAINER':
+            return "We can't process this video format. Please use MP4 or MOV.";
+          case 'UNSUPPORTED_CODEC':
+            return "This video uses a format we can't process. Try re-recording or exporting as H.264 or HEVC.";
+          case 'CORRUPT_MEDIA':
+            return "We couldn't read this video file. It may be damaged. Try re-recording or selecting a different video.";
+          case 'HDR_CONVERSION_FAILED':
+            return "We couldn't convert this HDR video for playback. Try re-recording in standard (non-HDR) mode.";
+        }
+        // Unknown code: fall through to the backend's own message (already
+        // user-friendly by design — see VIDEO_ERROR_CODES in videos.ts).
+        if (backendMessage != null && backendMessage.isNotEmpty) {
+          return backendMessage;
+        }
+      }
+    }
     final s = e.toString();
-    if (s.contains('VIDEO_LIMIT_REACHED')) {
-      return "You've reached the 5-video limit for this event. Delete a video to upload another.";
-    }
-    if (s.contains('DURATION_EXCEEDED')) {
-      return "Videos must be 5 minutes or shorter.";
-    }
-    if (s.contains('FILE_TOO_LARGE')) {
-      return "This video is too large. Videos must be under 500MB.";
-    }
     if (s.contains('SocketException') || s.contains('connection')) {
       return "Network error. Please check your connection and try again.";
     }

@@ -240,6 +240,43 @@ This binds the ACR registry to the job and tells it to use system-assigned manag
 
 **Captured principal ID:** `3bf7c2c1-8c34-4a12-adcd-d68e1485f4d8` (used in RBAC role assignments below)
 
+### Post-launch tuning (2026-04-08)
+
+After initial deployment, two parameters were tuned for performance based on real-device measurements:
+
+**Polling interval: 30 → 5 seconds**
+
+```bash
+az containerapp job update \
+  --name caj-cliquepix-transcoder \
+  --resource-group rg-cliquepix-prod \
+  --polling-interval 5
+```
+
+The original 30s default meant queued messages waited up to 30s before KEDA detected them. Reducing to 5s cuts worst-case detection latency from 30s to 5s and average from 15s to 2.5s. Marginal cost of 6x more polls against the storage queue is negligible (Storage Queue bills per million transactions; we're nowhere near that). See `docs/VIDEO_ARCHITECTURE_DECISIONS.md` Decision 12.
+
+**Min-executions: 0 → 1**
+
+```bash
+az containerapp job update \
+  --name caj-cliquepix-transcoder \
+  --resource-group rg-cliquepix-prod \
+  --min-executions 1
+```
+
+Ensures KEDA always has at least one execution running per polling interval. Keeps the image cached on the compute node and reduces (but doesn't eliminate) container cold-start time. **Caveat:** misleadingly named — Container Apps Jobs are one-shot by definition, so this doesn't keep a container "warm" in the traditional sense. The ~15-25s of Container Apps Jobs cold start per execution remains. Eliminating it requires migrating to a Container Apps Service (long-running queue processor) which is deferred to v1.5.
+
+**Verify both:**
+```bash
+az containerapp job show -n caj-cliquepix-transcoder -g rg-cliquepix-prod \
+  --query "properties.configuration.eventTriggerConfig.scale.{pollingInterval:pollingInterval, minExecutions:minExecutions, maxExecutions:maxExecutions}"
+```
+
+Expected:
+```json
+{ "pollingInterval": 5, "minExecutions": 1, "maxExecutions": 10 }
+```
+
 ### 6. Budget alert ($50/month)
 
 ```bash
@@ -435,6 +472,36 @@ az functionapp config appsettings delete --name func-cliquepix-fresh -g rg-cliqu
 | **Total** | **~$25-40/month** at MVP scale (~100 videos/month × 5 min each) |
 
 This is well under the $50/month budget alert threshold. Daily cost during dev should stay under $1.
+
+---
+
+## Transcoder image version history
+
+The Container Apps Job runs `cracliquepix.azurecr.io/cliquepix-transcoder:<tag>`. New tags are pushed via `docker build && docker tag && docker push` (after `az acr login --name cracliquepix`), then the job is updated via `az containerapp job update --image cracliquepix.azurecr.io/cliquepix-transcoder:<tag>`.
+
+| Tag | Date | Changes |
+|---|---|---|
+| `v0.1.0` | 2026-04-07 | Initial scaffold. Two sequential FFmpeg invocations: `transcodeHls` + `transcodeMp4Fallback`, both at `preset=medium`. ~120s wall-clock for short videos. Known issue: HDR HEVC sources produced 10-bit High10 H.264 with BT.2020 metadata that mobile devices couldn't decode. |
+| `v0.1.3` | 2026-04-08 | **Single tee-muxer FFmpeg invocation** (`transcodeHlsAndMp4`) producing HLS + MP4 outputs from one libx264 encode. Preset `medium` → `fast` (~30% faster encode, ~20% larger files). Wall-clock cut from ~120s to ~50-65s on the slow path. |
+| `v0.1.4` | 2026-04-08 | **Stream-copy fast path** (`remuxHlsAndMp4` + `canStreamCopy` predicate) for compatible sources (H.264 SDR ≤1080p mp4/mov AAC). Bit-exact `-c copy -c:a copy` remux via tee muxer. ~2-5s wall-clock for ~95% of phone uploads. Slow path retained as fall-through for HDR / HEVC / >1080p / non-AAC. Try/catch in runner.ts catches fast-path failures and falls through to slow path automatically. Adds `processing_mode` + `fast_path_failure_reason` to `CallbackSuccessPayload` for telemetry. |
+| `v0.1.5` | 2026-04-08 | **HDR→SDR pipeline fix.** Adds `zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,` to the slow-path video filter when `probeResult.isHdr`. Forces `-pix_fmt yuv420p` (was unset → libx264 was preserving source 10-bit). Adds `-profile:v high -level 4.0 -colorspace bt709 -color_primaries bt709 -color_trc bt709`. Confirmed `zscale` and `tonemap` filters available in `jrottenberg/ffmpeg:6-alpine` via `ffmpeg -filters`. HEVC HDR 1080p sources now produce playable SDR H.264. |
+| `v0.1.6` | 2026-04-08 | **Slow-path preset `fast` → `veryfast`.** ~25-30% faster encoding for the re-encode path. Files ~15-20% larger but well within budget. For an 11.5s HEVC HDR source, FFmpeg time drops from ~29s to ~21s. Stream-copy fast path unchanged (doesn't use libx264). |
+
+Rebuild + push command sequence (run from `backend/transcoder/`):
+
+```bash
+npm run build
+docker build -t cliquepix-transcoder:local .
+az acr login --name cracliquepix
+docker tag cliquepix-transcoder:local cracliquepix.azurecr.io/cliquepix-transcoder:vX.Y.Z
+docker tag cliquepix-transcoder:local cracliquepix.azurecr.io/cliquepix-transcoder:latest
+docker push cracliquepix.azurecr.io/cliquepix-transcoder:vX.Y.Z
+docker push cracliquepix.azurecr.io/cliquepix-transcoder:latest
+az containerapp job update \
+  --name caj-cliquepix-transcoder \
+  --resource-group rg-cliquepix-prod \
+  --image cracliquepix.azurecr.io/cliquepix-transcoder:vX.Y.Z
+```
 
 ---
 

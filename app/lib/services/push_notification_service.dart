@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/routing/app_router.dart';
 import '../features/notifications/presentation/notifications_providers.dart';
+import '../features/photos/presentation/photos_providers.dart';
+import '../features/videos/presentation/videos_providers.dart';
 
 final pushNotificationServiceProvider = Provider<PushNotificationService>((ref) {
   return PushNotificationService(ref);
@@ -97,8 +99,12 @@ class PushNotificationService {
       final videoId = data['video_id'] as String?;
       final type = data['type'] as String?;
 
-      // Video ready: open the player directly
+      // Video ready: open the player directly. The feed caches may have been
+      // populated before this video finished transcoding, so invalidate them
+      // so the event feed shows the new video when the user navigates back.
       if (type == 'video_ready' && eventId != null && videoId != null) {
+        _ref.invalidate(eventVideosProvider(eventId));
+        _ref.invalidate(eventPhotosProvider(eventId));
         router.push('/events/$eventId/videos/$videoId');
         return;
       }

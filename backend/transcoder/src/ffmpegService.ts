@@ -212,90 +212,175 @@ export async function ffprobe(localPath: string): Promise<FfprobeResult> {
  *   -c:v libx264 -preset medium -crf 23 -c:a aac -b:a 128k
  *   -vf scale=-2:min(ih\,1080) -hls_time 4 -hls_playlist_type vod
  *
- * Three example invocations to consider (uncomment one or write your own):
+ * HISTORY:
+ *   2026-04-07: Originally shipped as TWO separate ffmpeg invocations (transcodeHls
+ *               + transcodeMp4Fallback), both at preset=medium. This meant the
+ *               x264 encoder did the work TWICE for every video — once for HLS
+ *               output, once for MP4 fallback — and preset=medium was slow on
+ *               short content.
  *
- *   // Option A — Faster encode, larger files (cost-optimized for compute):
- *   //   '-preset', 'fast', '-crf', '23', '-b:a', '128k', '-hls_time', '4'
- *
- *   // Option B — Standard "visually indistinguishable" target (current default):
- *   //   '-preset', 'medium', '-crf', '23', '-b:a', '128k', '-hls_time', '4'
- *
- *   // Option C — Slower encode, smaller files (storage-optimized):
- *   //   '-preset', 'slow', '-crf', '23', '-b:a', '128k', '-hls_time', '4'
- *
- * Reasonable starting point: Option B (medium/23/128k/4s). Tune based on
- * production telemetry — if transcode jobs frequently approach the 15-min
- * timeout, switch to Option A. If storage cost grows too fast, switch to C.
+ *   2026-04-08: Consolidated into a single ffmpeg invocation using the `-f tee`
+ *               muxer, which produces both HLS and MP4 outputs from ONE x264
+ *               encode. Preset changed from medium → fast (~30% faster encode,
+ *               ~20% larger files, still visually indistinguishable at crf=23).
+ *               Measured: ~2 minutes wall-clock → target ~40-50 seconds for
+ *               short videos, matching the architecture spec.
  */
-export async function transcodeHls(inputPath: string, outputDir: string): Promise<string> {
-  await fs.promises.mkdir(outputDir, { recursive: true });
-  const manifestPath = `${outputDir}/manifest.m3u8`;
-  const segmentPattern = `${outputDir}/segment_%03d.ts`;
+export async function transcodeHlsAndMp4(
+  inputPath: string,
+  hlsOutputDir: string,
+  mp4FallbackPath: string,
+  options: { isHdr: boolean } = { isHdr: false },
+): Promise<{ manifestPath: string }> {
+  await fs.promises.mkdir(hlsOutputDir, { recursive: true });
+  const manifestPath = `${hlsOutputDir}/manifest.m3u8`;
+  const segmentPattern = `${hlsOutputDir}/segment_%03d.ts`;
 
-  // Parameters approved by Gene 2026-04-07: Option B (balanced defaults).
-  // - preset=medium: standard balance of encoding speed vs file size
-  // - crf=23: visually indistinguishable from source (industry standard)
-  // - audio=128k AAC: good for voice + music
-  // - hls_time=4: VOD industry standard
-  // - scale filter downscales source above 1080p, leaves smaller sources unchanged
-  // Re-tune in Phase 7 polish based on production transcode telemetry.
+  // Tee muxer spec — two outputs from one encoder pass:
+  //   [f=hls:hls_time=N:hls_playlist_type=vod:hls_segment_filename=PATH]MANIFEST|[f=mp4:movflags=+faststart]FALLBACK
+  //
+  // Options within a single tee output are `:`-separated. Outputs are
+  // `|`-separated. The string after `]` is the output path.
+  //
+  // Linux-only paths (no Windows drive letters) means no `:` inside the
+  // filename values, so no escaping required.
+  const teeSpec =
+    `[f=hls:hls_time=${HLS_SEGMENT_DURATION}:hls_playlist_type=vod:hls_segment_filename=${segmentPattern}]${manifestPath}` +
+    `|[f=mp4:movflags=+faststart]${mp4FallbackPath}`;
+
+  // Video filter chain. Two concerns:
+  //
+  // 1. HDR→SDR tone-mapping. If the source is HDR (HEVC iPhone captures with
+  //    BT.2020 primaries + SMPTE 2084 PQ transfer), we run it through a
+  //    zscale → tonemap (Hable) → zscale chain to produce SDR BT.709 output.
+  //    Without this, libx264 happily encodes HDR pixel values into an H.264
+  //    stream with BT.2020 VUI metadata, which ExoPlayer and AVPlayer can't
+  //    decode correctly on most mobile devices — the output plays on nothing.
+  //
+  // 2. Forced 8-bit output. libx264 preserves the source's pixel format by
+  //    default. HDR sources are 10-bit (yuv420p10le), and libx264 will happily
+  //    encode to 10-bit High10 profile H.264 — which almost no mobile player
+  //    supports. `format=yuv420p` + explicit `-pix_fmt yuv420p` force 8-bit.
+  //
+  // The zscale + tonemap filters are provided by libzimg. Confirmed present
+  // in jrottenberg/ffmpeg:6-alpine via `ffmpeg -filters` (2026-04-08).
+  //
+  // SDR sources skip the zscale+tonemap chain (overhead for no benefit) and
+  // only get scale + format=yuv420p.
+  const hdrToSdrChain = options.isHdr
+    ? 'zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,'
+    : '';
+  const videoFilter = `${hdrToSdrChain}scale=-2:min(ih\\,${MAX_OUTPUT_HEIGHT}),format=yuv420p`;
+
   const args: string[] = [
     '-y', // overwrite output
     '-i', inputPath,
     '-c:v', 'libx264',
-    '-preset', 'medium',
-    '-crf', '23',
+    // 2026-04-08: bumped 'fast' → 'veryfast' to cut HDR re-encode time.
+    // veryfast is ~25-30% faster than fast for libx264, files ~15-20% larger
+    // but well within budget for short clips. The HDR tone-mapping path
+    // (zscale + tonemap=hable) is the dominant cost; preset reduction helps
+    // amortize it.
+    '-preset', 'veryfast',
+    '-crf', '23',         // visually indistinguishable from source
+    '-profile:v', 'high', // H.264 High profile — universally supported on mobile
+    '-level', '4.0',      // compatible with all iOS/Android devices from ~2015+
+    '-pix_fmt', 'yuv420p', // force 8-bit output (prevents 10-bit High10 encode)
+    // Explicit BT.709 SDR metadata in the output stream's VUI parameters.
+    // Decoders look at these tags to decide how to interpret the YUV values;
+    // without them, an HDR-source → re-encode may carry BT.2020/PQ tags through.
+    '-colorspace', 'bt709',
+    '-color_primaries', 'bt709',
+    '-color_trc', 'bt709',
     '-c:a', 'aac',
     '-b:a', '128k',
-    '-vf', `scale=-2:min(ih\\,${MAX_OUTPUT_HEIGHT})`,
-    '-hls_time', String(HLS_SEGMENT_DURATION),
-    '-hls_playlist_type', 'vod',
-    '-hls_segment_filename', segmentPattern,
-    manifestPath,
+    '-vf', videoFilter,
+    // Tee muxer requires explicit stream mapping
+    '-map', '0:v?',
+    '-map', '0:a?',
+    '-f', 'tee',
+    teeSpec,
   ];
 
-  console.log(`Running ffmpeg (HLS): ${FFMPEG_BIN} ${args.join(' ')}`);
+  console.log(`Running ffmpeg (HLS + MP4 tee, hdr=${options.isHdr}): ${FFMPEG_BIN} ${args.join(' ')}`);
   await execFileP(FFMPEG_BIN, args, { maxBuffer: 50 * 1024 * 1024 });
-  return manifestPath;
+  return { manifestPath };
 }
 
 // ====================================================================================
-// MP4 fallback transcode — single progressive file for HLS-failure recovery
+// Stream-copy fast path — remux compatible sources without re-encoding
 // ====================================================================================
 
 /**
- * Transcode the input video to a single MP4 file used as fallback for clients
- * that fail HLS playback (older Android devices, edge cases).
+ * Fast path: re-mux compatible source directly to HLS + MP4 fallback without
+ * re-encoding. Audio and video streams are copied bit-exact from the source;
+ * only the container structure changes.
  *
- * Same quality settings as HLS but with `-movflags +faststart` to put the
- * moov atom at the front of the file (enables progressive download playback).
+ * Prerequisites (caller must verify via canStreamCopy()):
+ *   - Video codec is h264
+ *   - Not HDR
+ *   - Height ≤ 1080
+ *   - Container is mp4 or mov
+ *   - Audio is aac (or no audio)
  *
- * ★ USER CONTRIBUTION POINT 1 (continued) — MP4 fallback parameters
+ * Note on HLS segmentation: with -c copy, hls_time=4 cuts at the NEAREST
+ * keyframe before the target. Phone captures typically have keyframes every
+ * 1-2 seconds, so segment lengths vary (3-5 sec is typical). This is valid
+ * per the HLS spec — the playlist EXTINF tag declares actual segment duration
+ * and modern AVPlayer + ExoPlayer handle variable-length VOD segments fine.
  *
- * Recommendation: use the SAME preset/CRF/audio settings as the HLS transcode
- * for consistency. The fallback is rarely played, so you don't need to
- * over-optimize either direction.
+ * Measured wall-clock target: ~2-5 seconds for a 30-second 1080p phone capture,
+ * vs. ~15-25 seconds for libx264 preset=fast on the same hardware.
  */
-export async function transcodeMp4Fallback(inputPath: string, outputPath: string): Promise<string> {
-  // Parameters approved by Gene 2026-04-07: matching HLS settings for consistency.
-  // The fallback is rarely played (only when HLS fails on a client), so
-  // matching the HLS encoder settings keeps the user experience predictable.
+export async function remuxHlsAndMp4(
+  inputPath: string,
+  hlsOutputDir: string,
+  mp4FallbackPath: string,
+): Promise<{ manifestPath: string }> {
+  await fs.promises.mkdir(hlsOutputDir, { recursive: true });
+  const manifestPath = `${hlsOutputDir}/manifest.m3u8`;
+  const segmentPattern = `${hlsOutputDir}/segment_%03d.ts`;
+
+  const teeSpec =
+    `[f=hls:hls_time=${HLS_SEGMENT_DURATION}:hls_playlist_type=vod:hls_segment_filename=${segmentPattern}]${manifestPath}` +
+    `|[f=mp4:movflags=+faststart]${mp4FallbackPath}`;
+
   const args: string[] = [
     '-y',
     '-i', inputPath,
-    '-c:v', 'libx264',
-    '-preset', 'medium',
-    '-crf', '23',
-    '-c:a', 'aac',
-    '-b:a', '128k',
-    '-vf', `scale=-2:min(ih\\,${MAX_OUTPUT_HEIGHT})`,
-    '-movflags', '+faststart',
-    outputPath,
+    '-c:v', 'copy',        // bit-exact passthrough, no re-encoding
+    '-c:a', 'copy',        // bit-exact audio passthrough
+    '-map', '0:v:0',       // explicit single-video stream map (drop subtitles/extra tracks)
+    '-map', '0:a:0?',      // optional single audio stream
+    '-f', 'tee',
+    teeSpec,
   ];
 
-  console.log(`Running ffmpeg (MP4 fallback): ${FFMPEG_BIN} ${args.join(' ')}`);
+  console.log(`Running ffmpeg (stream-copy remux): ${FFMPEG_BIN} ${args.join(' ')}`);
   await execFileP(FFMPEG_BIN, args, { maxBuffer: 50 * 1024 * 1024 });
-  return outputPath;
+  return { manifestPath };
+}
+
+/**
+ * Decide whether an ffprobe result qualifies for the stream-copy fast path.
+ * Must be called AFTER the ffprobe `valid: true` discriminant has been checked.
+ *
+ * Criteria (ALL must hold):
+ *   - videoCodec === 'h264'               → libx264-compatible only, no HEVC
+ *   - !isHdr                              → SDR only, HDR needs tone-mapping
+ *   - height <= MAX_OUTPUT_HEIGHT (1080)  → no upscale/downscale required
+ *   - container is mp4 or mov             → mov/mp4 atoms are re-muxable to TS
+ *   - audioCodec is null or 'aac'         → AAC copies straight into MPEG-TS
+ */
+export function canStreamCopy(
+  probe: Extract<FfprobeResult, { valid: true }>,
+): boolean {
+  if (probe.videoCodec !== 'h264') return false;
+  if (probe.isHdr) return false;
+  if (probe.height > MAX_OUTPUT_HEIGHT) return false;
+  if (probe.container !== 'mp4' && probe.container !== 'mov') return false;
+  if (probe.audioCodec !== null && probe.audioCodec !== 'aac') return false;
+  return true;
 }
 
 // ====================================================================================

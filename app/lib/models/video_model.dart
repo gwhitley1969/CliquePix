@@ -8,6 +8,12 @@ class VideoModel {
   final String? uploadedByName;
   final String? posterUrl;
   final String? mp4FallbackUrl;
+  /// Instant-preview SAS URL for the ORIGINAL blob. Populated by the backend
+  /// ONLY when the caller is the uploader AND the video is still in
+  /// processing/pending state. Null for everyone else and for active videos.
+  /// Lets the uploader play the video immediately without waiting for the
+  /// transcoder to finish.
+  final String? previewUrl;
   final String? mimeType;
   final int? width;
   final int? height;
@@ -28,6 +34,7 @@ class VideoModel {
     this.uploadedByName,
     this.posterUrl,
     this.mp4FallbackUrl,
+    this.previewUrl,
     this.mimeType,
     this.width,
     this.height,
@@ -57,6 +64,7 @@ class VideoModel {
       uploadedByName: json['uploaded_by_name'] as String?,
       posterUrl: json['poster_url'] as String?,
       mp4FallbackUrl: json['mp4_fallback_url'] as String?,
+      previewUrl: json['preview_url'] as String?,
       mimeType: json['mime_type'] as String?,
       width: _toInt(json['width']),
       height: _toInt(json['height']),

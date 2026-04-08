@@ -36,7 +36,11 @@ const MAX_VIDEO_FILE_SIZE = 500 * 1024 * 1024; // 500MB hard ceiling
 const MAX_VIDEO_DURATION_SECONDS = 5 * 60; // 5 minutes per spec
 const VIDEO_BLOCK_SAS_EXPIRY_SECONDS = 30 * 60; // 30 min — covers slow connections
 const VIDEO_PLAYBACK_SAS_EXPIRY_SECONDS = 15 * 60; // 15 min — covers playback sessions
-const PER_USER_VIDEO_LIMIT = 5; // Q7: soft cap of 5 active+pending+processing per event
+// Q7: soft cap of active+pending+processing videos per user per event.
+// 2026-04-08: temporarily bumped 5 → 10 to give headroom while the in-app
+// video delete UI ships (video_player_screen.dart PopupMenuButton). Consider
+// restoring to 5 once users have had time to clean up their test events.
+const PER_USER_VIDEO_LIMIT = 10;
 
 // ====================================================================================
 // Validation error response shapes — approved defaults
@@ -233,12 +237,25 @@ async function cleanupVideoBlobs(video: Photo): Promise<void> {
 }
 
 async function enrichVideoWithUrls(video: Photo, userId: string): Promise<VideoWithUrls> {
-  const [posterUrl, mp4FallbackUrl, reactionRows, userReactionRows] = await Promise.all([
+  // Instant preview: only the uploader sees a preview_url, and only while the
+  // video is still processing/pending. Once status flips to 'active', this
+  // returns null and the client falls through to the standard HLS/MP4 path.
+  const isUploader = video.uploaded_by_user_id === userId;
+  const isNotYetActive = video.status === 'processing' || video.status === 'pending';
+  const shouldGeneratePreview = isUploader && isNotYetActive && Boolean(video.blob_path);
+
+  const [posterUrl, mp4FallbackUrl, previewUrl, reactionRows, userReactionRows] = await Promise.all([
     video.poster_blob_path
       ? generateViewSas(video.poster_blob_path, VIDEO_PLAYBACK_SAS_EXPIRY_SECONDS)
       : Promise.resolve(null),
     video.mp4_fallback_blob_path
       ? generateViewSas(video.mp4_fallback_blob_path, VIDEO_PLAYBACK_SAS_EXPIRY_SECONDS)
+      : Promise.resolve(null),
+    shouldGeneratePreview
+      ? generateViewSas(video.blob_path, VIDEO_PLAYBACK_SAS_EXPIRY_SECONDS).catch((err) => {
+          console.warn(`[enrichVideoWithUrls] preview SAS failed for ${video.id}:`, err);
+          return null;
+        })
       : Promise.resolve(null),
     query<{ reaction_type: string; count: number }>(
       `SELECT reaction_type, COUNT(*)::int AS count
@@ -262,38 +279,50 @@ async function enrichVideoWithUrls(video: Photo, userId: string): Promise<VideoW
     ...video,
     poster_url: posterUrl,
     mp4_fallback_url: mp4FallbackUrl,
+    preview_url: previewUrl,
     reaction_counts: reactionCounts,
     user_reactions: userReactionRows.map((r) => r.reaction_type),
   };
 }
 
 async function pushVideoReady(eventId: string, uploaderUserId: string, videoId: string): Promise<void> {
-  // Find all clique members for this event (except the uploader)
-  const members = await query<{ user_id: string }>(
+  const payload = { type: 'video_ready' as const, event_id: eventId, video_id: videoId };
+
+  // Web PubSub: include the UPLOADER so their instant-preview card can
+  // upgrade from 'processing' to the transcoded HLS/MP4 state when the
+  // transcode completes. The uploader's EventFeedScreen listens to the same
+  // onVideoReady stream as other clique members.
+  await sendToUser(uploaderUserId, payload).catch((err) =>
+    console.error(`Web PubSub send failed for uploader ${uploaderUserId}:`, err),
+  );
+
+  // Find other clique members (excluding the uploader) for Web PubSub
+  // broadcast, FCM push, and in-app notification records.
+  const otherMembers = await query<{ user_id: string }>(
     `SELECT DISTINCT cm.user_id FROM events e
      JOIN clique_members cm ON cm.clique_id = e.clique_id
      WHERE e.id = $1 AND cm.user_id != $2`,
     [eventId, uploaderUserId],
   );
 
-  if (members.length === 0) return;
+  if (otherMembers.length === 0) return;
 
-  // Web PubSub push for foreground users (instant feed update)
+  // Web PubSub push for other members (foreground feed update)
   await Promise.all(
-    members.map((m) =>
-      sendToUser(m.user_id, {
-        type: 'video_ready',
-        event_id: eventId,
-        video_id: videoId,
-      }).catch((err) => console.error(`Web PubSub send failed for ${m.user_id}:`, err)),
+    otherMembers.map((m) =>
+      sendToUser(m.user_id, payload).catch((err) =>
+        console.error(`Web PubSub send failed for ${m.user_id}:`, err),
+      ),
     ),
   );
 
-  // FCM push for background/terminated users
+  // FCM push for background/terminated OTHER members. Uploader is excluded
+  // here because they already saw their upload complete — a push notification
+  // about their own video would be redundant noise.
   const tokens = await query<{ token: string }>(
     `SELECT pt.token FROM push_tokens pt
      WHERE pt.user_id = ANY($1::uuid[])`,
-    [members.map((m) => m.user_id)],
+    [otherMembers.map((m) => m.user_id)],
   );
 
   if (tokens.length > 0) {
@@ -301,15 +330,11 @@ async function pushVideoReady(eventId: string, uploaderUserId: string, videoId: 
       tokens.map((t) => t.token),
       'New video ready',
       'A new video has been added to your event',
-      {
-        type: 'video_ready',
-        event_id: eventId,
-        video_id: videoId,
-      },
+      payload,
     );
   }
 
-  // Create in-app notification records
+  // Create in-app notification records (other members only, unchanged)
   await execute(
     `INSERT INTO notifications (user_id, type, payload_json)
      SELECT cm.user_id, 'video_ready', $1::jsonb
@@ -322,7 +347,8 @@ async function pushVideoReady(eventId: string, uploaderUserId: string, videoId: 
   trackEvent('video_ready_push_sent', {
     eventId,
     videoId,
-    recipientCount: String(members.length),
+    // +1 for the uploader (who always gets a Web PubSub push now)
+    recipientCount: String(otherMembers.length + 1),
   });
 }
 
@@ -581,10 +607,30 @@ async function commitVideoUpload(
     });
     trackEvent('video_transcoding_queued', { videoId, eventId });
 
+    // Instant preview: return a read SAS URL for the original blob so the
+    // uploader can play the video immediately without waiting for transcoding.
+    // The original is a valid MP4/MOV at this point (all blocks committed +
+    // size verified). Wrapped in try/catch because preview URL is a nice-to-
+    // have — if SAS generation fails, the transcode job is already enqueued
+    // and the client falls back to the "Polishing..." placeholder.
+    let previewUrl: string | null = null;
+    try {
+      previewUrl = await generateViewSas(video.blob_path, VIDEO_PLAYBACK_SAS_EXPIRY_SECONDS);
+    } catch (err) {
+      console.warn(`[video commit] Failed to generate preview SAS for ${videoId}:`, err);
+      trackEvent('video_preview_sas_failed', {
+        videoId,
+        eventId,
+        userId: authUser.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+
     return successResponse(
       {
         video_id: videoId,
         status: 'processing',
+        preview_url: previewUrl,
         message: 'Video uploaded successfully and queued for processing.',
       },
       202,
@@ -610,11 +656,13 @@ async function listVideos(req: HttpRequest, context: InvocationContext): Promise
 
     await getEventWithMembershipCheck(eventId, authUser.id);
 
-    const videos = await query<Photo>(
-      `SELECT * FROM photos
-       WHERE event_id = $1 AND media_type = 'video'
-         AND status IN ('active', 'processing')
-       ORDER BY created_at DESC`,
+    const videos = await query<Photo & { uploaded_by_name: string | null }>(
+      `SELECT p.*, u.display_name AS uploaded_by_name
+       FROM photos p
+       LEFT JOIN users u ON u.id = p.uploaded_by_user_id
+       WHERE p.event_id = $1 AND p.media_type = 'video'
+         AND p.status IN ('active', 'processing')
+       ORDER BY p.created_at DESC`,
       [eventId],
     );
 
@@ -642,10 +690,12 @@ async function getVideo(req: HttpRequest, context: InvocationContext): Promise<H
       throw new ValidationError('A valid video ID is required.');
     }
 
-    const video = await queryOne<Photo>(
-      `SELECT p.* FROM photos p
+    const video = await queryOne<Photo & { uploaded_by_name: string | null }>(
+      `SELECT p.*, u.display_name AS uploaded_by_name
+       FROM photos p
        JOIN events e ON e.id = p.event_id
        JOIN clique_members cm ON cm.clique_id = e.clique_id AND cm.user_id = $2
+       LEFT JOIN users u ON u.id = p.uploaded_by_user_id
        WHERE p.id = $1 AND p.media_type = 'video'`,
       [videoId, authUser.id],
     );
@@ -780,6 +830,9 @@ interface CallbackBody {
   height?: number;
   is_hdr_source?: boolean;
   normalized_to_sdr?: boolean;
+  // Performance telemetry (added 2026-04-08 with stream-copy fast path)
+  processing_mode?: 'transcode' | 'stream_copy';
+  fast_path_failure_reason?: string | null;
 }
 
 async function videoProcessingComplete(
@@ -887,6 +940,8 @@ async function videoProcessingComplete(
     trackEvent('video_transcoding_completed', {
       videoId: body.video_id,
       durationSeconds: String(body.duration_seconds ?? 0),
+      processingMode: String(body.processing_mode ?? 'transcode'),
+      fastPathFailureReason: String(body.fast_path_failure_reason ?? 'none'),
     });
 
     // Push video_ready to event members

@@ -198,7 +198,12 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: 'videos/:videoId',
             builder: (context, state) => VideoPlayerScreen(
+              eventId: state.pathParameters['eventId']!,
               videoId: state.pathParameters['videoId']!,
+              // Optional: when the processing-state card taps through for
+              // the uploader, it passes the preview SAS URL via extra so
+              // the player can skip /playback and play the original blob.
+              previewUrl: state.extra as String?,
             ),
           ),
           GoRoute(

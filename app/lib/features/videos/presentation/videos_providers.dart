@@ -67,6 +67,11 @@ class VideoUploadState {
   final String statusText;
   final String? errorText;
   final String? videoId;
+  /// Instant-preview SAS URL returned by the commit endpoint. Only set when
+  /// the upload completed and the backend provided a preview URL (nearly
+  /// always for compatible sources). Lets the uploader's client open the
+  /// player immediately against the original MP4 while transcoding runs.
+  final String? previewUrl;
 
   const VideoUploadState({
     this.isUploading = false,
@@ -74,6 +79,7 @@ class VideoUploadState {
     this.statusText = '',
     this.errorText,
     this.videoId,
+    this.previewUrl,
   });
 
   VideoUploadState copyWith({
@@ -82,6 +88,7 @@ class VideoUploadState {
     String? statusText,
     String? errorText,
     String? videoId,
+    String? previewUrl,
   }) {
     return VideoUploadState(
       isUploading: isUploading ?? this.isUploading,
@@ -89,6 +96,7 @@ class VideoUploadState {
       statusText: statusText ?? this.statusText,
       errorText: errorText, // intentionally allow null reset
       videoId: videoId ?? this.videoId,
+      previewUrl: previewUrl ?? this.previewUrl,
     );
   }
 }
@@ -104,12 +112,13 @@ class VideoUploadNotifier extends StateNotifier<VideoUploadState> {
     state = state.copyWith(progress: progress, statusText: statusText);
   }
 
-  void succeed(String videoId) {
+  void succeed(String videoId, {String? previewUrl}) {
     state = VideoUploadState(
       isUploading: false,
       progress: 1.0,
       statusText: 'Upload complete',
       videoId: videoId,
+      previewUrl: previewUrl,
     );
   }
 

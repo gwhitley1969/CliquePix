@@ -54,6 +54,11 @@ export interface CallbackSuccessPayload {
   height: number;
   is_hdr_source: boolean;
   normalized_to_sdr: boolean;
+  // Performance telemetry (added 2026-04-08, stream-copy fast path)
+  processing_mode: 'transcode' | 'stream_copy';
+  // Only set when the fast path was attempted but failed and we fell through
+  // to the slow re-encode path. null in all other cases.
+  fast_path_failure_reason?: string | null;
 }
 
 export interface CallbackFailurePayload {

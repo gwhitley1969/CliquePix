@@ -166,6 +166,7 @@ For v1, Claude Code should target a practical and reliable output set.
 - User sees validation errors before upload when possible
 - User sees upload and processing status
 - User should not be told the upload is fully complete until server-side processing is done or clearly marked as processing
+- **Instant preview for the uploader:** the moment server-side commit succeeds, the uploader should be able to play the video on their own device without waiting for transcoding. The processing-state card on their feed should be tappable and labeled "Tap to preview" instead of a static "Processing..." spinner. Other clique members continue to see the standard processing placeholder until transcoding completes. Implementation in CliquePix uses a short-lived read SAS for the original blob, returned in the upload-commit response and gated server-side to the uploader only.
 
 ### Failure UX
 Provide clear errors for at least:
@@ -174,12 +175,19 @@ Provide clear errors for at least:
 - unsupported codec
 - upload failed
 - processing failed
+- per-event upload limit reached
+
+Backend error codes must propagate cleanly to the user. The client should map structured error codes from the response body to friendly messages, NOT string-match on a stringified exception. CliquePix uses a `switch` on `response.data.error.code` for all video upload error codes (`VIDEO_LIMIT_REACHED`, `DURATION_EXCEEDED`, `FILE_TOO_LARGE`, `UNSUPPORTED_CONTAINER`, `UNSUPPORTED_CODEC`, `CORRUPT_MEDIA`, `HDR_CONVERSION_FAILED`).
 
 ### Playback UX
 - Video cards should show a poster image and duration
 - Tapping a video should open an in-app player
 - Player should prefer HLS where supported
 - Player should fall back to MP4 when needed
+- **Posters and thumbnails should not flicker on feed refreshes.** When the backend regenerates short-lived signed URLs every 30s (CliquePix uses User Delegation SAS with 15-minute expiry), the URLs change but the underlying image is the same. Use a stable cache key on the image cache (CliquePix uses `cacheKey: 'video_poster_${id}'` and `cacheKey: 'photo_thumb_${id}'` on `CachedNetworkImage`) to keep cards visually stable.
+
+### Management UX
+- The uploader of a video must be able to delete it from within the app. CliquePix exposes this via a `PopupMenuButton` in the video player AppBar with a Delete option and a confirmation dialog. The delete action must work even when the player itself fails to initialize (e.g., on a corrupted blob from a botched earlier transcode) — the menu must remain reachable in the error state so the user can clean up.
 
 ---
 
@@ -289,7 +297,7 @@ Claude Code should treat the feature as complete only when all of the following 
 3. H.264 uploads are accepted and playable.
 4. HEVC uploads are accepted and playable.
 5. A source video above 1080p is normalized so delivery does not exceed 1080p.
-6. HDR source video is normalized to SDR.
+6. HDR source video is normalized to SDR (with proper tone-mapping — CliquePix uses `zscale + tonemap=hable` and forces 8-bit output via `-pix_fmt yuv420p`).
 7. HLS playback works in supported clients.
 8. MP4 fallback playback works when needed.
 9. Videos longer than 5 minutes are rejected cleanly.
@@ -297,6 +305,10 @@ Claude Code should treat the feature as complete only when all of the following 
 11. A thumbnail/poster is generated.
 12. Media processing status is visible to the system and usable by the UI.
 13. Videos can be shared through Clique Pix in the intended feed/event/clique flows.
+14. The uploader can preview the original video the moment commit succeeds, without waiting for transcoding (uploader-only instant preview).
+15. The uploader can delete a video from within the app, including videos whose playback fails to initialize (delete UI must remain reachable in the error state).
+16. Backend error codes propagate cleanly to user-friendly messages on the upload screen — no generic "Upload failed" when a specific code is available.
+17. Video poster images and photo thumbnails do not flicker across feed refresh cycles (stable image cache key).
 
 ---
 

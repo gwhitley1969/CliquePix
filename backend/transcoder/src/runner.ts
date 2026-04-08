@@ -15,7 +15,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import { dequeueMessage, deleteMessage } from './queueService';
 import { downloadBlob, uploadBlob, uploadDirectory, setBlobTier } from './blobService';
-import { ffprobe, transcodeHls, transcodeMp4Fallback, extractPoster } from './ffmpegService';
+import { ffprobe, transcodeHlsAndMp4, remuxHlsAndMp4, canStreamCopy, extractPoster } from './ffmpegService';
 import { postCallback } from './callbackService';
 import type { CallbackPayload, FfprobeResult } from './types';
 
@@ -56,16 +56,33 @@ async function runLocalMode(): Promise<void> {
   console.log(`[LOCAL_MODE] ffprobe: ${probeResult.width}x${probeResult.height} ${probeResult.videoCodec} ${probeResult.durationSeconds.toFixed(1)}s${probeResult.isHdr ? ' HDR' : ''}`);
 
   await fs.promises.mkdir(outputDir, { recursive: true });
-  await fs.promises.mkdir(path.join(outputDir, 'hls'), { recursive: true });
+  const hlsDirLocal = path.join(outputDir, 'hls');
+  const fallbackPathLocal = path.join(outputDir, 'fallback.mp4');
+  await fs.promises.mkdir(hlsDirLocal, { recursive: true });
 
   const start = Date.now();
-  await transcodeHls(inputFile, path.join(outputDir, 'hls'));
-  const hlsTime = ((Date.now() - start) / 1000).toFixed(1);
-  console.log(`[LOCAL_MODE] HLS done in ${hlsTime}s → ${outputDir}/hls/manifest.m3u8`);
-
-  const mp4Start = Date.now();
-  await transcodeMp4Fallback(inputFile, path.join(outputDir, 'fallback.mp4'));
-  console.log(`[LOCAL_MODE] MP4 fallback done in ${((Date.now() - mp4Start) / 1000).toFixed(1)}s → ${outputDir}/fallback.mp4`);
+  const fastPathEligible = canStreamCopy(probeResult);
+  if (fastPathEligible) {
+    try {
+      console.log('[LOCAL_MODE] Fast path: stream-copy remux (compatible source)');
+      await remuxHlsAndMp4(inputFile, hlsDirLocal, fallbackPathLocal);
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      console.warn(`[LOCAL_MODE] Fast path failed, falling back to re-encode: ${reason}`);
+      await fs.promises.rm(hlsDirLocal, { recursive: true, force: true });
+      await fs.promises.mkdir(hlsDirLocal, { recursive: true });
+      await transcodeHlsAndMp4(inputFile, hlsDirLocal, fallbackPathLocal, {
+        isHdr: probeResult.isHdr,
+      });
+    }
+  } else {
+    console.log('[LOCAL_MODE] Slow path: full re-encode (hdr/hevc/>1080p/non-aac)');
+    await transcodeHlsAndMp4(inputFile, hlsDirLocal, fallbackPathLocal, {
+      isHdr: probeResult.isHdr,
+    });
+  }
+  const teeTime = ((Date.now() - start) / 1000).toFixed(1);
+  console.log(`[LOCAL_MODE] HLS + MP4 done in ${teeTime}s (mode=${fastPathEligible ? 'stream_copy' : 'transcode'}) → ${outputDir}/hls/manifest.m3u8 + ${outputDir}/fallback.mp4`);
 
   const posterStart = Date.now();
   await extractPoster(inputFile, path.join(outputDir, 'poster.jpg'), probeResult.durationSeconds);
@@ -120,13 +137,41 @@ async function runQueueMode(): Promise<void> {
     }
     console.log(`[runner] Validated: ${probeResult.width}x${probeResult.height} ${probeResult.videoCodec} ${probeResult.durationSeconds.toFixed(1)}s${probeResult.isHdr ? ' HDR' : ''}`);
 
-    // 3. Transcode HLS, MP4 fallback, poster
-    console.log('[runner] Transcoding HLS...');
+    // 3. Transcode HLS + MP4 fallback
+    // Try the stream-copy fast path first for compatible sources (H.264 + SDR +
+    // ≤1080p + mp4/mov + AAC-or-no-audio). Falls through to the full re-encode
+    // path on any failure (weird AAC profile, unusual MP4 atom layout, etc.),
+    // so unknown edge cases never fail the whole job.
     await fs.promises.mkdir(hlsDir, { recursive: true });
-    await transcodeHls(localInput, hlsDir);
 
-    console.log('[runner] Transcoding MP4 fallback...');
-    await transcodeMp4Fallback(localInput, fallbackPath);
+    const fastPathEligible = canStreamCopy(probeResult);
+    let processingMode: 'stream_copy' | 'transcode' = 'transcode';
+    let fastPathFailureReason: string | null = null;
+    const transcodeStart = Date.now();
+
+    if (fastPathEligible) {
+      try {
+        console.log('[runner] Fast path: stream-copy remux (compatible source)');
+        await remuxHlsAndMp4(localInput, hlsDir, fallbackPath);
+        processingMode = 'stream_copy';
+      } catch (err) {
+        fastPathFailureReason = err instanceof Error ? err.message : String(err);
+        console.warn(`[runner] Fast path failed, falling back to re-encode: ${fastPathFailureReason}`);
+        // Clean up any partial HLS output before the re-encode retries
+        await fs.promises.rm(hlsDir, { recursive: true, force: true });
+        await fs.promises.mkdir(hlsDir, { recursive: true });
+        // canStreamCopy() already rejects HDR sources, so this fall-through
+        // path is always non-HDR — pass isHdr=false.
+        await transcodeHlsAndMp4(localInput, hlsDir, fallbackPath, { isHdr: false });
+      }
+    } else {
+      console.log(`[runner] Slow path: full re-encode (hdr=${probeResult.isHdr}, hevc/>1080p/non-aac)`);
+      await transcodeHlsAndMp4(localInput, hlsDir, fallbackPath, {
+        isHdr: probeResult.isHdr,
+      });
+    }
+    const transcodeMs = Date.now() - transcodeStart;
+    console.log(`[runner] Transcode done in ${transcodeMs}ms (mode=${processingMode})`);
 
     console.log('[runner] Extracting poster...');
     await extractPoster(localInput, posterPath, probeResult.durationSeconds);
@@ -161,7 +206,13 @@ async function runQueueMode(): Promise<void> {
       width: probeResult.width,
       height: probeResult.height,
       is_hdr_source: probeResult.isHdr,
-      normalized_to_sdr: probeResult.isHdr,
+      // Stream-copy path preserves HDR (no tone-mapping); re-encode path
+      // tone-maps HDR→SDR. canStreamCopy() already rejects HDR sources, so
+      // stream-copy never runs on HDR — meaning: if the source was HDR, the
+      // re-encode path ran and normalized it; otherwise no normalization.
+      normalized_to_sdr: probeResult.isHdr && processingMode === 'transcode',
+      processing_mode: processingMode,
+      fast_path_failure_reason: fastPathFailureReason,
     };
     console.log('[runner] Posting success callback');
     await postCallback(successPayload);

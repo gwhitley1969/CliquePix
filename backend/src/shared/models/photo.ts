@@ -97,6 +97,11 @@ export interface VideoWithUrls extends Photo {
   reaction_counts: Record<string, number>;
   user_reactions: string[];
   uploaded_by_name?: string;
+  // Instant preview: a read-only SAS URL for the ORIGINAL blob, returned only
+  // when the caller is the uploader AND the video is still processing/pending.
+  // The uploader's client uses this to play the video immediately without
+  // waiting for the transcoder. Null for everyone else and for active videos.
+  preview_url?: string | null;
 }
 
 // Backwards-compat alias for code paths still using PhotoStatus

@@ -315,39 +315,83 @@ Does HLS deliver one quality (1080p) or multiple (360p / 720p / 1080p)?
 
 If telemetry (`video_playback_stall` event) shows a meaningful percentage of playback sessions stalling or abandoning on mobile networks, add 720p as a second rung. We keep the original master specifically so we can re-transcode existing videos without re-uploading.
 
-### FFmpeg invocation for v1
+### FFmpeg invocation for v1 (post-launch state, 2026-04-08)
+
+The original v1 ship used two sequential FFmpeg calls (one HLS, one MP4 fallback). Real-device testing revealed three problems that drove a multi-round refactor:
+
+1. ~120s wall-clock for short videos (two sequential libx264 encodes at preset=medium)
+2. HDR HEVC sources from modern iPhones produced unplayable output (10-bit High10 H.264 with BT.2020 metadata)
+3. Even after consolidation to a single tee-muxer call, ~95% of phone uploads were being re-encoded unnecessarily (they were already H.264 SDR ≤1080p mp4/mov AAC)
+
+**Current state (transcoder v0.1.6, image `cracliquepix.azurecr.io/cliquepix-transcoder:v0.1.6`):**
+
+The transcoder now has TWO paths chosen by `canStreamCopy(probeResult)` in `runner.ts`:
+
+#### Fast path — `remuxHlsAndMp4` (compatible sources, ~95% of phone uploads)
+
+Eligibility (ALL must hold):
+- `videoCodec === 'h264'`
+- `!isHdr`
+- `height <= 1080`
+- `container === 'mp4' | 'mov'`
+- `audioCodec === null | 'aac'`
+
+Command:
+```
+ffmpeg -y -i input.mp4 \
+  -c:v copy -c:a copy \
+  -map 0:v:0 -map 0:a:0? \
+  -f tee \
+  "[f=hls:hls_time=4:hls_playlist_type=vod:hls_segment_filename=segment_%03d.ts]manifest.m3u8|[f=mp4:movflags=+faststart]fallback.mp4"
+```
+
+Bit-exact stream copy of both video and audio into HLS (MPEG-TS segments) AND a faststart MP4 from a single FFmpeg invocation via the tee muxer. **No re-encode.** Wall-clock: ~2-5 seconds for a 30s phone capture. HLS segment lengths are variable (cut at nearest keyframe before `hls_time=4` boundary) — valid per HLS spec, modern AVPlayer + ExoPlayer handle this fine. On any failure (rare edge case like an unusual AAC profile), the runner catches the exception and falls through to the slow path automatically.
+
+#### Slow path — `transcodeHlsAndMp4` (HDR / HEVC / >1080p / non-AAC sources)
+
+Used when `canStreamCopy` rejects the source. Includes a proper HDR→SDR pipeline:
 
 ```
-ffmpeg -i input.mp4 \
-  -c:v libx264 -preset medium -crf 23 \
+ffmpeg -y -i input.mp4 \
+  -c:v libx264 \
+  -preset veryfast \
+  -crf 23 \
+  -profile:v high -level 4.0 \
+  -pix_fmt yuv420p \
+  -colorspace bt709 -color_primaries bt709 -color_trc bt709 \
   -c:a aac -b:a 128k \
-  -vf "scale=-2:min(ih\,1080)" \
-  -hls_time 4 \
-  -hls_playlist_type vod \
-  -hls_segment_filename "segment_%03d.ts" \
-  manifest.m3u8
+  -vf "<HDR_TO_SDR_CHAIN><SCALE>,format=yuv420p" \
+  -map 0:v? -map 0:a? \
+  -f tee \
+  "[f=hls:hls_time=4:hls_playlist_type=vod:hls_segment_filename=segment_%03d.ts]manifest.m3u8|[f=mp4:movflags=+faststart]fallback.mp4"
 ```
 
-Key parameters:
-- `-preset medium` — balance between speed and compression efficiency
-- `-crf 23` — "visually indistinguishable" quality target
-- `-b:a 128k` — AAC audio at 128kbps
-- `scale=-2:min(ih\,1080)` — downscale only when source height exceeds 1080 (no upscaling below)
-- `-hls_time 4` — 4-second segments (standard for VOD)
-- `-hls_playlist_type vod` — VOD playlist (no sliding window)
+Where `<HDR_TO_SDR_CHAIN>` is conditional on `probeResult.isHdr`:
+- HDR source: `zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,`
+- SDR source: `` (empty — no tonemap needed)
 
-Separate FFmpeg invocation for the MP4 fallback:
+And `<SCALE>` is always `scale=-2:min(ih\,1080)`.
+
+Key changes from the original v1 invocation:
+- **`-preset veryfast`** (was `medium`, then `fast`, now `veryfast`) — ~25-30% faster encoding than `fast`, files ~15-20% larger but well within budget for short clips
+- **`-pix_fmt yuv420p`** — forces 8-bit output. Without this, libx264 preserves the source's pixel format and produces 10-bit High10 H.264 for HDR sources, which most mobile devices can't decode
+- **`-profile:v high -level 4.0`** — universally compatible with all iOS/Android devices from ~2015+
+- **`-colorspace bt709 -color_primaries bt709 -color_trc bt709`** — explicit SDR metadata in the H.264 VUI parameters
+- **`zscale + tonemap=hable` chain** — proper HDR→SDR tone-mapping (provided by libzimg in `jrottenberg/ffmpeg:6-alpine`, confirmed via `ffmpeg -filters`)
+- **Single tee-muxer invocation** — produces both HLS and MP4 outputs from one encoder pass instead of two sequential libx264 runs
+
+Wall-clock: ~21s for an 11.5-second HEVC HDR 1080p source (was ~29s at `preset=fast`, ~50s at `preset=medium`).
+
+#### Poster frame (unchanged):
 ```
-ffmpeg -i input.mp4 -c:v libx264 -preset medium -crf 23 -c:a aac -b:a 128k \
-  -vf "scale=-2:min(ih\,1080)" -movflags +faststart fallback.mp4
+ffmpeg -y -ss 1 -i input.mp4 -vframes 1 -q:v 2 poster.jpg
 ```
 
-And for the poster:
-```
-ffmpeg -i input.mp4 -ss 00:00:01 -vframes 1 -q:v 2 poster.jpg
-```
+#### Telemetry on the callback payload
 
-(Exact parameters will be verified during implementation on real iPhone/Android source footage.)
+`CallbackSuccessPayload` (`backend/transcoder/src/types.ts`) includes:
+- `processing_mode: 'transcode' | 'stream_copy'` — required, observed via App Insights `customEvents | where name == 'video_transcoding_completed'`
+- `fast_path_failure_reason?: string | null` — only set when `canStreamCopy` matched but `remuxHlsAndMp4` threw and we fell through to the slow path (rare; investigate if non-empty)
 
 ---
 
@@ -537,6 +581,266 @@ Hot, Cool, or Archive storage tier for the master originals?
 
 ---
 
+## Decision 8: Stream-copy fast path for compatible sources
+
+**Added 2026-04-08 after first round of post-launch performance work.**
+
+### Question
+
+Re-encoding every video with libx264 takes 15-25 seconds for short phone captures even at `preset=fast`. ~95% of phone uploads (modern iPhones with "Most Compatible" setting and all modern Android captures) are already H.264 SDR ≤1080p MP4/MOV with AAC audio — exactly the format the slow path produces. Should we skip the re-encode entirely for those?
+
+### Chosen: Yes — branch in the runner on `canStreamCopy(probeResult)`
+
+### How it works
+
+`backend/transcoder/src/ffmpegService.ts` exports two helpers:
+
+- `remuxHlsAndMp4(input, hlsDir, mp4)` — uses FFmpeg `-c copy -c:a copy` with the existing `-f tee` muxer to bit-exact remux the source into HLS (MPEG-TS) + MP4 (faststart) outputs. Wall-clock: ~2-5 seconds for a 30-second 1080p phone capture.
+- `canStreamCopy(probe)` — predicate that returns true if ALL of: `videoCodec === 'h264'`, `!isHdr`, `height <= 1080`, container is `'mp4' | 'mov'`, audio is `null | 'aac'`.
+
+`backend/transcoder/src/runner.ts` branches right after ffprobe:
+
+```typescript
+if (canStreamCopy(probeResult)) {
+  try {
+    await remuxHlsAndMp4(localInput, hlsDir, fallbackPath);
+    processingMode = 'stream_copy';
+  } catch (err) {
+    fastPathFailureReason = err.message;
+    // Clean up partial HLS, then fall through:
+    await transcodeHlsAndMp4(localInput, hlsDir, fallbackPath, { isHdr: false });
+  }
+} else {
+  await transcodeHlsAndMp4(localInput, hlsDir, fallbackPath, { isHdr: probeResult.isHdr });
+}
+```
+
+### Why stream-copy is safe for HLS in MPEG-TS
+
+- `-f hls` with `hls_time=4` cuts at the **nearest keyframe before** the target duration, so segments are variable-length (typically 2-5 sec for phone captures with sub-2-second keyframe intervals). This is valid per the HLS spec — `EXTINF` declares actual duration per segment.
+- AAC-LC streams in MP4/MOV containers re-mux cleanly into MPEG-TS without bitstream filter changes. FFmpeg auto-applies `h264_mp4toannexb` for the H.264 NAL format conversion.
+- Tested on real iPhone H.264 SDR captures — works on both AVPlayer (iOS) and ExoPlayer (Android).
+
+### Why HEVC / HDR / >1080p still go through the slow path
+
+- HEVC isn't H.264 — it requires re-encoding to H.264 for our delivery contract.
+- HDR sources need tone-mapping to SDR (see Decision 3's slow path command).
+- >1080p sources need downscaling.
+- Non-AAC audio (rare — mostly older Android Opus or AMR captures) needs transcoding to AAC.
+
+### Why NOT a single re-encode-everything path
+
+- libx264 software encoding on 2 vCPU is the dominant cost. Avoiding it on the common case is the biggest single performance win available without architectural change.
+- Stream-copy preserves the source's bitrate and visual quality exactly — better than any re-encode.
+
+### Telemetry
+
+`processing_mode: 'transcode' | 'stream_copy'` is sent in the callback payload and logged via `trackEvent('video_transcoding_completed')`. Adoption rate query:
+
+```kql
+customEvents
+| where name == "video_transcoding_completed"
+| summarize count() by tostring(customDimensions.processingMode)
+```
+
+Expect ~95% `stream_copy` on a representative sample of phone uploads. If `transcode` is dominant, investigate which sources are escaping the fast-path predicate.
+
+---
+
+## Decision 9: Instant preview for the uploader
+
+**Added 2026-04-08. Drives perceived "polishing" wait time on the uploader's device from minutes to ~zero.**
+
+### Question
+
+Even with the stream-copy fast path, transcoding still takes ~15-65 seconds. For the uploader's own device, this is ~zero perceived value because they captured the video and already know what's in it. Can we let them play it instantly?
+
+### Chosen: Yes — return a SAS read URL for the original blob in the commit response
+
+### How it works
+
+1. Client commits the upload via `POST /api/events/{eventId}/videos`
+2. Backend (`commitVideoUpload` in `videos.ts`) marks the row `processing`, enqueues the transcode job, AND generates a 15-minute read SAS for the original blob via `generateViewSas(video.blob_path, 15 * 60)`
+3. Backend returns the preview URL in the response body:
+   ```json
+   { "video_id": "...", "status": "processing", "preview_url": "https://stcliquepixprod.blob.core.windows.net/photos/.../original.mp4?sv=..." }
+   ```
+4. The Flutter `videos_repository.uploadVideo` returns `({ String videoId, String? previewUrl })` to the upload screen
+5. The video card widget for processing-state videos becomes tappable when `video.previewUrl != null` (label changes from "Polishing your video" to "Tap to preview")
+6. Tap navigates to `/events/{eventId}/videos/{videoId}` with `extra: previewUrl` (GoRouter `extra` so the SAS URL never appears in the address bar)
+7. `VideoPlayerScreen` checks `widget.previewUrl != null` in `_initializePlayer` — if set, skips `/playback` entirely and constructs `VideoPlayerController.networkUrl(Uri.parse(widget.previewUrl!))` directly. Bottom banner reads "Playing preview while we finish processing..."
+8. Background: transcoder runs normally. When complete, `video_ready` fires via Web PubSub to ALL members **including the uploader** (this is a behavior change — see Decision 10). Feed providers invalidate; the card silently upgrades from "processing + preview" to the standard active state with poster + play icon. Future taps go through the normal `/playback` HLS pipeline.
+
+### Why this is safe
+
+- **Only the uploader ever sees the preview URL.** The backend gates the field generation in `enrichVideoWithUrls`:
+  ```typescript
+  const isUploader = video.uploaded_by_user_id === userId;
+  const isNotYetActive = video.status === 'processing' || video.status === 'pending';
+  if (isUploader && isNotYetActive && Boolean(video.blob_path)) { /* generate preview SAS */ }
+  ```
+- **HEVC compatibility is tautological** for the uploader's device — it captured the video, so it can decode the original by definition. No risk of an iPhone HEVC source failing to play on someone else's older Android.
+- **Stale-after-active is handled.** Once `status='active'`, the backend stops returning `preview_url` from the GET endpoints, so a feed refresh upgrades the card automatically.
+- **SAS expiry of 15 minutes** is plenty of headroom. If a user pauses mid-preview for >15 min, the player errors and they back out — by then the transcode has completed and a fresh `/playback` call serves the proper HLS URL.
+
+### Why preview, not "instant publish"
+
+We could mark the video `active` immediately and publish to other clique members against the original blob URL — but we don't, because:
+- iPhone HEVC originals would fail playback on some Android devices (the whole reason we transcode to H.264)
+- Original MP4s often lack `+faststart` moov atom positioning, hurting first-frame latency
+- Original file sizes are 2-5x larger than the H.264 transcode, wasting bandwidth for other viewers
+
+So the rule is: instant preview is **uploader-only**, transcoded HLS/MP4 is what other members see.
+
+### Failure handling
+
+`generateViewSas` for the preview URL is wrapped in try/catch in both the commit endpoint and `enrichVideoWithUrls`. If SAS generation fails (rare — would only happen if the User Delegation Key request itself fails), the response returns `preview_url: null`, the client falls back to the standard "Polishing your video" non-tappable card, and the user sees the same UX as the original v1 ship. Telemetry: `video_preview_sas_failed` event with the error.
+
+---
+
+## Decision 10: Web PubSub video_ready fanout includes the uploader
+
+**Added 2026-04-08 — corollary of Decision 9.**
+
+### Question
+
+Originally, `pushVideoReady` excluded the uploader from BOTH Web PubSub and FCM (`WHERE cm.user_id != $2`). The reasoning was: "the uploader already knows they uploaded it." But with instant preview (Decision 9), the uploader has a "processing + preview" card that needs to upgrade to the "active" state when transcoding finishes. Without a Web PubSub signal to their device, they keep seeing the processing card until the 30-second feed poll fires.
+
+### Chosen: Split the channels
+
+- **Web PubSub `video_ready`:** sent to uploader AND all other clique members. Uploader's `EventFeedScreen.onVideoReady` listener invalidates `eventVideosProvider(eventId)` and the card upgrades immediately.
+- **FCM push `video_ready`:** sent to OTHER clique members only. The uploader doesn't get an FCM push — they already saw their upload complete and a "Your video is ready" notification on their own upload would be redundant noise.
+
+### Implementation
+
+`pushVideoReady` in `videos.ts:284-348`:
+
+```typescript
+// Web PubSub: include the uploader
+await sendToUser(uploaderUserId, payload).catch(...);
+
+// Find OTHER members for the rest of the fanout
+const otherMembers = await query<{ user_id: string }>(
+  `SELECT DISTINCT cm.user_id FROM events e
+   JOIN clique_members cm ON cm.clique_id = e.clique_id
+   WHERE e.id = $1 AND cm.user_id != $2`,
+  [eventId, uploaderUserId],
+);
+
+// Web PubSub broadcast to other members
+await Promise.all(otherMembers.map((m) => sendToUser(m.user_id, payload).catch(...)));
+
+// FCM push for backgrounded other members (NOT the uploader)
+const tokens = await query<...>(`SELECT pt.token FROM push_tokens pt WHERE pt.user_id = ANY($1::uuid[])`, [otherMembers.map((m) => m.user_id)]);
+await sendToMultipleTokens(tokens.map((t) => t.token), 'New video ready', '...', payload);
+```
+
+### Why not also send FCM to the uploader
+
+The uploader's instant-preview UX already covers the "I want to know when my video is ready" need without a notification. Sending FCM to the uploader would:
+- Show an Android heads-up banner saying "New video ready" about a video they themselves just uploaded — UX noise
+- Potentially fire while they're still tapping around in the app, making them wonder what just happened
+- Burn an FCM quota slot for zero value
+
+Web PubSub on the uploader's open WebSocket connection is the right channel — it silently flips a Riverpod provider without any visible notification.
+
+---
+
+## Decision 11: Stable cacheKey for SAS-backed images in feed cards
+
+**Added 2026-04-08 after observing card flicker on every 30-second poll cycle.**
+
+### Question
+
+The event feed has a 30-second poll timer (`event_feed_screen.dart:56-63`) that invalidates `eventPhotosProvider` and `eventVideosProvider`. Each invalidation triggers a backend refetch, and `enrichVideoWithUrls` / `enrichPhotoWithUrls` regenerate fresh User Delegation SAS URLs every call (different `se=` and `sig=` query params each time). `CachedNetworkImage` keys its disk cache on the URL by default, so a new SAS URL = cache miss = image re-fetch and re-decode = visible flicker every 30 seconds. Bad UX.
+
+### Chosen: Set explicit `cacheKey` based on photo/video ID
+
+`cached_network_image` accepts an explicit `cacheKey` parameter that overrides URL-based caching. When set, the cache lookup uses the key — not the URL — so a refreshed SAS URL is treated as the same image. First load fetches via the network using the URL; subsequent loads with the same key (but different URL) are served from the disk cache.
+
+Applied in two places:
+- `app/lib/features/videos/presentation/video_card_widget.dart`:
+  ```dart
+  CachedNetworkImage(
+    imageUrl: video.posterUrl ?? '',
+    cacheKey: 'video_poster_${video.id}',
+    ...
+  )
+  ```
+- `app/lib/features/photos/presentation/photo_card_widget.dart`:
+  ```dart
+  CachedNetworkImage(
+    imageUrl: photo.thumbnailUrl ?? photo.originalUrl ?? '',
+    cacheKey: 'photo_thumb_${photo.id}',
+    ...
+  )
+  ```
+
+### Why ID-based cache keys are safe
+
+- Photo and video IDs are immutable UUIDs — never reused.
+- The image bytes a given ID points to never change (we never re-upload to the same blob path with different content).
+- If a photo or video is deleted, the row is gone and the cache entry is harmless leftover memory until the next LRU eviction.
+
+### Why this isn't a backend-side fix
+
+The "right" fix on paper would be to cache the generated SAS URLs in the backend for several minutes so successive feed refetches return the same URL. But:
+- The in-Function memory cache is per-instance (not shared across scaled-out workers)
+- TTL tuning is fiddly (too short = no benefit; too long = SAS expires before the cache does)
+- The client-side `cacheKey` fix is a one-line change that completely eliminates the flicker
+
+Backend SAS caching is deferred indefinitely. The client-side fix is sufficient.
+
+---
+
+## Decision 12: KEDA polling interval and min-executions tuning
+
+**Added 2026-04-08 after queue dispatch latency was measured at ~53s for HDR videos.**
+
+### Question
+
+The default Container Apps Job KEDA scaler polls the queue every 30 seconds. For a queued message that arrived right after a poll, the worst-case detection latency is 30s. Combined with ~15-25s of Container Apps Job cold start (Consumption workload profile), total queue→runner-start latency was ~50-55 seconds. For an 11.5-second source video, this completely dominates the wall-clock budget.
+
+### Chosen: pollingInterval=5, min-executions=1, retain Consumption profile
+
+```bash
+az containerapp job update \
+  --name caj-cliquepix-transcoder \
+  --resource-group rg-cliquepix-prod \
+  --polling-interval 5 \
+  --min-executions 1
+```
+
+- **`polling-interval=5`** cuts worst-case detection latency from 30s to 5s (average from 15s to 2.5s). The marginal cost of 6x more polls against the storage queue is negligible (Storage Queue bills per million transactions).
+- **`min-executions=1`** ensures KEDA always has at least one execution running per polling interval, which keeps the image cached on the compute node and reduces (but doesn't eliminate) container cold-start time. Caveat: this is misleadingly named — it doesn't keep a container "warm" in the traditional sense. Container Apps Jobs are one-shot by definition; each new message spawns a fresh container.
+
+### What this still doesn't fix
+
+~15-25 seconds of Container Apps Jobs cold start per execution (container scheduling + image load + node.js init) is irreducible on the Consumption workload profile. Eliminating it requires migrating from a Container Apps Job (one-shot per message) to a Container Apps **Service** with a long-running queue processor (always-on container that polls and processes in a loop, scaling on queue depth via KEDA). That's a meaningful refactor: ~1-2 days of work, new health checks, different deployment model. **Deferred to v1.5.** Current ~55-65s wall clock for HDR HEVC re-encodes is acceptable for the v1 launch window now that:
+- Stream-copy fast path covers the common case in 2-5s
+- Instant preview makes the uploader's perceived wait ~zero
+- Web PubSub `video_ready` signals other members the moment processing completes
+
+### Telemetry
+
+App Insights query to track queue dispatch latency:
+
+```kql
+let commits = traces
+  | where operation_Name == "commitVideoUpload" and message contains "Succeeded"
+  | project commit_t = timestamp, video_id = extract("Id=([0-9a-f-]+)", 1, message);
+let starts = traces
+  | where message startswith "[runner] Processing video"
+  | project start_t = timestamp, video_id = extract("video ([0-9a-f-]+)", 1, message);
+commits | join kind=inner starts on video_id
+| extend dispatch_latency_s = datetime_diff('second', start_t, commit_t)
+| summarize avg(dispatch_latency_s), percentiles(dispatch_latency_s, 50, 95)
+```
+
+Target after the bump: p50 < 25s, p95 < 40s.
+
+---
+
 ## Decisions deferred to the implementation plan
 
 These are known-unknowns that will be resolved when we write the implementation plan, not now:
@@ -600,16 +904,20 @@ For the edge case where some other playback failure occurs:
 - Add telemetry: `video_playback_fallback_used` event with `reason` field
 - If telemetry shows this happens often, revisit during v1.5
 
-### Q7: Per-user video limits — Soft cap of 5 videos per user per event
+### Q7: Per-user video limits — Soft cap of (currently 10, originally 5) videos per user per event
 
-Each user is limited to **5 currently non-deleted videos in any single event**. Counting semantics:
+Each user is limited to a fixed number of **currently non-deleted videos in any single event**. Counting semantics:
 - Counts videos in `status IN ('pending', 'processing', 'active')` for this user in this event
 - Deleted videos (`status='deleted'`) **do NOT count** — deletion frees a slot, encouraging cleanup
 - Rejected videos (`status='rejected'`) do NOT count
 - Limit is enforced at the `POST /api/events/{eventId}/videos/upload-url` endpoint
-- Error response: `VIDEO_LIMIT_REACHED` — "You've reached the 5-video limit for this event. Delete a video to upload another."
+- Error response: `VIDEO_LIMIT_REACHED` — "You've reached the N-video limit for this event. Delete a video to upload another."
 
 Photos remain unlimited per user per event — this cap is video-specific because video has dramatically higher per-item cost (transcoding compute + multi-asset storage) than photos.
+
+**Current value: `PER_USER_VIDEO_LIMIT = 10`** (`backend/src/functions/videos.ts:39`).
+
+**History:** originally shipped at 5. Bumped to 10 on 2026-04-08 as an emergency unblock when a tester piled up 5 broken videos in a test event from earlier HDR re-encode failures and couldn't clean them up via the (then-missing) in-app delete UI. With the delete UI now shipping (`video_player_screen.dart` PopupMenuButton — see Decision 8 below), 10 is also a reasonable steady-state value: typical clique events rarely exceed a handful of videos per user, and the higher ceiling reduces the chance of a tester or power user getting wedged again. The Flutter friendly-error string in `_friendlyError` is hard-coded to "5-video limit" as of the bump — update it if the limit is changed again, or refactor it to read from a backend-supplied number.
 
 ---
 

@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:chewie/chewie.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:video_player/video_player.dart';
 import '../../../core/theme/app_colors.dart';
@@ -16,9 +17,21 @@ import 'videos_providers.dart';
 ///   3. Try to play via HLS (video_player handles AVPlayer/ExoPlayer internally)
 ///   4. On HLS init failure, fall back to the MP4 progressive URL
 class VideoPlayerScreen extends ConsumerStatefulWidget {
+  /// Owning event — needed so the delete action can invalidate the feed
+  /// provider (`eventVideosProvider(eventId)`) and pop cleanly.
+  final String eventId;
   final String videoId;
+  /// Instant-preview SAS URL for the original blob. If present, the player
+  /// skips the /playback API call and opens the original MP4 directly.
+  /// Only set when the uploader taps a card for their own processing video.
+  final String? previewUrl;
 
-  const VideoPlayerScreen({super.key, required this.videoId});
+  const VideoPlayerScreen({
+    super.key,
+    required this.eventId,
+    required this.videoId,
+    this.previewUrl,
+  });
 
   @override
   ConsumerState<VideoPlayerScreen> createState() => _VideoPlayerScreenState();
@@ -30,6 +43,7 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
   File? _tempManifestFile;
   bool _isLoading = true;
   bool _usedFallback = false;
+  bool _usedInstantPreview = false;
   String? _errorText;
 
   @override
@@ -40,6 +54,24 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
 
   Future<void> _initializePlayer() async {
     try {
+      // Instant-preview path: skip /playback entirely and play the original
+      // MP4 directly via a pre-signed SAS URL. The uploader's device captured
+      // this video so codec compatibility is tautologically safe. Transcoding
+      // still runs in the background; when video_ready arrives via Web PubSub,
+      // the feed refreshes and future playback goes through the normal HLS/MP4
+      // pipeline.
+      if (widget.previewUrl != null) {
+        debugPrint('[CliquePix Video] Instant-preview path: ${widget.previewUrl}');
+        _usedInstantPreview = true;
+        final controller = VideoPlayerController.networkUrl(
+          Uri.parse(widget.previewUrl!),
+        );
+        await controller.initialize();
+        _controller = controller;
+        _wireChewieFromController(controller);
+        return;
+      }
+
       final repo = await ref.read(videosRepositoryProvider.future);
       final playback = await repo.getPlayback(widget.videoId);
 
@@ -47,13 +79,21 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
       try {
         await _initWithHls(playback);
         return;
-      } catch (e) {
-        debugPrint('[CliquePix Video] HLS init failed: $e — falling back to MP4');
+      } catch (e, st) {
+        debugPrint('[CliquePix Video] HLS init failed (${e.runtimeType}): $e');
+        debugPrint('[CliquePix Video] HLS stack: $st');
+        debugPrint('[CliquePix Video] Falling back to MP4...');
       }
 
       // HLS failed — try MP4 fallback
       _usedFallback = true;
-      await _initWithMp4(playback);
+      try {
+        await _initWithMp4(playback);
+      } catch (e, st) {
+        debugPrint('[CliquePix Video] MP4 fallback init failed (${e.runtimeType}): $e');
+        debugPrint('[CliquePix Video] MP4 stack: $st');
+        rethrow;
+      }
     } catch (e) {
       debugPrint('[CliquePix Video] Player init failed: $e');
       if (mounted) {
@@ -65,6 +105,27 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
     }
   }
 
+  /// Wires a ChewieController for the instant-preview path (no
+  /// VideoPlaybackInfo available). Mirrors `_wireChewie` but takes just
+  /// the controller.
+  void _wireChewieFromController(VideoPlayerController controller) {
+    _chewieController = ChewieController(
+      videoPlayerController: controller,
+      autoPlay: true,
+      looping: false,
+      aspectRatio: controller.value.aspectRatio,
+      materialProgressColors: ChewieProgressColors(
+        playedColor: AppColors.electricAqua,
+        handleColor: AppColors.electricAqua,
+        backgroundColor: Colors.white24,
+        bufferedColor: Colors.white38,
+      ),
+    );
+    if (mounted) {
+      setState(() => _isLoading = false);
+    }
+  }
+
   Future<void> _initWithHls(VideoPlaybackInfo playback) async {
     // Materialize the manifest text into a temp file. video_player can play
     // HLS from a file:// URL but not from raw text or a data URL.
@@ -73,7 +134,16 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
     await manifestFile.writeAsString(playback.hlsManifest);
     _tempManifestFile = manifestFile;
 
-    final controller = VideoPlayerController.file(manifestFile);
+    // We use networkUrl with a file:// URI instead of .file() because only
+    // the network constructors expose formatHint. formatHint is REQUIRED —
+    // video_player does not auto-detect HLS from the .m3u8 extension when
+    // loading via the file constructor. Without the hint, both AVFoundation
+    // and ExoPlayer default to ProgressiveMediaSource and try to parse the
+    // manifest text as a raw video stream, throwing during init.
+    final controller = VideoPlayerController.networkUrl(
+      Uri.file(manifestFile.path),
+      formatHint: VideoFormat.hls,
+    );
     await controller.initialize();
     _controller = controller;
     _wireChewie(controller, playback);
@@ -114,6 +184,43 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
     super.dispose();
   }
 
+  /// Prompt for confirmation, delete the video via the repository, invalidate
+  /// the feed provider so the card disappears immediately, then pop back to
+  /// the event feed. Works even when the player failed to init (e.g., broken
+  /// HDR blobs from pre-v0.1.5 transcodes) because the AppBar is rendered
+  /// unconditionally — the menu stays reachable in the error state.
+  Future<void> _confirmAndDeleteVideo() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Video'),
+        content: const Text('This video will be permanently deleted.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete', style: TextStyle(color: AppColors.error)),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    try {
+      final repo = await ref.read(videosRepositoryProvider.future);
+      await repo.deleteVideo(widget.videoId);
+      ref.invalidate(eventVideosProvider(widget.eventId));
+      if (mounted) context.pop();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to delete: $e')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -122,6 +229,26 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
         title: const Text('Video'),
+        actions: [
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, color: Colors.white),
+            onSelected: (value) async {
+              if (value == 'delete') await _confirmAndDeleteVideo();
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(
+                value: 'delete',
+                child: Row(
+                  children: [
+                    Icon(Icons.delete, color: AppColors.error),
+                    SizedBox(width: 8),
+                    Text('Delete', style: TextStyle(color: AppColors.error)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
       body: Center(child: _buildBody()),
     );
@@ -157,7 +284,15 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
       mainAxisSize: MainAxisSize.min,
       children: [
         Expanded(child: Chewie(controller: _chewieController!)),
-        if (_usedFallback)
+        if (_usedInstantPreview)
+          Padding(
+            padding: const EdgeInsets.all(8),
+            child: Text(
+              'Playing preview while we finish processing...',
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 12),
+            ),
+          )
+        else if (_usedFallback)
           Padding(
             padding: const EdgeInsets.all(8),
             child: Text(
