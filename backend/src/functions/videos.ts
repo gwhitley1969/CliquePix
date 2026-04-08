@@ -506,13 +506,41 @@ async function commitVideoUpload(
     }
 
     // Commit the blocks via Put Block List
-    await commitBlockList(video.blob_path, blockIds as string[], 'video/mp4');
+    try {
+      await commitBlockList(video.blob_path, blockIds as string[], 'video/mp4');
+    } catch (err) {
+      // commitBlockList throws if any blockId isn't present in the uncommitted
+      // block list — e.g., the client's block uploads never reached Azure, or
+      // sent the wrong block IDs. Surface this as its own telemetry event so
+      // we can diagnose client-side upload bugs.
+      trackEvent('video_commit_block_list_failed', {
+        videoId,
+        eventId,
+        userId: authUser.id,
+        expectedBlocks: String(blockIds.length),
+        error: err instanceof Error ? err.message : String(err),
+      });
+      // Delete the pending row so the user can retry cleanly
+      await execute(`DELETE FROM photos WHERE id = $1`, [videoId]);
+      throw new ValidationError(
+        `Failed to commit video blocks: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
 
     // Verify the assembled blob exists with the expected size
     const blobProps = await getBlobProperties(video.blob_path);
     const actualSize = blobProps.contentLength ?? 0;
     if (actualSize !== video.file_size_bytes) {
-      // Size mismatch — likely a client bug or partial upload
+      // Size mismatch — likely a client bug or partial upload.
+      // Track this specifically so we can catch client upload bugs in telemetry.
+      trackEvent('video_commit_size_mismatch', {
+        videoId,
+        eventId,
+        userId: authUser.id,
+        expectedSize: String(video.file_size_bytes),
+        actualSize: String(actualSize),
+        blockCount: String(blockIds.length),
+      });
       await deleteBlob(video.blob_path);
       await execute(`DELETE FROM photos WHERE id = $1`, [videoId]);
       throw new ValidationError(

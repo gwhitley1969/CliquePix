@@ -128,15 +128,21 @@ class VideoBlockUploadService {
 
     for (int attempt = 0; attempt <= maxRetries; attempt++) {
       try {
+        // Pass the chunk bytes DIRECTLY to Dio (not wrapped in a Stream).
+        // Stream bodies cause Dio to use Transfer-Encoding: chunked which
+        // Azure Storage Put Block doesn't handle correctly — the block ends
+        // up as 0 bytes in Azure, the commit fails with size mismatch, and
+        // the client sees a generic "Upload failed" message.
+        //
+        // Do NOT set x-ms-blob-type: BlockBlob — that's for Put Blob (whole
+        // blob upload), not Put Block (single block within a block blob).
+        // Do NOT manually set Content-Length — Dio sets it correctly from
+        // the chunk byte length.
         await _dio.put(
           url,
-          data: Stream.fromIterable([chunk]),
+          data: chunk,
           options: Options(
-            headers: {
-              'x-ms-blob-type': 'BlockBlob',
-              'Content-Length': chunk.length.toString(),
-              'Content-Type': 'application/octet-stream',
-            },
+            contentType: 'application/octet-stream',
             // Don't auto-retry via the RetryInterceptor — we have our own loop
             extra: {'noRetry': true},
           ),

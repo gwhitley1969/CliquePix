@@ -5,6 +5,13 @@ import { trackError } from '../services/telemetryService';
 
 export function handleError(error: unknown, invocationId?: string): HttpResponseInit {
   if (error instanceof AppError) {
+    // Log AppErrors at warn level so they show up in App Insights traces.
+    // Previously these were returned silently, making bug-hunting hard —
+    // we'd see the client show "Upload failed" but have no backend trace.
+    console.warn(
+      `AppError: ${error.code} (status=${error.statusCode}) — ${error.message}`,
+      invocationId ? `[${invocationId}]` : '',
+    );
     return errorResponse(error.code, error.message, error.statusCode);
   }
 
