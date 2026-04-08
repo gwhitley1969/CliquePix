@@ -1,10 +1,30 @@
 # DEPLOYMENT_STATUS.md — Clique Pix v1
 
-Last updated: 2026-04-03
+Last updated: 2026-04-07 (video v1 implementation complete on `feature/video`)
+
+## Video v1 Status
+
+**Branch:** `feature/video` — ready for on-device verification, pending merge to `main`
+
+| Phase | Status | Commit |
+|---|---|---|
+| 1. Database migration (007 — media_type + video columns) | ✅ Applied to production | `fe3e69f` |
+| 2. Infrastructure (Log Analytics, ACR Standard, Container Apps Environment+Job, Storage Queue, RBAC, Budget) | ✅ Provisioned in `rg-cliquepix-prod` | `8e569ab`, `343d893` |
+| 3. Transcoder container (Dockerfile + Node.js runner + FFmpeg) | ✅ v0.1.2 deployed to `cracliquepix.azurecr.io` | `a6a9930`, `9db5bad` |
+| 4. Backend Function endpoints (10 new routes) | ✅ Deployed to `func-cliquepix-fresh` | `552cb60`, `9db5bad` |
+| 5. Backend integration test (E2E with real test video) | ✅ All 3 attempts passed after 2 bugs fixed | `9db5bad` |
+| 6. Flutter frontend (11 new files, 11 modified) | ✅ Compiles, debug APK builds successfully | `45f5baf` |
+| 7. Polish + on-device testing + merge to main | ⏳ In progress — manual testing required before merge | — |
+
+**See also:**
+- `docs/VIDEO_ARCHITECTURE_DECISIONS.md` — 8 architecture decisions + 7 product Q&A
+- `docs/VIDEO_INFRASTRUCTURE_RUNBOOK.md` — Azure resources runbook (as-built)
+- `docs/CliquePix_Video_Feature_Spec.md` — original generic feature spec
+- `docs/VIDEO_V1_TESTING_CHECKLIST.md` — manual on-device testing checklist (Phase 7)
 
 ---
 
-## Code Implementation Status
+## Pre-existing v1 Status (photos, cliques, events, DMs)
 
 ### Backend (Azure Functions v4 TypeScript)
 

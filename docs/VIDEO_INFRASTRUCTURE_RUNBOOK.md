@@ -342,10 +342,13 @@ This is well under the $50/month budget alert threshold. Daily cost during dev s
 
 ---
 
-## Outstanding follow-ups
+## Outstanding follow-ups (post-v1)
 
 - **CLI bug:** Re-test `az role assignment create` after upgrading Azure CLI from 2.77.0
 - **Storage account:** Audit code paths and disable `allowSharedKeyAccess` (CLAUDE.md says it should be `false`)
 - **Function App:** Migrate from Node 20 to Node 24 before 2026-04-30 (Node 20 EOL)
 - **Bicep IaC:** Convert this runbook to Bicep templates in v1.5
 - **Sample test videos:** Create the `dev-assets` blob container and upload reference videos for the `download-sample-videos.sh` script (Phase 3)
+- **KEDA scaler auto-trigger:** Phase 5 integration test required manual `az containerapp job start`. Investigate why the queue scaler didn't fire — could be polling lag, RBAC missing on the scaler identity, or queue depth metrics not being read correctly. Important to fix before scaling beyond manual testing.
+- **Internal callback auth:** Currently uses Azure Functions function key (`?code=<key>`). Architecturally cleaner would be a real Azure AD app registration for the Function App so the transcoder MI can acquire a proper bearer token. Defer to v1.5.
+- **Function key rotation:** The `function-callback-key` secret on the Container Apps Job has a copy of the Functions runtime key for `videoProcessingComplete`. If you rotate the function key (`az functionapp function keys set`), you must also update the secret on the Container Apps Job. Document this in any future runbook for key rotation.
