@@ -527,24 +527,29 @@ async function commitVideoUpload(
       );
     }
 
-    // Verify the assembled blob exists with the expected size
+    // Verify the assembled blob exists with the expected size.
+    // Explicit Number() conversion on BOTH sides as defense in depth —
+    // the global pg type parser already converts BIGINT to number, but
+    // being explicit here makes the comparison intent obvious and
+    // protects against future changes to the type parser config.
     const blobProps = await getBlobProperties(video.blob_path);
-    const actualSize = blobProps.contentLength ?? 0;
-    if (actualSize !== video.file_size_bytes) {
+    const actualSize = Number(blobProps.contentLength ?? 0);
+    const expectedSize = Number(video.file_size_bytes ?? 0);
+    if (actualSize !== expectedSize) {
       // Size mismatch — likely a client bug or partial upload.
       // Track this specifically so we can catch client upload bugs in telemetry.
       trackEvent('video_commit_size_mismatch', {
         videoId,
         eventId,
         userId: authUser.id,
-        expectedSize: String(video.file_size_bytes),
+        expectedSize: String(expectedSize),
         actualSize: String(actualSize),
         blockCount: String(blockIds.length),
       });
       await deleteBlob(video.blob_path);
       await execute(`DELETE FROM photos WHERE id = $1`, [videoId]);
       throw new ValidationError(
-        `Uploaded blob size (${actualSize}) does not match expected size (${video.file_size_bytes}).`,
+        `Uploaded blob size (${actualSize}) does not match expected size (${expectedSize}).`,
       );
     }
 
