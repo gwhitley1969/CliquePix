@@ -304,40 +304,73 @@ class _EventDetailBodyState extends ConsumerState<_EventDetailBody> {
                 ),
                 const SizedBox(height: 20),
 
-                // Add Photo button (only for active events)
+                // Add Photo + Add Video buttons (only for active events)
                 if (event.isActive)
-                  Container(
-                    width: double.infinity,
-                    height: 50,
-                    decoration: BoxDecoration(
-                      gradient: AppGradients.primary,
-                      borderRadius: BorderRadius.circular(14),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.deepBlue.withValues(alpha: 0.3),
-                          blurRadius: 16,
-                          offset: const Offset(0, 6),
-                        ),
-                      ],
-                    ),
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        onTap: () => context.push('/events/$eventId/capture'),
-                        borderRadius: BorderRadius.circular(14),
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.camera_alt_rounded, color: Colors.white, size: 20),
-                            SizedBox(width: 8),
-                            Text(
-                              'Add Photo',
-                              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Container(
+                          height: 50,
+                          decoration: BoxDecoration(
+                            gradient: AppGradients.primary,
+                            borderRadius: BorderRadius.circular(14),
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppColors.deepBlue.withValues(alpha: 0.3),
+                                blurRadius: 16,
+                                offset: const Offset(0, 6),
+                              ),
+                            ],
+                          ),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: () => context.push('/events/$eventId/capture'),
+                              borderRadius: BorderRadius.circular(14),
+                              child: const Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.camera_alt_rounded, color: Colors.white, size: 20),
+                                  SizedBox(width: 6),
+                                  Text(
+                                    'Photo',
+                                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ],
+                          ),
                         ),
                       ),
-                    ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Container(
+                          height: 50,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: AppColors.electricAqua, width: 2),
+                          ),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: () => context.push('/events/$eventId/video-capture'),
+                              borderRadius: BorderRadius.circular(14),
+                              child: const Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.videocam_rounded, color: AppColors.electricAqua, size: 20),
+                                  SizedBox(width: 6),
+                                  Text(
+                                    'Video',
+                                    style: TextStyle(color: AppColors.electricAqua, fontWeight: FontWeight.w700, fontSize: 15),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
 
                 // Messages button

@@ -5,11 +5,36 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_gradients.dart';
+import '../../../models/photo_model.dart';
+import '../../../models/video_model.dart';
 import '../../../services/storage_service.dart';
 import '../../../widgets/error_widget.dart';
 import '../../../widgets/loading_shimmer.dart';
+import '../../videos/presentation/videos_providers.dart';
+import '../../videos/presentation/video_card_widget.dart';
 import 'photos_providers.dart';
 import 'photo_card_widget.dart';
+
+/// Discriminated union for mixed-media feed items.
+/// Either `photo` is non-null OR `video` is non-null, never both.
+class _MediaListItem {
+  final DateTime createdAt;
+  final PhotoModel? photo;
+  final VideoModel? video;
+
+  _MediaListItem.photo(PhotoModel p)
+      : photo = p,
+        video = null,
+        createdAt = p.createdAt;
+
+  _MediaListItem.video(VideoModel v)
+      : photo = null,
+        video = v,
+        createdAt = v.createdAt;
+
+  bool get isPhoto => photo != null;
+  String get id => photo?.id ?? video!.id;
+}
 
 class EventFeedScreen extends ConsumerStatefulWidget {
   final String eventId;
@@ -30,7 +55,10 @@ class _EventFeedScreenState extends ConsumerState<EventFeedScreen> {
     super.initState();
     _pollTimer = Timer.periodic(
       Duration(seconds: AppConstants.feedPollIntervalSeconds),
-      (_) => ref.invalidate(eventPhotosProvider(widget.eventId)),
+      (_) {
+        ref.invalidate(eventPhotosProvider(widget.eventId));
+        ref.invalidate(eventVideosProvider(widget.eventId));
+      },
     );
   }
 
@@ -75,6 +103,7 @@ class _EventFeedScreenState extends ConsumerState<EventFeedScreen> {
   @override
   Widget build(BuildContext context) {
     final photosAsync = ref.watch(eventPhotosProvider(widget.eventId));
+    final videosAsync = ref.watch(eventVideosProvider(widget.eventId));
     final selectionState = ref.watch(photoSelectionProvider(widget.eventId));
     final isSelecting = selectionState.isSelecting;
     final selectedIds = selectionState.selectedIds;
@@ -93,8 +122,22 @@ class _EventFeedScreenState extends ConsumerState<EventFeedScreen> {
         onRetry: () => ref.invalidate(eventPhotosProvider(widget.eventId)),
       );},
       data: (photos) {
-        debugPrint('[CliquePix] EventFeed: loaded ${photos.length} photos');
-        if (photos.isEmpty) {
+        // Pull videos out of the AsyncValue (gracefully degrade if videos
+        // endpoint errors — the photo feed should still render).
+        final videos = videosAsync.maybeWhen(
+          data: (v) => v,
+          orElse: () => <VideoModel>[],
+        );
+
+        // Build the unified, time-ordered media list
+        final mediaItems = <_MediaListItem>[
+          ...photos.map(_MediaListItem.photo),
+          ...videos.map(_MediaListItem.video),
+        ]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+        debugPrint('[CliquePix] EventFeed: loaded ${photos.length} photos + ${videos.length} videos');
+
+        if (mediaItems.isEmpty) {
           return Center(
             child: Padding(
               padding: const EdgeInsets.all(32),
@@ -107,12 +150,12 @@ class _EventFeedScreenState extends ConsumerState<EventFeedScreen> {
                   ),
                   const SizedBox(height: 16),
                   const Text(
-                    'No photos yet',
+                    'No photos or videos yet',
                     style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: Colors.white),
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Be the first to share a photo!',
+                    'Be the first to share something!',
                     style: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.5)),
                   ),
                 ],
@@ -123,7 +166,9 @@ class _EventFeedScreenState extends ConsumerState<EventFeedScreen> {
 
         return Column(
           children: [
-            // Selection toolbar
+            // Selection toolbar (still uses photo IDs only — videos are excluded
+            // from multi-select download in v1; the user can save individual
+            // videos via the video player screen)
             _SelectionToolbar(
               isSelecting: isSelecting,
               selectedCount: selectedIds.length,
@@ -144,25 +189,38 @@ class _EventFeedScreenState extends ConsumerState<EventFeedScreen> {
               },
             ),
 
-            // Photo feed
+            // Mixed media feed (photos + videos interleaved by created_at)
             Expanded(
               child: RefreshIndicator(
-                onRefresh: () async => ref.invalidate(eventPhotosProvider(widget.eventId)),
+                onRefresh: () async {
+                  ref.invalidate(eventPhotosProvider(widget.eventId));
+                  ref.invalidate(eventVideosProvider(widget.eventId));
+                },
                 child: ListView.builder(
                   padding: const EdgeInsets.symmetric(vertical: 8),
-                  itemCount: photos.length,
+                  itemCount: mediaItems.length,
                   itemBuilder: (context, index) {
-                    final photo = photos[index];
-                    return PhotoCardWidget(
-                      photo: photo,
-                      eventId: widget.eventId,
-                      isSelecting: isSelecting,
-                      isSelected: selectedIds.contains(photo.id),
-                      onSelectionToggle: () {
-                        ref.read(photoSelectionProvider(widget.eventId).notifier)
-                            .togglePhoto(photo.id);
-                      },
-                    );
+                    final item = mediaItems[index];
+                    if (item.isPhoto) {
+                      final photo = item.photo!;
+                      return PhotoCardWidget(
+                        photo: photo,
+                        eventId: widget.eventId,
+                        isSelecting: isSelecting,
+                        isSelected: selectedIds.contains(photo.id),
+                        onSelectionToggle: () {
+                          ref.read(photoSelectionProvider(widget.eventId).notifier)
+                              .togglePhoto(photo.id);
+                        },
+                      );
+                    } else {
+                      // Video card — selection mode doesn't apply to videos in v1
+                      return VideoCardWidget(
+                        video: item.video!,
+                        eventId: widget.eventId,
+                        isSelecting: false,
+                      );
+                    }
                   },
                 ),
               ),

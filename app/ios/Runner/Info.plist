@@ -58,15 +58,19 @@
 		<string>msauthv3</string>
 	</array>
 
-	<!-- Camera Usage -->
+	<!-- Camera Usage (photo + video capture) -->
 	<key>NSCameraUsageDescription</key>
-	<string>Clique Pix needs camera access to take photos for your events.</string>
+	<string>Clique Pix needs camera access to take photos and record videos for your events.</string>
 
-	<!-- Photo Library Usage -->
+	<!-- Microphone Usage (video recording) -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Clique Pix needs microphone access to record audio with your videos.</string>
+
+	<!-- Photo Library Usage (photo + video pick + save) -->
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Clique Pix needs photo library access to share photos from your gallery.</string>
+	<string>Clique Pix needs photo library access to share photos and videos from your gallery.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Clique Pix needs permission to save photos to your gallery.</string>
+	<string>Clique Pix needs permission to save photos and videos to your gallery.</string>
 
 	<!-- Background Modes -->
 	<key>UIBackgroundModes</key>

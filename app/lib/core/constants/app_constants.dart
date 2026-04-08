@@ -19,6 +19,13 @@ class AppConstants {
   static const thumbnailDimension = 400;
   static const thumbnailQuality = 70;
 
+  // Video upload (server-side limits enforced too)
+  static const maxVideoDurationSeconds = 5 * 60; // 5 minutes
+  static const maxVideoFileSizeBytes = 500 * 1024 * 1024; // 500MB
+  static const videoBlockSizeBytes = 4 * 1024 * 1024; // 4MB blocks
+  static const acceptedVideoExtensions = ['mp4', 'mov'];
+  static const perUserVideoLimitPerEvent = 5;
+
   // Reactions
   static const reactionTypes = ['heart', 'laugh', 'fire', 'wow'];
   static const reactionEmojis = {

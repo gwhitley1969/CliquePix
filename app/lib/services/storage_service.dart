@@ -48,4 +48,22 @@ class StorageService {
     }
     return saved;
   }
+
+  /// Save a video to the device's photo library / gallery.
+  /// Used for the "Save to device" action on a video card or video player.
+  /// Downloads the MP4 fallback URL (always H.264 — universally compatible)
+  /// rather than the HLS manifest, which can't be saved as a single file.
+  Future<void> saveVideoToGallery(String mp4Url, String videoId) async {
+    final dio = Dio();
+    final tempDir = await getTemporaryDirectory();
+    final filePath = '${tempDir.path}/cliquepix_$videoId.mp4';
+
+    await dio.download(mp4Url, filePath);
+    await Gal.putVideo(filePath);
+
+    final file = File(filePath);
+    if (await file.exists()) {
+      await file.delete();
+    }
+  }
 }

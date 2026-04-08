@@ -4,9 +4,19 @@ import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import '../../../models/dm_message_model.dart';
 
+/// VideoReadyEvent — emitted when the backend pushes a `video_ready`
+/// notification via Web PubSub. Fans out to listeners that want to update
+/// the feed in-place when a video finishes transcoding.
+class VideoReadyEvent {
+  final String eventId;
+  final String videoId;
+  const VideoReadyEvent({required this.eventId, required this.videoId});
+}
+
 class DmRealtimeService {
   WebSocketChannel? _channel;
   final _messageController = StreamController<DmMessageModel>.broadcast();
+  final _videoReadyController = StreamController<VideoReadyEvent>.broadcast();
   Timer? _reconnectTimer;
   String? _url;
   int _reconnectAttempts = 0;
@@ -14,6 +24,7 @@ class DmRealtimeService {
   Future<String> Function()? onNegotiate;
 
   Stream<DmMessageModel> get onMessage => _messageController.stream;
+  Stream<VideoReadyEvent> get onVideoReady => _videoReadyController.stream;
   bool get isConnected => _channel != null;
 
   Future<void> connect(String url) async {
@@ -42,6 +53,13 @@ class DmRealtimeService {
             final message = DmMessageModel.fromJson(messageJson);
             _messageController.add(message);
             debugPrint('[CliquePix DM] Received message: ${message.id}');
+          } else if (type == 'video_ready') {
+            final eventId = json['event_id'] as String?;
+            final videoId = json['video_id'] as String?;
+            if (eventId != null && videoId != null) {
+              _videoReadyController.add(VideoReadyEvent(eventId: eventId, videoId: videoId));
+              debugPrint('[CliquePix Realtime] video_ready: $videoId in event $eventId');
+            }
           }
         } catch (e) {
           debugPrint('[CliquePix DM] Failed to parse message: $e');
@@ -101,5 +119,6 @@ class DmRealtimeService {
   void dispose() {
     disconnect();
     _messageController.close();
+    _videoReadyController.close();
   }
 }

@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -14,6 +15,9 @@ import '../../features/events/presentation/create_event_screen.dart';
 import '../../features/events/presentation/event_detail_screen.dart';
 import '../../features/photos/presentation/camera_capture_screen.dart';
 import '../../features/photos/presentation/photo_detail_screen.dart';
+import '../../features/videos/presentation/video_capture_screen.dart';
+import '../../features/videos/presentation/video_upload_screen.dart';
+import '../../features/videos/presentation/video_player_screen.dart';
 import '../../features/notifications/presentation/notifications_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
 import '../../features/dm/presentation/dm_thread_list_screen.dart';
@@ -172,6 +176,29 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: 'photos/:photoId',
             builder: (context, state) => PhotoDetailScreen(
               photoId: state.pathParameters['photoId']!,
+            ),
+          ),
+          GoRoute(
+            path: 'video-capture',
+            builder: (context, state) => VideoCaptureScreen(
+              eventId: state.pathParameters['eventId']!,
+            ),
+          ),
+          GoRoute(
+            path: 'videos/upload',
+            builder: (context, state) {
+              final extra = state.extra as Map<String, dynamic>;
+              return VideoUploadScreen(
+                eventId: state.pathParameters['eventId']!,
+                videoFile: extra['file'] as File,
+                durationSeconds: extra['durationSeconds'] as int,
+              );
+            },
+          ),
+          GoRoute(
+            path: 'videos/:videoId',
+            builder: (context, state) => VideoPlayerScreen(
+              videoId: state.pathParameters['videoId']!,
             ),
           ),
           GoRoute(

@@ -94,7 +94,21 @@ class PushNotificationService {
       final eventId = data['event_id'] as String?;
       final cliqueId = data['clique_id'] as String?;
       final threadId = data['thread_id'] as String?;
+      final videoId = data['video_id'] as String?;
       final type = data['type'] as String?;
+
+      // Video ready: open the player directly
+      if (type == 'video_ready' && eventId != null && videoId != null) {
+        router.push('/events/$eventId/videos/$videoId');
+        return;
+      }
+
+      // Video processing failed: open the event so the uploader can see/delete
+      if (type == 'video_processing_failed' && eventId != null) {
+        router.push('/events/$eventId');
+        return;
+      }
+
       if (type == 'dm_message' && threadId != null && eventId != null) {
         router.push('/events/$eventId/dm/$threadId');
       } else if (eventId != null) {

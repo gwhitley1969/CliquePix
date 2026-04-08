@@ -24,10 +24,24 @@ class ApiEndpoints {
   static String eventPhotos(String eventId) => '/api/events/$eventId/photos';
   static String photo(String id) => '/api/photos/$id';
 
-  // Reactions
+  // Videos
+  static String videoUploadUrl(String eventId) => '/api/events/$eventId/videos/upload-url';
+  static String eventVideos(String eventId) => '/api/events/$eventId/videos';
+  static String video(String id) => '/api/videos/$id';
+  static String videoPlayback(String id) => '/api/videos/$id/playback';
+
+  // Unified mixed-media feed (photos + videos in one ordered list)
+  static String eventMedia(String eventId) => '/api/events/$eventId/media';
+
+  // Reactions — photos
   static String photoReactions(String photoId) => '/api/photos/$photoId/reactions';
   static String reaction(String photoId, String reactionId) =>
       '/api/photos/$photoId/reactions/$reactionId';
+
+  // Reactions — videos
+  static String videoReactions(String videoId) => '/api/videos/$videoId/reactions';
+  static String videoReaction(String videoId, String reactionId) =>
+      '/api/videos/$videoId/reactions/$reactionId';
 
   // DMs
   static String eventDmThreads(String eventId) => '/api/events/$eventId/dm-threads';

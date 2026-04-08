@@ -24,6 +24,10 @@ dependencies:
   cached_network_image: ^3.3.1
   pro_image_editor: ^5.1.4
 
+  # Video playback (HLS preferred, MP4 fallback) — see VIDEO_ARCHITECTURE_DECISIONS Decision 4
+  video_player: ^2.9.1
+  chewie: ^1.8.5
+
   # Storage
   flutter_secure_storage: ^9.0.0
   shared_preferences: ^2.2.3
