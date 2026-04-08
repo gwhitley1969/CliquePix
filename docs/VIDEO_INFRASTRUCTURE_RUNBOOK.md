@@ -97,6 +97,12 @@ Linked to Log Analytics workspace `log-cliquepix-prod` for log collection.
 ### 5. Container Apps Job (transcoder)
 
 ```bash
+# NOTE: --scale-rule-auth "identity=system" is WRONG and creates a broken
+# scaler that tries to look up a secret named "system" that doesn't exist.
+# The KEDA scaler identity field is NOT exposed via az CLI flags in
+# 2.77.0 — you MUST apply it via az rest PATCH after creation.
+# See "KEDA scaler identity fix" section below for the workaround.
+
 az containerapp job create \
   --name caj-cliquepix-transcoder \
   --resource-group rg-cliquepix-prod \
@@ -115,9 +121,99 @@ az containerapp job create \
   --mi-system-assigned \
   --scale-rule-name azure-queue-scaler \
   --scale-rule-type azure-queue \
-  --scale-rule-metadata "queueName=video-transcode-queue" "accountName=stcliquepixprod" "queueLength=1" \
-  --scale-rule-auth "identity=system"
+  --scale-rule-metadata "queueName=video-transcode-queue" "accountName=stcliquepixprod" "queueLength=1"
+  # DO NOT add --scale-rule-auth "identity=system" — it's broken. See below.
 ```
+
+### KEDA scaler identity fix (MUST run after job creation)
+
+The `az containerapp job` CLI (tested 2.77.0) does NOT support specifying
+managed identity for a KEDA scaler via a `--scale-rule-identity` flag or
+via the `--scale-rule-auth "identity=system"` syntax. The latter creates
+a broken `auth` array that references a nonexistent secret:
+
+```json
+"auth": [{"secretRef": "system", "triggerParameter": "identity"}]
+```
+
+This causes the scaler to silently fail on every poll — the job never
+auto-triggers regardless of queue depth. The fix is to use `az rest` to
+PATCH the ARM resource directly with the `identity` field, using the
+preview API version (`2024-08-02-preview`) that supports this property:
+
+```bash
+cat > /tmp/scale-patch.json <<'EOF'
+{
+  "properties": {
+    "configuration": {
+      "eventTriggerConfig": {
+        "parallelism": 1,
+        "replicaCompletionCount": 1,
+        "scale": {
+          "maxExecutions": 10,
+          "minExecutions": 0,
+          "pollingInterval": 30,
+          "rules": [
+            {
+              "name": "azure-queue-scaler",
+              "type": "azure-queue",
+              "metadata": {
+                "accountName": "stcliquepixprod",
+                "queueName": "video-transcode-queue",
+                "queueLength": "1"
+              },
+              "identity": "system"
+            }
+          ]
+        }
+      }
+    }
+  }
+}
+EOF
+
+SUB=25410e67-b3c8-49a2-8cf0-ab9f77ce613f
+JOB_URL="https://management.azure.com/subscriptions/${SUB}/resourceGroups/rg-cliquepix-prod/providers/Microsoft.App/jobs/caj-cliquepix-transcoder?api-version=2024-08-02-preview"
+az rest --method patch --url "$JOB_URL" --body "@/tmp/scale-patch.json"
+```
+
+**Verification:** query the rule and confirm `identity: "system"` is
+present and no `auth` array:
+
+```bash
+az rest --method get --url "$JOB_URL" \
+  --query "properties.configuration.eventTriggerConfig.scale.rules" -o json
+```
+
+Expected output:
+```json
+[{
+  "identity": "system",
+  "metadata": {
+    "accountName": "stcliquepixprod",
+    "queueLength": "1",
+    "queueName": "video-transcode-queue"
+  },
+  "name": "azure-queue-scaler",
+  "type": "azure-queue"
+}]
+```
+
+**End-to-end verification:** enqueue a test message and check that a new
+execution starts within ~15-30 seconds (the polling interval):
+
+```bash
+az storage message put --queue-name video-transcode-queue \
+  --account-name stcliquepixprod --auth-mode key \
+  --content "$(echo -n '{}' | base64)"
+sleep 30
+az containerapp job execution list --name caj-cliquepix-transcoder \
+  --resource-group rg-cliquepix-prod \
+  --query "[0].{name:name, status:properties.status, startTime:properties.startTime}" -o table
+```
+
+When the CLI is upgraded and this bug is fixed upstream, the workaround
+can be removed. Track at: https://github.com/Azure/azure-cli/issues
 
 **Image is a placeholder** (`aci-helloworld`). Phase 3 builds and pushes the real FFmpeg transcoder image and updates the job to use it.
 
@@ -349,6 +445,6 @@ This is well under the $50/month budget alert threshold. Daily cost during dev s
 - **Function App:** Migrate from Node 20 to Node 24 before 2026-04-30 (Node 20 EOL)
 - **Bicep IaC:** Convert this runbook to Bicep templates in v1.5
 - **Sample test videos:** Create the `dev-assets` blob container and upload reference videos for the `download-sample-videos.sh` script (Phase 3)
-- **KEDA scaler auto-trigger:** Phase 5 integration test required manual `az containerapp job start`. Investigate why the queue scaler didn't fire — could be polling lag, RBAC missing on the scaler identity, or queue depth metrics not being read correctly. Important to fix before scaling beyond manual testing.
+- **KEDA scaler auto-trigger:** FIXED 2026-04-08. Root cause: the `az containerapp job create --scale-rule-auth "identity=system"` flag creates a broken auth array that references a nonexistent secret. Fix: PATCH the ARM resource with `identity: "system"` on the rule itself via `az rest` + preview API version `2024-08-02-preview`. See "KEDA scaler identity fix" section above. Verified end-to-end: test message enqueued at 17:00:48, job auto-started at 17:01:02 (14 seconds later, well under the 30-second polling interval).
 - **Internal callback auth:** Currently uses Azure Functions function key (`?code=<key>`). Architecturally cleaner would be a real Azure AD app registration for the Function App so the transcoder MI can acquire a proper bearer token. Defer to v1.5.
 - **Function key rotation:** The `function-callback-key` secret on the Container Apps Job has a copy of the Functions runtime key for `videoProcessingComplete`. If you rotate the function key (`az functionapp function keys set`), you must also update the secret on the Container Apps Job. Document this in any future runbook for key rotation.
