@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
+import '../domain/local_pending_video.dart';
 import 'videos_providers.dart';
 
 /// Pick or record a video, validate it, then let the user CONFIRM before
@@ -72,14 +73,29 @@ class _VideoCaptureScreenState extends ConsumerState<VideoCaptureScreen> {
 
   void _startUpload() {
     if (_pickedFile == null || _durationSeconds == null) return;
+
+    // Create local pending item BEFORE navigating to upload screen so the
+    // uploader's feed card exists immediately for local playback.
+    final localTempId = LocalPendingVideo.generateId();
+    ref.read(localPendingVideosProvider(widget.eventId).notifier).add(
+      LocalPendingVideo(
+        localTempId: localTempId,
+        eventId: widget.eventId,
+        localFilePath: _pickedFile!.path,
+        durationSeconds: _durationSeconds!,
+        width: _width,
+        height: _height,
+        fileSizeBytes: _fileSizeBytes,
+        createdAt: DateTime.now(),
+      ),
+    );
+
     context.pushReplacement(
       '/events/${widget.eventId}/videos/upload',
       extra: {
         'file': _pickedFile!,
         'durationSeconds': _durationSeconds!,
-        'width': _width,
-        'height': _height,
-        'fileSizeBytes': _fileSizeBytes,
+        'localTempId': localTempId,
       },
     );
   }

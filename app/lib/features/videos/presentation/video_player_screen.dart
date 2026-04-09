@@ -4,9 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:video_player/video_player.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../models/video_model.dart';
+import '../../../services/storage_service.dart';
 import 'videos_providers.dart';
 
 /// In-app video player screen.
@@ -21,6 +23,9 @@ class VideoPlayerScreen extends ConsumerStatefulWidget {
   /// provider (`eventVideosProvider(eventId)`) and pop cleanly.
   final String eventId;
   final String videoId;
+  /// Local file path for uploader's just-captured/selected video. Highest
+  /// priority playback source — zero network wait, guaranteed codec compat.
+  final String? localFilePath;
   /// Instant-preview SAS URL for the original blob. If present, the player
   /// skips the /playback API call and opens the original MP4 directly.
   /// Only set when the uploader taps a card for their own processing video.
@@ -30,6 +35,7 @@ class VideoPlayerScreen extends ConsumerStatefulWidget {
     super.key,
     required this.eventId,
     required this.videoId,
+    this.localFilePath,
     this.previewUrl,
   });
 
@@ -41,7 +47,9 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
   VideoPlayerController? _controller;
   ChewieController? _chewieController;
   File? _tempManifestFile;
+  VideoPlaybackInfo? _playbackInfo;
   bool _isLoading = true;
+  bool _usedLocalFile = false;
   bool _usedFallback = false;
   bool _usedInstantPreview = false;
   String? _errorText;
@@ -54,6 +62,25 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
 
   Future<void> _initializePlayer() async {
     try {
+      // 1. LOCAL FILE — uploader's device has the original. Fastest path.
+      // VideoPlayerController.file() is correct here — the formatHint
+      // caveat in CLAUDE.md only applies to HLS manifests; local MP4/MOV
+      // files are auto-detected correctly.
+      if (widget.localFilePath != null) {
+        final file = File(widget.localFilePath!);
+        if (await file.exists()) {
+          debugPrint('[CliquePix Video] Local file path: ${widget.localFilePath}');
+          _usedLocalFile = true;
+          final controller = VideoPlayerController.file(file);
+          await controller.initialize();
+          _controller = controller;
+          _wireChewieFromController(controller);
+          return;
+        }
+        debugPrint('[CliquePix Video] Local file missing, falling through...');
+      }
+
+      // 2. INSTANT PREVIEW — uploader fallback (SAS to original blob).
       // Instant-preview path: skip /playback entirely and play the original
       // MP4 directly via a pre-signed SAS URL. The uploader's device captured
       // this video so codec compatibility is tautologically safe. Transcoding
@@ -74,6 +101,7 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
 
       final repo = await ref.read(videosRepositoryProvider.future);
       final playback = await repo.getPlayback(widget.videoId);
+      _playbackInfo = playback;
 
       // Try HLS first
       try {
@@ -184,6 +212,45 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
     super.dispose();
   }
 
+  Future<void> _saveVideo() async {
+    try {
+      final storageService = ref.read(storageServiceProvider);
+      await storageService.saveVideoToGallery(
+        _playbackInfo!.mp4FallbackUrl,
+        widget.videoId,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Video saved to gallery')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _shareVideo() async {
+    try {
+      final storageService = ref.read(storageServiceProvider);
+      final filePath = await storageService.downloadToTempFile(
+        _playbackInfo!.mp4FallbackUrl,
+        widget.videoId,
+        extension: 'mp4',
+      );
+      await Share.shareXFiles([XFile(filePath)]);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to share: $e')),
+        );
+      }
+    }
+  }
+
   /// Prompt for confirmation, delete the video via the repository, invalidate
   /// the feed provider so the card disappears immediately, then pop back to
   /// the event feed. Works even when the player failed to init (e.g., broken
@@ -233,10 +300,41 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert, color: Colors.white),
             onSelected: (value) async {
-              if (value == 'delete') await _confirmAndDeleteVideo();
+              switch (value) {
+                case 'save':
+                  await _saveVideo();
+                case 'share':
+                  await _shareVideo();
+                case 'delete':
+                  await _confirmAndDeleteVideo();
+              }
             },
-            itemBuilder: (_) => const [
-              PopupMenuItem(
+            itemBuilder: (_) => [
+              // Save/Share only available when we have playback info
+              // (video is active, not preview/local mode)
+              if (_playbackInfo != null && !_usedInstantPreview) ...[
+                const PopupMenuItem(
+                  value: 'save',
+                  child: Row(
+                    children: [
+                      Icon(Icons.download),
+                      SizedBox(width: 8),
+                      Text('Save to Device'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'share',
+                  child: Row(
+                    children: [
+                      Icon(Icons.share),
+                      SizedBox(width: 8),
+                      Text('Share'),
+                    ],
+                  ),
+                ),
+              ],
+              const PopupMenuItem(
                 value: 'delete',
                 child: Row(
                   children: [
@@ -284,7 +382,15 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
       mainAxisSize: MainAxisSize.min,
       children: [
         Expanded(child: Chewie(controller: _chewieController!)),
-        if (_usedInstantPreview)
+        if (_usedLocalFile)
+          Padding(
+            padding: const EdgeInsets.all(8),
+            child: Text(
+              'Playing from your device',
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 12),
+            ),
+          )
+        else if (_usedInstantPreview)
           Padding(
             padding: const EdgeInsets.all(8),
             child: Text(

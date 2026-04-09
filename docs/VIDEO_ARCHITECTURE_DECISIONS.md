@@ -839,6 +839,140 @@ commits | join kind=inner starts on video_id
 
 Target after the bump: p50 < 25s, p95 < 40s.
 
+### Container Apps Service migration — cost analysis (researched 2026-04-09)
+
+The following cost analysis captures the pricing research for the v1.5 migration from Container Apps Jobs to a Container Apps Service (long-running queue processor). Preserved here so the decision doesn't need to be re-researched.
+
+**Current architecture (Container Apps Job, Consumption plan):**
+
+The transcoder is a one-shot container (2 vCPU / 4 GiB) that spins up per queue message and terminates on completion. KEDA polling at 5s, min-executions=1. Each execution incurs ~15-25s of cold start (container scheduling + image pull + node.js init) that is irreducible on the Consumption workload profile.
+
+**Proposed architecture (Container Apps Service):**
+
+A long-running container (2 vCPU / 4 GiB) that boots once and polls the queue in a loop. The container stays warm between jobs — no cold start. KEDA scales replicas (0→1→N) based on queue depth.
+
+**Consumption plan rates (East US, as of April 2026):**
+
+| Meter | Active rate | Idle rate |
+|---|---|---|
+| vCPU-second | ~$0.000024 | ~$0.000008 |
+| GiB-second | ~$0.000003 | ~$0.000001 |
+
+Free grants: 180,000 vCPU-seconds + 360,000 GiB-seconds + 2M requests per subscription per month.
+
+**Cost comparison:**
+
+| Approach | Monthly cost | Cold start? | Complexity |
+|---|---|---|---|
+| **Current Jobs** (pay-per-execution) | ~$3-11 at 50-200 videos/day (+ free tier covers ~1,500 transcodes) | Yes, ~15-25s every time | Low (current state) |
+| **Service, minReplicas=1** (always-on) | ~$52-55/month (idle rate 24/7) | No — fully eliminated | Medium (queue loop, health checks, graceful shutdown) |
+| **Service, peak-hours only** (8h/day warm, scale-to-zero overnight) | ~$17-20/month | Eliminated during peak hours only | Medium-High (scheduling + queue loop) |
+| **Service, minReplicas=0** (scale-to-zero) | Same as Jobs | Yes — back to cold starts | Medium (no benefit) |
+
+**Advantages of Service over Jobs:**
+- Eliminates 15-25s cold start (dominant latency for fast-path transcodes)
+- Consistent latency — no variance from container scheduling
+- Simpler KEDA config — no min-executions/max-executions/replica-completion-count
+- No KEDA scaler identity workaround (the `az rest` PATCH hack documented in `VIDEO_INFRASTRUCTURE_RUNBOOK.md`)
+- Graceful shutdown — can finish current transcode before termination
+
+**Disadvantages:**
+- Always-on cost (~$52/month at minReplicas=1) vs near-zero cost with Jobs
+- Must write the queue-polling loop (dequeue, process, visibility timeout, poison-message handling)
+- Health checks (liveness/readiness probes) required
+- More complex deployment (rolling updates, graceful drain)
+- minReplicas=0 defeats the purpose (cold starts return)
+
+**Recommendation for v1.5:** The ~$52/month always-on cost becomes justifiable when the user base is large enough that the 15-25s "Processing for sharing..." delay is a retention concern. For pre-launch MVP, the current Jobs approach is fine — the local-first architecture (Decision 13) already makes the uploader's experience instant. The $52/month is purely for how fast *other clique members* see the processed version.
+
+**Alternative quick win (no architecture change):** Bump Container Apps Job CPU from 2 to 4 vCPU. This roughly halves FFmpeg encode time on the slow path (~21s → ~11s) but doesn't address cold start. ~$0.002 per transcode (double current), still negligible at MVP scale.
+
+---
+
+## Decision 13: Local-first uploader video playback
+
+**Added 2026-04-09 after implementing `docs/VIDEO_LOCAL_FIRST_UPLOADER_ARCHITECTURE.md`.**
+
+### Problem
+
+Even with the instant-preview SAS URL (Decision 9), the uploader's playback still depended on a successful upload + backend commit before they could watch their own video. The preview_url path required a network round-trip to Azure Blob Storage. The uploader already has the file on their device — we should use it.
+
+### Chosen: Client-side local-first playback with server reconciliation
+
+The uploader's device creates a **local pending video item** immediately after validation (before any network work begins), making the video available for local file playback in the event feed with zero wait.
+
+**Key architectural components:**
+
+1. **`LocalPendingVideo` model** (`app/lib/features/videos/domain/local_pending_video.dart`) — client-side state with `UploadStage` enum: `localOnly → uploading → committing → processing → failed → complete`. Tracks `localFilePath`, `serverVideoId` (set after commit), and `previewUrl`.
+
+2. **`localPendingVideosProvider`** (`app/lib/features/videos/presentation/videos_providers.dart`) — `StateNotifierProvider.family<..., String>` keyed on `eventId`. Not autoDispose — survives navigation. In-memory only (lost on app restart; backend state takes over).
+
+3. **Feed merge with deduplication** (`app/lib/features/photos/presentation/event_feed_screen.dart`) — `_MediaListItem` extended with a third variant for `LocalPendingVideo`. Merge logic: local item suppresses server processing item by `serverVideoId`; auto-retires when server item reaches `active` status via `Future.microtask()`.
+
+4. **3-tier player precedence** (`app/lib/features/videos/presentation/video_player_screen.dart`):
+   - **Local file** (`VideoPlayerController.file()`) — zero network, guaranteed codec compat
+   - **Preview URL** (`VideoPlayerController.networkUrl()`) — fallback if local file is missing
+   - **Cloud HLS + MP4 fallback** — standard shared playback path
+
+5. **Reconciliation** — three paths, any one triggers local item retirement:
+   - Web PubSub `video_ready` → `reconcileComplete(videoId)` in the listener
+   - 30-second poll → merge logic detects `serverVideo.isReady` → auto-retire via `Future.microtask()`
+   - Pull-to-refresh → same as poll
+   
+   The `UploadStage.complete` state (vs. outright removal) prevents a visual gap between local item retirement and server item fetch completing.
+
+6. **Local pending video card** (`app/lib/features/videos/presentation/local_pending_video_card.dart`) — dedicated card widget with upload-stage-specific subtitles, always-present play button, progress bar during upload, and retry affordance for failed uploads.
+
+### What `preview_url` becomes
+
+`preview_url` (Decision 9) is retained as a **secondary fallback**. Its role changes:
+- Previously: primary uploader playback path while processing
+- Now: fallback when the local file has been cleaned up by the OS (temp directory)
+
+### Router migration
+
+The video player route's `extra` parameter was migrated from `String?` (bare previewUrl) to `Map<String, dynamic>?` with keys `localFilePath` and `previewUrl`. All callers updated (`video_card_widget.dart`, `local_pending_video_card.dart`).
+
+### What this does NOT change
+
+- Backend pipeline (upload, transcode, HLS, video_ready) — unchanged
+- Clique member playback — unchanged (cloud-only)
+- Delete behavior — unchanged
+- Preview URL generation on commit — unchanged (still returned, used as fallback)
+
+---
+
+## Decision 14: Video save-to-device and share promoted to v1
+
+**Added 2026-04-09. Previously deferred to v1.5 (see Decision 9 follow-ups).**
+
+### Why now
+
+The video player's PopupMenuButton already had the delete action. The `StorageService` already had `saveVideoToGallery()` (line 56) using `Gal.putVideo()` — written in anticipation but never wired up. Promoting save/share to v1 was a wiring job, not new infrastructure.
+
+### Implementation
+
+**`StorageService.downloadToTempFile()`** — generalized with a named `extension` parameter (default `'jpg'`). Existing photo callers are backward-compatible. Video share calls it with `extension: 'mp4'`.
+
+**Video player PopupMenu** — dynamic item list based on playback mode:
+
+| Playback mode | Save | Share | Delete |
+|---|---|---|---|
+| Local file (`_usedLocalFile`) | Hidden | Hidden | Show if `_playbackInfo != null` |
+| Instant preview (`_usedInstantPreview`) | Hidden | Hidden | Show |
+| Normal HLS/MP4 (`_playbackInfo != null`) | Show | Show | Show |
+
+Save uses `StorageService.saveVideoToGallery()` with the MP4 fallback URL. Share uses `downloadToTempFile(extension: 'mp4')` + `Share.shareXFiles()`. Both mirror the photo detail screen pattern (`photo_detail_screen.dart:49-84`).
+
+**`_playbackInfo` state field** — `VideoPlaybackInfo` is now stored as a class field in the player (previously a local variable in `_initializePlayer()`), making `mp4FallbackUrl` available for save/share after init.
+
+### Files modified
+
+| File | Change |
+|---|---|
+| `app/lib/services/storage_service.dart` | `downloadToTempFile` gains `extension` parameter |
+| `app/lib/features/videos/presentation/video_player_screen.dart` | Save/share handlers, `_playbackInfo` state, dynamic menu items |
+
 ---
 
 ## Decisions deferred to the implementation plan

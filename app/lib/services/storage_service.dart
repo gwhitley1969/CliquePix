@@ -24,10 +24,10 @@ class StorageService {
     }
   }
 
-  Future<String> downloadToTempFile(String url, String photoId) async {
+  Future<String> downloadToTempFile(String url, String id, {String extension = 'jpg'}) async {
     final dio = Dio();
     final tempDir = await getTemporaryDirectory();
-    final filePath = '${tempDir.path}/cliquepix_share_$photoId.jpg';
+    final filePath = '${tempDir.path}/cliquepix_share_$id.$extension';
     await dio.download(url, filePath);
     return filePath;
   }

@@ -11,30 +11,42 @@ import '../../../widgets/error_widget.dart';
 import '../../../widgets/loading_shimmer.dart';
 import '../../dm/domain/dm_realtime_service.dart';
 import '../../dm/presentation/dm_providers.dart';
+import '../../videos/domain/local_pending_video.dart';
 import '../../videos/presentation/videos_providers.dart';
 import '../../videos/presentation/video_card_widget.dart';
+import '../../videos/presentation/local_pending_video_card.dart';
 import 'photos_providers.dart';
 import 'photo_card_widget.dart';
 
 /// Discriminated union for mixed-media feed items.
-/// Either `photo` is non-null OR `video` is non-null, never both.
+/// Exactly one of `photo`, `video`, or `localVideo` is non-null.
 class _MediaListItem {
   final DateTime createdAt;
   final PhotoModel? photo;
   final VideoModel? video;
+  final LocalPendingVideo? localVideo;
 
   _MediaListItem.photo(PhotoModel p)
       : photo = p,
         video = null,
+        localVideo = null,
         createdAt = p.createdAt;
 
   _MediaListItem.video(VideoModel v)
       : photo = null,
         video = v,
+        localVideo = null,
         createdAt = v.createdAt;
 
+  _MediaListItem.localVideo(LocalPendingVideo lv)
+      : photo = null,
+        video = null,
+        localVideo = lv,
+        createdAt = lv.createdAt;
+
   bool get isPhoto => photo != null;
-  String get id => photo?.id ?? video!.id;
+  bool get isLocalVideo => localVideo != null;
+  String get id => photo?.id ?? video?.id ?? localVideo!.localTempId;
 }
 
 class EventFeedScreen extends ConsumerStatefulWidget {
@@ -81,6 +93,10 @@ class _EventFeedScreenState extends ConsumerState<EventFeedScreen> {
           debugPrint('[CliquePix EventFeed] video_ready: invalidating feed for ${event.videoId}');
           ref.invalidate(eventVideosProvider(widget.eventId));
           ref.invalidate(eventPhotosProvider(widget.eventId));
+          // Reconcile: mark the matching local pending item as complete so
+          // the server's active card takes over in the next build.
+          ref.read(localPendingVideosProvider(widget.eventId).notifier)
+              .reconcileComplete(event.videoId);
         }
       });
     } catch (e) {
@@ -156,13 +172,44 @@ class _EventFeedScreenState extends ConsumerState<EventFeedScreen> {
           orElse: () => <VideoModel>[],
         );
 
+        // Local pending videos for this event (uploader-only items)
+        final localPendings = ref.watch(localPendingVideosProvider(widget.eventId));
+
+        // Server video IDs that a local pending item "owns" (still in
+        // progress). These server items get suppressed so the local item
+        // takes precedence — it has the local file path for instant playback.
+        final locallyOwnedServerIds = localPendings
+            .where((lp) => lp.serverVideoId != null && lp.uploadStage != UploadStage.complete)
+            .map((lp) => lp.serverVideoId!)
+            .toSet();
+        final filteredVideos = videos.where((v) => !locallyOwnedServerIds.contains(v.id)).toList();
+
+        // Filter out local items that should be retired (server version active)
+        final activeLocalPendings = localPendings.where((lp) {
+          if (lp.uploadStage == UploadStage.complete) return false;
+          if (lp.serverVideoId != null) {
+            final serverVideo = videos.where((v) => v.id == lp.serverVideoId).firstOrNull;
+            if (serverVideo != null && serverVideo.isReady) {
+              // Auto-retire: server video is active, local item no longer needed.
+              // Deferred to avoid modifying provider state during build.
+              Future.microtask(() {
+                ref.read(localPendingVideosProvider(widget.eventId).notifier)
+                    .reconcileComplete(lp.serverVideoId!);
+              });
+              return false;
+            }
+          }
+          return true;
+        }).toList();
+
         // Build the unified, time-ordered media list
         final mediaItems = <_MediaListItem>[
           ...photos.map(_MediaListItem.photo),
-          ...videos.map(_MediaListItem.video),
+          ...filteredVideos.map(_MediaListItem.video),
+          ...activeLocalPendings.map(_MediaListItem.localVideo),
         ]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
-        debugPrint('[CliquePix] EventFeed: loaded ${photos.length} photos + ${videos.length} videos');
+        debugPrint('[CliquePix] EventFeed: loaded ${photos.length} photos + ${videos.length} videos + ${activeLocalPendings.length} local pending');
 
         if (mediaItems.isEmpty) {
           return Center(
@@ -228,7 +275,12 @@ class _EventFeedScreenState extends ConsumerState<EventFeedScreen> {
                   itemCount: mediaItems.length,
                   itemBuilder: (context, index) {
                     final item = mediaItems[index];
-                    if (item.isPhoto) {
+                    if (item.isLocalVideo) {
+                      return LocalPendingVideoCard(
+                        localVideo: item.localVideo!,
+                        eventId: widget.eventId,
+                      );
+                    } else if (item.isPhoto) {
                       final photo = item.photo!;
                       return PhotoCardWidget(
                         photo: photo,

@@ -123,7 +123,7 @@ class VideoCardWidget extends StatelessWidget {
       onTap: hasPreview
           ? () => context.push(
                 '/events/$eventId/videos/${video.id}',
-                extra: video.previewUrl,
+                extra: <String, String?>{'previewUrl': video.previewUrl},
               )
           : null,
       child: Container(

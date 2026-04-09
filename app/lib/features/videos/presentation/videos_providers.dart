@@ -4,6 +4,7 @@ import '../../../models/video_model.dart';
 import '../../../services/api_client.dart';
 import '../data/videos_api.dart';
 import '../data/video_block_upload_service.dart';
+import '../domain/local_pending_video.dart';
 import '../domain/videos_repository.dart';
 import '../domain/video_validation_service.dart';
 
@@ -135,3 +136,58 @@ final videoUploadProvider =
     StateNotifierProvider.autoDispose<VideoUploadNotifier, VideoUploadState>(
   (ref) => VideoUploadNotifier(),
 );
+
+// ====================================================================================
+// Local pending videos — uploader-local state for instant local playback
+// ====================================================================================
+
+class LocalPendingVideosNotifier extends StateNotifier<List<LocalPendingVideo>> {
+  final String eventId;
+  LocalPendingVideosNotifier(this.eventId) : super([]);
+
+  void add(LocalPendingVideo item) {
+    state = [...state, item];
+  }
+
+  void updateStage(String localTempId, UploadStage stage, {
+    double? progress,
+    String? serverVideoId,
+    String? previewUrl,
+    String? errorMessage,
+  }) {
+    state = [
+      for (final item in state)
+        if (item.localTempId == localTempId)
+          item.copyWith(
+            uploadStage: stage,
+            uploadProgress: progress,
+            serverVideoId: serverVideoId,
+            previewUrl: previewUrl,
+            errorMessage: errorMessage,
+          )
+        else
+          item,
+    ];
+  }
+
+  void reconcileComplete(String serverVideoId) {
+    state = [
+      for (final item in state)
+        if (item.serverVideoId == serverVideoId)
+          item.copyWith(uploadStage: UploadStage.complete)
+        else
+          item,
+    ];
+  }
+
+  void remove(String localTempId) {
+    state = state.where((item) => item.localTempId != localTempId).toList();
+  }
+}
+
+/// Per-event local pending video state. Not autoDispose — survives navigation
+/// so local items persist until reconciliation with the server state.
+final localPendingVideosProvider = StateNotifierProvider.family<
+    LocalPendingVideosNotifier,
+    List<LocalPendingVideo>,
+    String>((ref, eventId) => LocalPendingVideosNotifier(eventId));

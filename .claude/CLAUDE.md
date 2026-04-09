@@ -80,10 +80,11 @@ If a feature does not directly support one of these loops, it does not belong in
   - **Slow path (`transcodeHlsAndMp4`):** full re-encode for HDR / HEVC / >1080p / non-AAC sources. Includes `zscale + tonemap=hable` HDR→SDR pipeline, `-pix_fmt yuv420p`, `-profile:v high -level 4.0`, `-colorspace bt709 -color_primaries bt709 -color_trc bt709`. preset=`veryfast`. ~21 sec for an 11s HDR HEVC source.
   - Both paths use the same single tee-muxer FFmpeg invocation (HLS + MP4 from one pass).
   - Runs in Container Apps Job with `jrottenberg/ffmpeg:6-alpine` base image. KEDA polling 5s, min-executions=1.
-- **Instant preview for the uploader:** commit endpoint returns a 15-min read SAS for the original blob in `preview_url`. Uploader's processing card is tappable ("Tap to preview") and plays the original MP4 immediately. When transcode completes, Web PubSub `video_ready` upgrades the card silently. See `docs/VIDEO_ARCHITECTURE_DECISIONS.md` Decision 9.
+- **Local-first uploader playback:** uploader can play their video immediately from the device file — zero network, zero wait. A `LocalPendingVideo` item (tracked by `localPendingVideosProvider` per event) is created before any upload begins. The event feed merges local pending items with server items, deduplicating by `serverVideoId`. When `video_ready` arrives, the local item retires and the cloud active card takes over. See `docs/VIDEO_ARCHITECTURE_DECISIONS.md` Decision 13 and `docs/VIDEO_LOCAL_FIRST_UPLOADER_ARCHITECTURE.md`.
+- **Instant preview (fallback):** commit endpoint returns a 15-min read SAS for the original blob in `preview_url`. Used as a secondary fallback when the local file has been cleaned up by the OS. See `docs/VIDEO_ARCHITECTURE_DECISIONS.md` Decision 9.
 - Resumable video uploads using Azure Blob block uploads (4MB blocks, client-side block state persistence for resume-on-restart)
-- Video playback: in-app player using `video_player` + `chewie`, HLS preferred (with `formatHint: VideoFormat.hls` via `VideoPlayerController.networkUrl(Uri.file(...))`), MP4 fallback. **`VideoPlayerController.file()` does NOT support `formatHint` — must use `.networkUrl` even for local file:// URIs.**
-- **Video delete UI:** PopupMenuButton in the video player AppBar, mirroring `photo_detail_screen.dart:43-124`. Delete-only for now (Save/Share deferred). Calls `videosRepositoryProvider.deleteVideo` and invalidates `eventVideosProvider(eventId)` so the card disappears immediately.
+- Video playback: in-app player using `video_player` + `chewie` with **3-tier precedence**: (1) local file path via `VideoPlayerController.file()` — uploader's device file, zero network; (2) preview URL via `VideoPlayerController.networkUrl()` — fallback if local file cleaned up; (3) cloud HLS + MP4 fallback via `/playback` endpoint. HLS uses `formatHint: VideoFormat.hls` via `VideoPlayerController.networkUrl(Uri.file(...))`. **Note:** `VideoPlayerController.file()` does NOT support `formatHint` but this only matters for HLS manifests — local MP4/MOV files auto-detect correctly.
+- **Video player AppBar PopupMenu:** Save to Device, Share, and Delete — mirroring `photo_detail_screen.dart:43-124`. Save uses `StorageService.saveVideoToGallery()` with the MP4 fallback URL. Share uses `downloadToTempFile(extension: 'mp4')` + `Share.shareXFiles`. Save/Share only shown when `_playbackInfo != null` (video is active, not in preview/local mode). Delete calls `videosRepositoryProvider.deleteVideo` and invalidates `eventVideosProvider(eventId)` so the card disappears immediately.
 - Video processing-state UX: placeholder card in the event feed while transcoding, push notification + Web PubSub signal when ready
 - Processing-state propagation: Web PubSub `video_ready` event (foreground, **including the uploader** so their instant-preview card upgrades) + FCM push (backgrounded, **excluding the uploader** to avoid redundant notification noise about their own upload)
 - HLS delivery via User Delegation SAS: backend rewrites `.m3u8` manifests at request time with per-segment signed URLs (60s in-Function cache, 15-min SAS expiry per segment)
@@ -899,7 +900,7 @@ This is sufficient. Most photo sharing happens in bursts during active events. D
 
 - Photo capture to visible in feed: < 5 seconds on good connectivity
 - Video upload completion to transcoding job started (queue dispatch latency): < 10 seconds (KEDA polling 5s + ~5s container scheduling)
-- **Video uploader's perceived "polishing" wait: ~zero** — instant preview lets the uploader play the original blob the moment commit returns
+- **Video uploader's perceived wait: zero** — local-first playback lets the uploader play from their device file the moment they tap "Upload", before any network work begins. Instant preview (SAS to original blob) is a fallback if the local file is cleaned up
 - Video transcoding for compatible source (~95% of phone uploads, fast path): **2-5 seconds FFmpeg work, ~15-25 seconds total wall-clock** including queue dispatch and container cold start
 - Video transcoding for HDR / HEVC / >1080p source (slow path with HDR pipeline): **~21 seconds FFmpeg work, ~55-65 seconds total wall-clock** for an 11.5s 1080p HEVC HDR source on 2 vCPU
 - Video transcoding for 5-minute 1080p source: target ≤ 5 minutes, hard ceiling ≤ 15 minutes (Container Apps Job timeout)
@@ -911,7 +912,7 @@ This is sufficient. Most photo sharing happens in bursts during active events. D
 - Thumbnail / poster loads: < 500ms on 4G
 - Never block the UI thread with image processing, video decoding, or network calls
 
-**Container Apps Jobs cold start (~15-25s on Consumption profile)** is the biggest remaining bottleneck on the slow path. Migrating from Container Apps Jobs to a long-running Container Apps Service queue processor would eliminate it. Deferred to v1.5.
+**Container Apps Jobs cold start (~15-25s on Consumption profile)** is the biggest remaining bottleneck on the slow path. Migrating from Container Apps Jobs to a long-running Container Apps Service queue processor would eliminate it — estimated ~$52/month at `minReplicas=1` (2 vCPU / 4 GiB, idle rate 24/7) vs ~$3-11/month current Jobs cost. Full cost analysis in `docs/VIDEO_ARCHITECTURE_DECISIONS.md` Decision 12 appendix. Deferred to v1.5. With local-first uploader playback (Decision 13), the cold start only affects how fast *other clique members* see the processed version — the uploader plays instantly from their device.
 
 ---
 
@@ -1155,17 +1156,17 @@ A user can:
 5. Take a photo or record a video, or pick either from their gallery
 6. See the photo appear in the event feed within seconds
 7. See the video upload reliably (even with connection drops), show a processing placeholder, then transition to playable within ~15-25s for compatible sources or ~55-65s for HDR HEVC sources
-8. **Tap their own processing video card immediately and play the original via instant preview** while the transcoder runs in the background (uploader-only)
+8. **Tap their own video card immediately and play from the local device file** — zero wait, zero network. The local pending card appears in the feed the moment the user taps "Upload", before any Azure communication begins
 9. Play back a video cleanly via HLS with MP4 fallback
 10. React to others' photos and videos
-11. Save a photo to their device (video save deferred to v1.5 — see Decision 9 follow-ups)
-12. Share a photo externally via the OS share sheet (video share deferred to v1.5)
+11. Save a photo or video to their device (video save uses the MP4 fallback URL via the player PopupMenu)
+12. Share a photo or video externally via the OS share sheet
 13. **Delete their own video** via the PopupMenu in the video player AppBar (works even when the player fails to init on a broken blob)
 14. Receive push notifications when new photos are added and when videos finish processing (uploader gets the Web PubSub signal but NOT the FCM push for their own video)
 15. See backend error codes mapped to friendly messages on the upload screen (`VIDEO_LIMIT_REACHED`, `DURATION_EXCEEDED`, etc. — read from `e.response.data.error.code` on a `DioException`)
 16. See photos and videos automatically disappear from the cloud when the event expires
 
-If all sixteen of these work cleanly on both iOS and Android, v1 is done.
+If all sixteen of these work cleanly on both iOS and Android, v1 is done. (Local-first uploader playback replaces the preview_url-based instant preview as the primary uploader UX — see `docs/VIDEO_LOCAL_FIRST_UPLOADER_ARCHITECTURE.md`.)
 
 ---
 
@@ -1178,6 +1179,6 @@ If all sixteen of these work cleanly on both iOS and Android, v1 is done.
 | `docs/ENTRA_REFRESH_TOKEN_WORKAROUND.md` | Complete 5-layer token refresh implementation (code samples, debug tags, test procedures) |
 | `docs/EVENT_DM_CHAT_ARCHITECTURE.md` | Event-centric 1:1 DM design: Web PubSub delivery, schema, auth rules |
 | `docs/CliquePix_Video_Feature_Spec.md` | Generic video feature spec (handoff doc — requirements, acceptance criteria) |
-| `docs/VIDEO_ARCHITECTURE_DECISIONS.md` | CliquePix-specific video architecture decisions (12 decisions, including post-launch additions): transcoder host, HLS SAS delivery, schema, player, upload UX, stream-copy fast path, instant preview, HDR pipeline, KEDA tuning, image cache keys |
+| `docs/VIDEO_ARCHITECTURE_DECISIONS.md` | CliquePix-specific video architecture decisions (15 decisions, 0-14): transcoder host, HLS SAS delivery, schema, player, upload UX, stream-copy fast path, instant preview, HDR pipeline, KEDA tuning, image cache keys, local-first uploader playback, video save/share |
 | `docs/VIDEO_INFRASTRUCTURE_RUNBOOK.md` | As-built runbook for the Azure infra (ACR, Container Apps Environment, Container Apps Job, Storage Queue, RBAC roles, KEDA scaler config). Source of truth until Bicep IaC catches up. |
 | `docs/NOTIFICATION_SYSTEM.md` | Push notification architecture details (FCM transport, channel setup, payload routing) |

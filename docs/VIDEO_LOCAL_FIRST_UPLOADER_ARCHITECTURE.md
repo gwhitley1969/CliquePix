@@ -526,3 +526,43 @@ The correct end state is:
 - **Azure remains the shared media pipeline**
 
 That is the architecture we want.
+
+---
+
+## Implementation Status
+
+**Implemented: 2026-04-09** on `feature/video` branch.
+
+### Files created
+
+| File | Purpose |
+|---|---|
+| `app/lib/features/videos/domain/local_pending_video.dart` | `LocalPendingVideo` model, `UploadStage` enum, `copyWith`, UUID generation |
+| `app/lib/features/videos/presentation/local_pending_video_card.dart` | Feed card for local pending videos (upload-stage subtitles, play button, retry) |
+
+### Files modified
+
+| File | Change |
+|---|---|
+| `app/lib/features/videos/presentation/videos_providers.dart` | `LocalPendingVideosNotifier` + `localPendingVideosProvider` (StateNotifier.family, not autoDispose) |
+| `app/lib/features/videos/presentation/video_capture_screen.dart` | Creates `LocalPendingVideo` on "Upload" tap before navigating to upload screen |
+| `app/lib/features/videos/presentation/video_upload_screen.dart` | Accepts `localTempId`, updates local item stages (uploading/committing/processing/failed) |
+| `app/lib/features/photos/presentation/event_feed_screen.dart` | `_MediaListItem` extended with `localVideo` variant; merge + dedup logic; auto-retire via `Future.microtask()`; `video_ready` listener calls `reconcileComplete()` |
+| `app/lib/features/videos/presentation/video_player_screen.dart` | `localFilePath` parameter, 3-tier init precedence, `_playbackInfo` state, save/share/delete menu |
+| `app/lib/features/videos/presentation/video_card_widget.dart` | Processing card tap migrated from `extra: String?` to `extra: Map<String, String?>` |
+| `app/lib/core/routing/app_router.dart` | Upload route parses `localTempId`; player route parses structured `extra` map |
+| `app/lib/services/storage_service.dart` | `downloadToTempFile` generalized with `extension` parameter |
+
+### Also implemented in this session (not in original architecture doc)
+
+- **Video save-to-device** — `StorageService.saveVideoToGallery()` wired into video player PopupMenu
+- **Video share** — `downloadToTempFile(extension: 'mp4')` + `Share.shareXFiles()` wired into video player PopupMenu
+- Both mirror the photo detail screen pattern. Only shown when video is in active/ready state (not during preview or local playback).
+
+### Implementation notes
+
+- **Blocking upload screen retained** — the architecture doc's "ideal UX" (return to feed immediately, inline progress) was deferred. The blocking `VideoUploadScreen` stays, but the `LocalPendingVideo` is created before it, so the feed card exists when the user returns.
+- **State is in-memory only** — `localPendingVideosProvider` is not persisted to `SharedPreferences`. If the app is killed, local pending items are lost and the backend video (processing or active) takes over on next launch. Acceptable for v1.
+- **`UploadStage.complete` vs removal** — local items are marked `complete` (not removed) when retired. This prevents a visual gap between retirement and server item fetch. Stale `complete` items accumulate in memory but are filtered from the UI and lost on app restart.
+- **`VideoPlayerController.file()` used for local playback** — the `formatHint` caveat in CLAUDE.md only applies to HLS manifests. Local MP4/MOV files auto-detect correctly via `.file()`.
+- **Retry affordance** — failed upload cards show Play + Retry buttons. Retry reuses the same local file and `localTempId`.

@@ -192,19 +192,21 @@ final routerProvider = Provider<GoRouter>((ref) {
                 eventId: state.pathParameters['eventId']!,
                 videoFile: extra['file'] as File,
                 durationSeconds: extra['durationSeconds'] as int,
+                localTempId: extra['localTempId'] as String,
               );
             },
           ),
           GoRoute(
             path: 'videos/:videoId',
-            builder: (context, state) => VideoPlayerScreen(
-              eventId: state.pathParameters['eventId']!,
-              videoId: state.pathParameters['videoId']!,
-              // Optional: when the processing-state card taps through for
-              // the uploader, it passes the preview SAS URL via extra so
-              // the player can skip /playback and play the original blob.
-              previewUrl: state.extra as String?,
-            ),
+            builder: (context, state) {
+              final extra = state.extra as Map<String, dynamic>?;
+              return VideoPlayerScreen(
+                eventId: state.pathParameters['eventId']!,
+                videoId: state.pathParameters['videoId']!,
+                localFilePath: extra?['localFilePath'] as String?,
+                previewUrl: extra?['previewUrl'] as String?,
+              );
+            },
           ),
           GoRoute(
             path: 'dm-threads',

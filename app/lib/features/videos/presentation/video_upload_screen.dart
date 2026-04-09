@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
+import '../domain/local_pending_video.dart';
 import 'videos_providers.dart';
 
 /// Upload progress UI for a validated video file.
@@ -16,12 +17,14 @@ class VideoUploadScreen extends ConsumerStatefulWidget {
   final String eventId;
   final File videoFile;
   final int durationSeconds;
+  final String localTempId;
 
   const VideoUploadScreen({
     super.key,
     required this.eventId,
     required this.videoFile,
     required this.durationSeconds,
+    required this.localTempId,
   });
 
   @override
@@ -43,7 +46,9 @@ class _VideoUploadScreenState extends ConsumerState<VideoUploadScreen> {
     _started = true;
 
     final notifier = ref.read(videoUploadProvider.notifier);
+    final localNotifier = ref.read(localPendingVideosProvider(widget.eventId).notifier);
     notifier.start('Preparing upload...');
+    localNotifier.updateStage(widget.localTempId, UploadStage.uploading);
 
     try {
       final repo = await ref.read(videosRepositoryProvider.future);
@@ -59,9 +64,20 @@ class _VideoUploadScreenState extends ConsumerState<VideoUploadScreen> {
                   ? 'Uploading $percent%'
                   : 'Finalizing...';
           notifier.updateProgress(p, statusText);
+          localNotifier.updateStage(
+            widget.localTempId,
+            p < 0.95 ? UploadStage.uploading : UploadStage.committing,
+            progress: p,
+          );
         },
       );
       notifier.succeed(result.videoId, previewUrl: result.previewUrl);
+      localNotifier.updateStage(
+        widget.localTempId,
+        UploadStage.processing,
+        serverVideoId: result.videoId,
+        previewUrl: result.previewUrl,
+      );
 
       // Invalidate the feed so the placeholder card appears
       ref.invalidate(eventVideosProvider(widget.eventId));
@@ -74,6 +90,11 @@ class _VideoUploadScreenState extends ConsumerState<VideoUploadScreen> {
     } catch (e) {
       debugPrint('[CliquePix Video] Upload failed: $e');
       notifier.fail(_friendlyError(e));
+      localNotifier.updateStage(
+        widget.localTempId,
+        UploadStage.failed,
+        errorMessage: _friendlyError(e),
+      );
     }
   }
 
