@@ -278,7 +278,7 @@ How do clients consume HLS manifests when every blob URL must be a short-lived U
 - Segment SAS expiry: **15 minutes** (longer than photos' 5 minutes because playback sessions can last several minutes; 15 min covers most viewing without needing a refresh)
 - Content-type header: `application/vnd.apple.mpegurl` for HLS
 - `Cache-Control: no-store` on the HTTP response (the in-Function cache is ours; we don't want downstream caches holding stale SAS URLs)
-- When the 15-min SAS expires mid-playback, `video_player` / ExoPlayer / AVPlayer will error on the next segment request. The client catches the error, re-calls `/playback` for a fresh manifest, and reloads the player at the current position. This is ugly UX for a session paused near the end of a 5-min video; v1 accepts the edge case, v1.5 addresses it with either a longer SAS expiry or Front Door CDN caching.
+- When the 15-min SAS expires mid-playback, `video_player` / ExoPlayer / AVPlayer errors on the next segment request. **Implemented 2026-04-10:** the player's `_onPlaybackError` listener detects the error, calls `_recoverFromSasExpiry()` which re-fetches `/playback` for a fresh manifest with new SAS URLs, reinitializes the player, and seeks to the saved position. Only triggers for cloud HLS/MP4 playback (not local file or instant-preview paths). Falls back to a user-facing error message if recovery fails.
 - In-memory cache is per-Function-instance. With multiple instances (if the Function App scales out), each instance has its own cache. Cache miss rate is acceptable at MVP scale.
 
 ### Open follow-ups

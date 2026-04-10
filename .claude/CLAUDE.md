@@ -410,7 +410,7 @@ If the client does not call the commit URL (step 6) within **30 minutes** (longe
 - Tapping a video opens the in-app player (`video_player` + `chewie`)
 - Player fetches the playback manifest by calling `/api/videos/{videoId}/playback` — Function reads the stored HLS manifest, rewrites each segment URL with a fresh 15-minute User Delegation SAS, returns the rewritten manifest
 - Player attempts HLS first; on any HLS failure, falls back to the MP4 progressive URL (also a fresh 15-minute SAS)
-- If the 15-minute SAS expires mid-playback (long session, paused for 20 minutes), the player errors → client re-calls `/playback` → receives a fresh manifest → reloads player at current position
+- **SAS expiry recovery (implemented):** If the 15-minute SAS expires mid-playback (long session, paused for 20 minutes), `_onPlaybackError` listener detects the error → `_recoverFromSasExpiry()` saves current position → re-calls `/playback` for fresh manifest → reinitializes player at saved position. Only triggers for cloud HLS/MP4 (not local file or instant-preview). Falls back to error message on recovery failure.
 - Manifest rewrite cost is amortized by a 60-second in-Function cache keyed on `video_id`
 
 ### Response Format
@@ -429,12 +429,13 @@ Error:
   "data": null,
   "error": {
     "code": "CLIQUE_NOT_FOUND",
-    "message": "The requested clique does not exist."
+    "message": "The requested clique does not exist.",
+    "request_id": "abc-123-def"
   }
 }
 ```
 
-Use consistent error codes. Never return raw exception messages or stack traces to the client.
+`request_id` is the Azure Functions `invocationId` — included in every error response for correlation with App Insights logs. Use consistent error codes. Never return raw exception messages or stack traces to the client.
 
 ---
 

@@ -312,12 +312,13 @@ Error:
   "data": null,
   "error": {
     "code": "CLIQUE_NOT_FOUND",
-    "message": "The requested clique does not exist."
+    "message": "The requested clique does not exist.",
+    "request_id": "abc-123-def"
   }
 }
 ```
 
-Use consistent error codes. Never return raw exception messages or stack traces to the client.
+`request_id` is the Azure Functions `invocationId` — included in every error response for correlation with App Insights logs. Use consistent error codes. Never return raw exception messages or stack traces to the client.
 
 ---
 
@@ -948,9 +949,12 @@ Use Flutter flavor/environment mechanisms. Do not hardcode environment-specific 
 
 ## Backend
 
-- Bicep for infrastructure provisioning (preferred, but must not delay MVP)
-- CI/CD for Function App deployment when ready
-- Manual deployment is acceptable for initial setup — document what was provisioned
+- Bicep for infrastructure provisioning (preferred, deferred to v1.5)
+- **CI/CD implemented:** GitHub Actions workflows in `.github/workflows/`:
+  - `backend-ci.yml` — lint (eslint) → type-check (tsc) → test (jest) on push/PR
+  - `flutter-ci.yml` — analyze → test on push/PR
+  - `transcoder-build.yml` — tsc → docker build → ACR push (main branch only)
+- Manual deployment acceptable for Function App and transcoder image until CD is added
 
 ## Mobile
 
@@ -1064,3 +1068,4 @@ The architecture is:
 | `VIDEO_INFRASTRUCTURE_RUNBOOK.md` | As-built runbook for video Azure infra (ACR, Container Apps, KEDA, RBAC) |
 | `NOTIFICATION_SYSTEM.md` | Push notification architecture: FCM payloads, Web PubSub events, token lifecycle |
 | `BETA_TEST_PLAN.md` | Manual smoke test checklist for beta releases |
+| `BETA_OPERATIONS_RUNBOOK.md` | Incident response, troubleshooting, DB backup/restore, key rotation, cost monitoring |
