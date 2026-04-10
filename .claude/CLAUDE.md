@@ -1181,4 +1181,7 @@ If all sixteen of these work cleanly on both iOS and Android, v1 is done. (Local
 | `docs/CliquePix_Video_Feature_Spec.md` | Generic video feature spec (handoff doc — requirements, acceptance criteria) |
 | `docs/VIDEO_ARCHITECTURE_DECISIONS.md` | CliquePix-specific video architecture decisions (15 decisions, 0-14): transcoder host, HLS SAS delivery, schema, player, upload UX, stream-copy fast path, instant preview, HDR pipeline, KEDA tuning, image cache keys, local-first uploader playback, video save/share |
 | `docs/VIDEO_INFRASTRUCTURE_RUNBOOK.md` | As-built runbook for the Azure infra (ACR, Container Apps Environment, Container Apps Job, Storage Queue, RBAC roles, KEDA scaler config). Source of truth until Bicep IaC catches up. |
-| `docs/NOTIFICATION_SYSTEM.md` | Push notification architecture details (FCM transport, channel setup, payload routing) |
+| `docs/NOTIFICATION_SYSTEM.md` | Push notification architecture: all 7 notification types, FCM payloads, Web PubSub events, token lifecycle, tap routing |
+| `docs/VIDEO_LOCAL_FIRST_UPLOADER_ARCHITECTURE.md` | Local-first uploader playback handoff doc — architecture and implementation status |
+| `docs/BETA_TEST_PLAN.md` | Manual smoke test checklist (60+ items) for beta releases — dual-device testing |
+| `docs/BETA_OPERATIONS_RUNBOOK.md` | Incident response, troubleshooting, DB backup/restore, key rotation, cost monitoring |
