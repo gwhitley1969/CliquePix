@@ -74,7 +74,7 @@ az storage queue create \
 
 `--auth-mode login` uses AAD authentication, which works whether or not shared key access is enabled on the storage account.
 
-**Known drift from CLAUDE.md:** As of 2026-04-07, `allowSharedKeyAccess` on `stcliquepixprod` is `True`, even though CLAUDE.md says it should be `false`. This is a v1.5 audit and cleanup item — disable shared key access only after verifying no code paths still depend on it.
+**Resolved 2026-04-10:** `allowSharedKeyAccess` set to `false` on `stcliquepixprod`. All code paths use `DefaultAzureCredential` (managed identity) — audit confirmed no shared-key dependencies in Function App, transcoder, or SAS generation.
 
 ### 4. Container Apps Environment
 
@@ -508,7 +508,7 @@ az containerapp job update \
 ## Outstanding follow-ups (post-v1)
 
 - **CLI bug:** Re-test `az role assignment create` after upgrading Azure CLI from 2.77.0
-- **Storage account:** Audit code paths and disable `allowSharedKeyAccess` (CLAUDE.md says it should be `false`)
+- ~~**Storage account:** Audit code paths and disable `allowSharedKeyAccess`~~ — DONE 2026-04-10. All code uses `DefaultAzureCredential`; shared-key access disabled.
 - **Function App:** Migrate from Node 20 to Node 24 before 2026-04-30 (Node 20 EOL)
 - **Bicep IaC:** Convert this runbook to Bicep templates in v1.5
 - **Sample test videos:** Create the `dev-assets` blob container and upload reference videos for the `download-sample-videos.sh` script (Phase 3)

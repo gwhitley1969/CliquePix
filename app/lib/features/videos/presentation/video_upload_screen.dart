@@ -113,7 +113,10 @@ class _VideoUploadScreenState extends ConsumerState<VideoUploadScreen> {
         final backendMessage = errorMap['message'] as String?;
         switch (code) {
           case 'VIDEO_LIMIT_REACHED':
-            return "You've reached the 5-video limit for this event. Delete a video to upload another.";
+            // Use the backend message directly — it includes the current
+            // limit dynamically (PER_USER_VIDEO_LIMIT may change server-side).
+            if (backendMessage != null && backendMessage.isNotEmpty) return backendMessage;
+            return "You've reached the video limit for this event. Delete a video to upload another.";
           case 'DURATION_EXCEEDED':
             return "Videos must be 5 minutes or shorter.";
           case 'FILE_TOO_LARGE':

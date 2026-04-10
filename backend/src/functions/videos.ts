@@ -71,7 +71,7 @@ const VIDEO_ERROR_CODES = {
   },
   VIDEO_LIMIT_REACHED: {
     status: 429,
-    message: "You've reached the 5-video limit for this event. Delete a video to upload another.",
+    message: `You've reached the ${PER_USER_VIDEO_LIMIT}-video limit for this event. Delete a video to upload another.`,
   },
   FILE_TOO_LARGE: {
     status: 413,
@@ -107,30 +107,9 @@ async function getEventWithMembershipCheck(
   return event;
 }
 
-// ★ USER CONTRIBUTION POINT 3 — Per-user video limit enforcement
-//
-// Architectural commitment (Q7): soft cap of 5 currently non-deleted videos
-// per user per event. Counts videos in status IN ('pending','processing','active').
-// Deleted and rejected videos do NOT count — deletion frees a slot.
-//
-// Considerations:
-//   - The exact SQL query: COUNT(*) with WHERE clause is the obvious choice.
-//   - Whether to fetch the count first or rely on a database constraint: SQL
-//     count is simpler and matches the "soft cap" wording (we can change the
-//     limit later without a migration).
-//   - Whether to include the current count in the error response: helpful for
-//     a frontend that wants to show "5/5 videos used". You decide.
-//   - The exact statuses to count: pending + processing + active (not deleted,
-//     not rejected). This is what "currently in use" means.
-//
-// TODO(gene): Implement the count query and the limit check. If the count
-// is at or above PER_USER_VIDEO_LIMIT, call videoError('VIDEO_LIMIT_REACHED').
-//
-// Reference SQL pattern (you may modify):
-//   SELECT COUNT(*) AS count FROM photos
-//   WHERE event_id = $1 AND uploaded_by_user_id = $2
-//     AND media_type = 'video'
-//     AND status IN ('pending', 'processing', 'active')
+// Per-user video limit enforcement (Q7): soft cap of PER_USER_VIDEO_LIMIT
+// non-deleted videos per user per event. Counts pending + processing + active.
+// Deleted and rejected do NOT count — deletion frees a slot.
 async function enforceVideoLimit(eventId: string, userId: string): Promise<void> {
   // Approved default: count currently non-deleted videos by this user in this event.
   // Counts pending (uploading), processing (transcoding), and active (ready) statuses.
@@ -149,37 +128,9 @@ async function enforceVideoLimit(eventId: string, userId: string): Promise<void>
   }
 }
 
-// ★ USER CONTRIBUTION POINT 4 — Video deletion cleanup semantics
-//
-// Architectural commitment (Q5): mark row deleted immediately, callback
-// discards results if transcode is still in flight. But what about cleanup
-// of blobs that already exist on disk?
-//
-// Three cases to handle:
-//   1. status='pending': only the partial original master blob exists (or none).
-//      Delete it via deleteBlob(video.blob_path).
-//   2. status='processing': original master exists, derived assets do NOT yet
-//      (transcoder will see status='deleted' on callback and skip writing them
-//      OR write them and then the callback discards). Delete the master.
-//   3. status='active': original + HLS prefix + MP4 fallback + poster all exist.
-//      Need a prefix-delete to catch all the HLS segments + a few targeted
-//      deletes for the named files.
-//
-// Two implementation styles:
-//   (A) Switch on status, delete only what should exist for that status
-//   (B) Try to delete everything blindly with try/catch (idempotent)
-//
-// Recommendation: (A) is more code but easier to reason about. (B) works
-// but generates noise in the logs from "blob not found" errors which makes
-// real failures harder to spot.
-//
-// TODO(gene): Implement the cleanup logic.
-//
-// Reference helpers:
-//   - deleteBlob(blobPath: string): single-blob delete
-//   - deleteBlobsByPrefix(prefix: string): delete everything under a prefix
-//   - The HLS prefix is: video.hls_manifest_blob_path's parent directory
-//     e.g., "photos/{cliqueId}/{eventId}/{videoId}/hls/"
+// Video blob cleanup (Q5): delete blobs based on status to avoid log noise.
+// Pending/processing: only the original master exists. Active: original +
+// HLS segments (prefix-delete) + MP4 fallback + poster.
 async function cleanupVideoBlobs(video: Photo): Promise<void> {
   // Approved default: switch on status to delete only what should exist.
   // Cleaner logs than blind try-catch (no spurious "blob not found" errors
