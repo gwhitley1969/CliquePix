@@ -249,7 +249,7 @@ DELETE /api/events/{eventId}
 ```
 
 **Event deletion:**
-- `DELETE /api/events/{eventId}` — only the event creator (organizer) can delete
+- `DELETE /api/events/{eventId}` — only the event owner (organizer) can delete
 - Deletes all photo blobs from Azure Storage before cascading the database delete (photos + reactions)
 - Sends push notification and in-app notification to clique members
 - Hard delete — permanent, not recoverable
@@ -721,9 +721,14 @@ Do not overbuild live infrastructure. The following is sufficient to feel respon
 
 This three-layer approach (push + app-resume + polling) covers all cases: push for immediate alerting, app-resume for returning users, polling for actively-open screens. Most photo sharing happens in bursts (everyone at the same event, actively using the app).
 
-## Future Option
+## Real-Time Channels (In Use)
 
-If true real-time becomes a strong requirement post-v1, consider Azure Web PubSub or SignalR. Not needed now.
+Azure Web PubSub is used for two real-time channels (added during v1 development):
+
+- **DM delivery:** event-centric 1:1 direct messages delivered via WebSocket, with FCM fallback for backgrounded users. See `docs/EVENT_DM_CHAT_ARCHITECTURE.md`.
+- **Video processing-state push:** `video_ready` event pushed to all event members (including the uploader) so feed cards upgrade instantly when transcoding completes. See `docs/VIDEO_ARCHITECTURE_DECISIONS.md` Decision 10.
+
+The polling + push + app-resume approach above remains the primary feed update mechanism for photos and non-video content.
 
 ---
 
@@ -1017,7 +1022,7 @@ Log enough to troubleshoot, not enough to leak:
 - Premium subscription tier
 - Printed albums
 - ~~Multi-photo bulk save / download~~ (implemented in v1)
-- Video support
+- ~~Video support~~ (implemented in v1 — capture, upload, transcode, HLS playback, local-first uploader UX)
 - Event recap / AI-assisted highlights
 - Silent push for iOS token refresh reliability
 
@@ -1053,3 +1058,9 @@ The architecture is:
 | `PRD.md` | Product requirements, features, UX principles, branding |
 | `CLAUDE.md` | Development guardrails, locked decisions, implementation rules for Claude Code |
 | `ENTRA_REFRESH_TOKEN_WORKAROUND.md` | Complete 5-layer token refresh implementation (code samples, debug tags, test procedures) |
+| `EVENT_DM_CHAT_ARCHITECTURE.md` | Event-centric 1:1 DM design: Web PubSub delivery, schema, auth rules |
+| `VIDEO_ARCHITECTURE_DECISIONS.md` | 15 video architecture decisions (transcoder, HLS delivery, stream-copy fast path, local-first playback, etc.) |
+| `VIDEO_LOCAL_FIRST_UPLOADER_ARCHITECTURE.md` | Local-first uploader playback handoff doc — architecture and implementation |
+| `VIDEO_INFRASTRUCTURE_RUNBOOK.md` | As-built runbook for video Azure infra (ACR, Container Apps, KEDA, RBAC) |
+| `NOTIFICATION_SYSTEM.md` | Push notification architecture: FCM payloads, Web PubSub events, token lifecycle |
+| `BETA_TEST_PLAN.md` | Manual smoke test checklist for beta releases |

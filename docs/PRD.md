@@ -203,7 +203,7 @@ A persistent group of people (e.g., “Girls Night Out” or bachelor party)
 - No followers/following
 - No advanced editing suite
 - No printed albums (future)
-- No video-first features
+- ~~No video-first features~~ (video promoted to v1 — capture, upload, transcode, HLS playback, save/share)
 
 ---
 
