@@ -1,0 +1,58 @@
+name: Transcoder Build
+
+on:
+  push:
+    branches: [main, 'feature/**']
+    paths:
+      - 'backend/transcoder/**'
+      - '.github/workflows/transcoder-build.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'backend/transcoder/**'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: backend/transcoder
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/transcoder/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Build TypeScript
+        run: npx tsc
+
+      - name: Build Docker image
+        run: docker build -t cliquepix-transcoder:${{ github.sha }} .
+
+      # ACR push only on main branch pushes (not PRs or feature branches)
+      - name: Login to ACR
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: azure/docker-login@v2
+        with:
+          login-server: cracliquepix.azurecr.io
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      - name: Push to ACR
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          docker tag cliquepix-transcoder:${{ github.sha }} cracliquepix.azurecr.io/cliquepix-transcoder:${{ github.sha }}
+          docker tag cliquepix-transcoder:${{ github.sha }} cracliquepix.azurecr.io/cliquepix-transcoder:latest
+          docker push cracliquepix.azurecr.io/cliquepix-transcoder:${{ github.sha }}
+          docker push cracliquepix.azurecr.io/cliquepix-transcoder:latest
