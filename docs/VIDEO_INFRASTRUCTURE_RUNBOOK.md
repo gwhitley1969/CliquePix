@@ -74,7 +74,7 @@ az storage queue create \
 
 `--auth-mode login` uses AAD authentication, which works whether or not shared key access is enabled on the storage account.
 
-**Resolved 2026-04-10:** `allowSharedKeyAccess` set to `false` on `stcliquepixprod`. All code paths use `DefaultAzureCredential` (managed identity) — audit confirmed no shared-key dependencies in Function App, transcoder, or SAS generation.
+**Reverted 2026-04-10:** `allowSharedKeyAccess` must remain `true`. While all CliquePix application code uses `DefaultAzureCredential`, the **Azure Functions runtime itself** requires shared-key access for `AzureWebJobsStorage` (timer triggers, leases, deployment). Disabling shared keys caused a 503 outage. To properly disable shared keys, first migrate `AzureWebJobsStorage` to identity-based connection (`AzureWebJobsStorage__accountName` + RBAC roles `Storage Blob Data Owner` + `Storage Queue Data Contributor` + `Storage Table Data Contributor` on the Function App MI). This is a v1.5 task.
 
 ### 4. Container Apps Environment
 
@@ -508,7 +508,7 @@ az containerapp job update \
 ## Outstanding follow-ups (post-v1)
 
 - **CLI bug:** Re-test `az role assignment create` after upgrading Azure CLI from 2.77.0
-- ~~**Storage account:** Audit code paths and disable `allowSharedKeyAccess`~~ — DONE 2026-04-10. All code uses `DefaultAzureCredential`; shared-key access disabled.
+- **Storage account:** App code uses `DefaultAzureCredential` (audited 2026-04-10), but `allowSharedKeyAccess` must stay `true` because Azure Functions runtime (`AzureWebJobsStorage`) requires shared keys. To fully disable: migrate to identity-based `AzureWebJobsStorage__accountName` first (v1.5).
 - **Function App:** Migrate from Node 20 to Node 24 before 2026-04-30 (Node 20 EOL)
 - **Bicep IaC:** Convert this runbook to Bicep templates in v1.5
 - **Sample test videos:** Create the `dev-assets` blob container and upload reference videos for the `download-sample-videos.sh` script (Phase 3)
