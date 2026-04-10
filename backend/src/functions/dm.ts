@@ -343,13 +343,15 @@ async function markDmRead(req: HttpRequest, context: InvocationContext): Promise
       throw new ValidationError('A valid last_read_message_id is required.');
     }
 
-    const column = authUser.id === thread.user_a_id
-      ? 'user_a_last_read_message_id'
-      : 'user_b_last_read_message_id';
-
+    // Use CASE to avoid interpolating a column name into the SQL string.
+    // Both branches are safe (hardcoded from a boolean), but parameterized
+    // CASE is defense-in-depth best practice.
     await execute(
-      `UPDATE event_dm_threads SET ${column} = $1 WHERE id = $2`,
-      [lastReadMessageId, threadId],
+      `UPDATE event_dm_threads SET
+        user_a_last_read_message_id = CASE WHEN $3 = user_a_id THEN $1 ELSE user_a_last_read_message_id END,
+        user_b_last_read_message_id = CASE WHEN $3 = user_b_id THEN $1 ELSE user_b_last_read_message_id END
+       WHERE id = $2`,
+      [lastReadMessageId, threadId, authUser.id],
     );
 
     return successResponse({ message: 'Thread marked as read.' });

@@ -109,4 +109,24 @@ describe('handleError', () => {
     expect(body.error.message).toBe('An unexpected error occurred.');
     expect(body.error.message).not.toContain('database');
   });
+
+  // ─── Correlation ID (request_id) ───────────────────────────────────
+
+  it('includes request_id in error response when invocationId provided', () => {
+    const response = handleError(new ValidationError('Bad'), 'abc-123');
+    const body = response.jsonBody as any;
+    expect(body.error.request_id).toBe('abc-123');
+  });
+
+  it('omits request_id when invocationId is undefined', () => {
+    const response = handleError(new ValidationError('Bad'));
+    const body = response.jsonBody as any;
+    expect(body.error.request_id).toBeUndefined();
+  });
+
+  it('includes request_id for internal errors', () => {
+    const response = handleError(new Error('boom'), 'req-456');
+    const body = response.jsonBody as any;
+    expect(body.error.request_id).toBe('req-456');
+  });
 });

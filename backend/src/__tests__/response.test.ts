@@ -49,4 +49,14 @@ describe('errorResponse', () => {
     const response = errorResponse('ERR', 'msg');
     expect((response.headers as Record<string, string>)['Content-Type']).toBe('application/json');
   });
+
+  it('includes request_id when provided', () => {
+    const response = errorResponse('ERR', 'msg', 400, 'req-123');
+    expect((response.jsonBody as any).error.request_id).toBe('req-123');
+  });
+
+  it('omits request_id when not provided', () => {
+    const response = errorResponse('ERR', 'msg');
+    expect((response.jsonBody as any).error.request_id).toBeUndefined();
+  });
 });

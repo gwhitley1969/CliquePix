@@ -12,13 +12,13 @@ export function handleError(error: unknown, invocationId?: string): HttpResponse
       `AppError: ${error.code} (status=${error.statusCode}) — ${error.message}`,
       invocationId ? `[${invocationId}]` : '',
     );
-    return errorResponse(error.code, error.message, error.statusCode);
+    return errorResponse(error.code, error.message, error.statusCode, invocationId);
   }
 
   if (error instanceof Error) {
     // JWT-specific errors
     if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
-      return errorResponse('UNAUTHORIZED', 'Invalid or expired token.', 401);
+      return errorResponse('UNAUTHORIZED', 'Invalid or expired token.', 401, invocationId);
     }
 
     // Log unexpected errors
@@ -26,5 +26,5 @@ export function handleError(error: unknown, invocationId?: string): HttpResponse
     console.error('Unhandled error:', error.name, error.constructor.name, invocationId ? `[${invocationId}]` : '');
   }
 
-  return errorResponse('INTERNAL_ERROR', 'An unexpected error occurred.', 500);
+  return errorResponse('INTERNAL_ERROR', 'An unexpected error occurred.', 500, invocationId);
 }
