@@ -735,8 +735,8 @@ Serve from Azure Front Door or a simple static web app. Static JSON files that r
 - User can only delete their own photos
 
 ### Blob Storage Access — RBAC + User Delegation SAS:
-- **No storage account keys.** No account-key-based SAS tokens anywhere in the system.
-- `allowSharedKeyAccess: false` on the storage account
+- **No storage account keys in application code.** All CliquePix blob/queue access uses `DefaultAzureCredential` (managed identity). No account-key-based SAS tokens anywhere.
+- `allowSharedKeyAccess` is `true` on the storage account — required because the Azure Functions runtime (`AzureWebJobsStorage`) uses shared keys internally for timer triggers, leases, and deployment. Migrate to identity-based `AzureWebJobsStorage__accountName` in v1.5 to fully disable.
 - Function App managed identity assigned `Storage Blob Data Contributor` + `Storage Blob Delegator` roles
 - Client uploads via write-only User Delegation SAS (scoped to single blob, 5-minute expiry)
 - Client views via read-only User Delegation SAS (scoped, short-lived)
@@ -1116,7 +1116,7 @@ Use Flutter flavor/environment mechanisms. Do not hardcode environment-specific 
 | `AcrPull` | Container Registry | Pull the FFmpeg transcoder image |
 | *(Callback auth to Function)* | — | Via managed identity token for the Function App's audience — Function validates the caller's managed identity token on `/api/internal/video-processing-complete` |
 
-No storage account keys anywhere. `allowSharedKeyAccess: false` on the storage account. Use `DefaultAzureCredential` in all Azure SDK calls (Function App Node.js + Container Apps Job Python/Node). PostgreSQL connection string stored in Key Vault, referenced via Key Vault reference in Function App settings.
+No storage account keys in application code. All CliquePix SDK calls use `DefaultAzureCredential` (Function App Node.js + Container Apps Job). `allowSharedKeyAccess` remains `true` on the storage account because the Azure Functions runtime (`AzureWebJobsStorage`) requires shared keys — migrate to identity-based connection in v1.5. PostgreSQL connection string stored in Key Vault, referenced via Key Vault reference in Function App settings.
 
 ### Key Vault Contents
 
