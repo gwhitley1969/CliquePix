@@ -52,6 +52,7 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
   bool _usedLocalFile = false;
   bool _usedFallback = false;
   bool _usedInstantPreview = false;
+  bool _isRecovering = false;
   String? _errorText;
 
   @override
@@ -197,13 +198,69 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
         bufferedColor: Colors.white38,
       ),
     );
+    // Listen for playback errors (e.g. SAS token expiry after 15-min pause).
+    // On error, re-fetch /playback for a fresh manifest and reload at the
+    // current position. Only applies to cloud HLS/MP4 playback — local file
+    // and instant-preview paths don't use SAS tokens.
+    controller.addListener(_onPlaybackError);
     if (mounted) {
       setState(() => _isLoading = false);
     }
   }
 
+  void _onPlaybackError() {
+    final ctrl = _controller;
+    if (ctrl == null || !ctrl.value.hasError || _isRecovering) return;
+    if (_usedLocalFile || _usedInstantPreview) return; // no SAS tokens to expire
+    debugPrint('[CliquePix Video] Playback error detected — attempting SAS recovery');
+    _recoverFromSasExpiry(ctrl.value.position);
+  }
+
+  Future<void> _recoverFromSasExpiry(Duration position) async {
+    if (_isRecovering || !mounted) return;
+    _isRecovering = true;
+    setState(() => _isLoading = true);
+
+    try {
+      // Dispose old controllers
+      _controller?.removeListener(_onPlaybackError);
+      _chewieController?.dispose();
+      _controller?.dispose();
+      _chewieController = null;
+      _controller = null;
+
+      // Re-fetch fresh playback manifest with new SAS URLs
+      final repo = await ref.read(videosRepositoryProvider.future);
+      final playback = await repo.getPlayback(widget.videoId);
+      _playbackInfo = playback;
+
+      // Try HLS first, fall back to MP4
+      try {
+        await _initWithHls(playback);
+      } catch (_) {
+        _usedFallback = true;
+        await _initWithMp4(playback);
+      }
+
+      // Seek to the position where playback failed
+      await _controller?.seekTo(position);
+      debugPrint('[CliquePix Video] SAS recovery succeeded at ${position.inSeconds}s');
+    } catch (e) {
+      debugPrint('[CliquePix Video] SAS recovery failed: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _errorText = "Playback session expired. Please go back and try again.";
+        });
+      }
+    } finally {
+      _isRecovering = false;
+    }
+  }
+
   @override
   void dispose() {
+    _controller?.removeListener(_onPlaybackError);
     _chewieController?.dispose();
     _controller?.dispose();
     if (_tempManifestFile != null) {
