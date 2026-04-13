@@ -1,6 +1,6 @@
 # DEPLOYMENT_STATUS.md — Clique Pix v1
 
-Last updated: 2026-04-07 (video v1 implementation complete on `feature/video`)
+Last updated: 2026-04-13 (iOS auth fix + bundle ID reconciliation)
 
 ## Video v1 Status
 
@@ -55,7 +55,7 @@ Last updated: 2026-04-07 (video v1 implementation complete on `feature/video`)
 | Component | Status | Notes |
 |-----------|--------|-------|
 | Project scaffold (pubspec.yaml, analysis_options) | Done | Flutter 3.35.5, Dart 3.9.2 |
-| Native scaffolding (Android/iOS) | Done | `flutter create` with org `com.cliquepix`, package `com.cliquepix.clique_pix` |
+| Native scaffolding (Android/iOS) | Done | `flutter create` with org `com.cliquepix`; Android package `com.cliquepix.clique_pix`, iOS bundle ID `com.cliquepix.app` (changed from flutter create default `com.cliquepix.cliquePix`) |
 | Design system (colors, gradients, typography, theme) | Done | Dark theme throughout, uses `withValues(alpha:)` (Flutter 3.27+) |
 | Constants (endpoints, app constants, environment) | Done | Domain: `clique-pix.com` |
 | Error types (sealed AppFailure, error mapper) | Done | |
@@ -183,6 +183,7 @@ Health endpoint confirmed at:
 | CIAM Tenant | `cliquepix.onmicrosoft.com` | Tenant ID: `27748e01-d49f-4f0b-b78f-b97c16be69dc` |
 | App Registration | `Clique Pix` | Client ID: `7db01206-135b-4a34-a4d5-2622d1a888bf` |
 | Redirect URI (Android debug) | Configured | `msauth://com.cliquepix.clique_pix/W28%2BgAaZ9fNu1yL%2FGMRe94rK0dY%3D` |
+| Redirect URI (iOS) | Configured | `msauth.com.cliquepix.app://auth` (auto-generated from Bundle ID `com.cliquepix.app`) |
 | Application ID URI | Configured | `api://7db01206-135b-4a34-a4d5-2622d1a888bf` |
 | Exposed API Scope | Configured | `access_as_user` — required for MSAL to return app-scoped access token |
 | Email OTP | Enabled | Primary sign-in method |
@@ -442,6 +443,19 @@ Scanning a clique invite QR code navigated to `https://clique-pix.com/invite/{co
 | Fix: DM real-time delivery | Done | Switched from group-based (`sendToAll`) to user-targeted (`sendToUser`) delivery; fixed WebSocket reconnection to re-negotiate fresh URL |
 | Backend redeployed (6th) | Done | `func azure functionapp publish func-cliquepix-fresh --force` — DM sendToUser fix |
 | Fix: Sign-out browser session | Done | Added `browser_sign_out_enabled: true` to `msal_config.json` + `Prompt.login` on `acquireToken` — clears Google session cookies on sign-out, forces re-authentication on sign-in |
+
+### Recently Completed (2026-04-13)
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Fix: iOS MSAL auth loop | Done | Three root causes: (1) no iOS platform registered in Azure Entra, (2) Info.plist URL scheme `msauth.com.cliquepix.app` didn't match bundle ID, (3) missing keychain entitlements (`com.microsoft.adalcache`). Errors were silently swallowed by `auth_providers.dart` catch block. |
+| iOS bundle ID reconciliation | Done | Changed Xcode bundle ID from `com.cliquepix.cliquePix` (flutter create default) to `com.cliquepix.app` to match Apple App ID, Firebase iOS, and Apple Sign In config. Updated Azure Entra iOS platform accordingly. |
+| Info.plist URL scheme fix | Done | Changed from hardcoded `msauth.com.cliquepix.app` to `msauth.$(PRODUCT_BUNDLE_IDENTIFIER)` — auto-resolves at build time |
+| Runner.entitlements created | Done | Keychain group `$(AppIdentifierPrefix)com.microsoft.adalcache` for MSAL token caching |
+| iOS deployment target bump | Done | 13.0 → 15.0 (required by `firebase_core` v4 and `workmanager_apple`) |
+| Firebase packages upgraded | Done | `firebase_core` 2.x → 4.7.0, `firebase_messaging` 14.x → 16.2.0 (old versions incompatible with Xcode 26.2), `share_plus` 9.x → 12.x (dependency conflict with new firebase_core) |
+| iOS code signing configured | Done | `DEVELOPMENT_TEAM = 4ML27KY869`, `CODE_SIGN_STYLE = Automatic` on all Runner build configs |
+| iOS on-device verification | Done | App builds, installs, and authenticates successfully on physical iPhone (iOS 26.3.1) |
 
 ### Not Started
 
