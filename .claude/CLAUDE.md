@@ -64,7 +64,7 @@ If a feature does not directly support one of these loops, it does not belong in
 - Photo upload via User Delegation SAS (two-phase: get upload URL, then confirm)
 - Event feed: vertical scroll, large photo/video cards, user attribution, timestamp, thumbnails/posters
 - Lightweight reactions: ❤️ 😂 🔥 😮 (unique constraint per user per media item per type)
-- Save individual photo/video to device, multi-select batch download with progress
+- Save individual photo/video to device, unified multi-select batch download for photos and videos with progress (dynamic label: "Download N Photos" / "N Videos" / "N Items")
 - External share via native OS share sheet (no direct third-party API integrations)
 - Auto-deletion: timer-triggered cloud cleanup when event duration expires
 - Orphan cleanup: pending uploads not confirmed within 10 minutes (photos) / 30 minutes (videos — larger files need more time)
@@ -1161,7 +1161,7 @@ A user can:
 8. **Tap their own video card immediately and play from the local device file** — zero wait, zero network. The local pending card appears in the feed the moment the user taps "Upload", before any Azure communication begins
 9. Play back a video cleanly via HLS with MP4 fallback
 10. React to others' photos and videos
-11. Save a photo or video to their device (video save uses the MP4 fallback URL via the player PopupMenu)
+11. Save a photo or video to their device — individually via the detail/player screen, or in bulk via multi-select download (photos and videos together, with progress)
 12. Share a photo or video externally via the OS share sheet
 13. **Delete their own video** via the PopupMenu in the video player AppBar (works even when the player fails to init on a broken blob)
 14. Receive push notifications when new photos are added and when videos finish processing (uploader gets the Web PubSub signal but NOT the FCM push for their own video)

@@ -62,7 +62,7 @@ Last updated: 2026-04-07 (video v1 implementation complete on `feature/video`)
 | Routing (GoRouter with shell route) | Done | Event-first flow, 4 tabs (Home/Cliques/Notifications/Profile), auth guard with redirect preservation for invite deep links |
 | API client (Dio + 3 interceptors) | Done | Auth interceptor uses parent Dio for retry |
 | Token storage service | Done | Refresh callback mechanism wired to MSAL |
-| Storage service (save to gallery + share + batch download) | Done | Single save, batch save with progress, share via temp file |
+| Storage service (save to gallery + share + batch download) | Done | Single photo/video save, unified batch download (photos + videos) with progress, share via temp file |
 | Deep link service | Done | Host: clique-pix.com, initialized in app.dart via ConsumerStatefulWidget |
 | Push notification service | Done | FCM token registration + refresh; foreground display via `flutter_local_notifications`; background/terminated tap navigation; static callback for local notification taps |
 | Shared widgets (7 widgets) | Done | Gradient-ringed avatars, dark-themed bottom nav with gradient icons |
@@ -398,10 +398,10 @@ Scanning a clique invite QR code navigated to `https://clique-pix.com/invite/{co
 | Event deletion: frontend UI | Done | Delete icon in AppBar (organizer only), dark-themed confirmation dialog, post-delete navigation to events list with SnackBar |
 | Event deletion: API/repository layer | Done | `deleteEvent()` method in EventsApi and EventsRepository |
 | Photo card name readability fix | Done | Uploader name and timestamp text overridden to white for dark card background (#162033) — was invisible dark navy (#0F172A) |
-| Multi-select photo download: selection state | Done | `PhotoSelectionNotifier` + `photoSelectionProvider` (family by eventId) in photos_providers.dart |
-| Multi-select photo download: card UI | Done | Circular checkbox overlay on photo cards (aqua when selected), aqua border on selected cards, tap toggles selection in selection mode |
-| Multi-select photo download: feed UI | Done | Selection toolbar with Select All / Deselect All + Cancel; download action bar with progress indicator at bottom |
-| Multi-select photo download: batch save | Done | `savePhotosToGallery()` in StorageService — sequential download with progress callback, continues past individual failures |
+| Multi-select media download: selection state | Done | `MediaSelectionNotifier` + `mediaSelectionProvider` (family by eventId) in photos_providers.dart — unified for photos + videos |
+| Multi-select media download: card UI | Done | Circular checkbox overlay on photo and video cards (aqua when selected), tap toggles selection; processing/failed videos excluded from selection |
+| Multi-select media download: feed UI | Done | Selection toolbar with Select All / Deselect All + Cancel; download action bar with dynamic label ("Download 3 Photos" / "Download 2 Videos" / "Download 5 Items") |
+| Multi-select media download: batch save | Done | Photos via `savePhotoToGallery()`, videos via `saveVideoToGallery()` (MP4 fallback URL) — sequential with combined progress, continues past individual failures |
 | Backend redeployed | Done | `func azure functionapp publish func-cliquepix-fresh` — 28 functions |
 | Clique screens: refresh button | Done | Refresh icon in AppBar on both CliqueDetailScreen and CliquesListScreen — calls existing `_refresh()` / `cliquesListProvider.notifier.refresh()` |
 | DB migration: `event_deleted` notification type | Done | Migration `003_event_deleted_notification.sql` — added `event_deleted` to notifications CHECK constraint |
@@ -478,7 +478,7 @@ Scanning a clique invite QR code navigated to `https://clique-pix.com/invite/{co
 | 18. Removed member graceful redirect | Done (2026-04-01) — 404 detection auto-navigates removed user back to cliques list with SnackBar |
 | 19. Event organizer deletes event | Not tested — delete icon visible to creator, confirmation dialog, blob cleanup + cascade delete |
 | 20. Non-organizer cannot delete event | Not tested — delete icon should not appear for non-creators |
-| 21. Multi-select photo download | Not tested — enter selection mode, select photos, download with progress bar |
+| 21. Multi-select media download | Not tested — enter selection mode, select photos + videos, download with progress bar, dynamic label |
 | 22. Photo card uploader name readable | Not tested — white text on dark card background |
 | 23. Event creator name displayed | Not tested — "Created by {name}" visible on event detail screen |
 | 24. Clear all notifications | Not tested — tap trash sweep icon in AppBar → confirm → all notifications cleared |

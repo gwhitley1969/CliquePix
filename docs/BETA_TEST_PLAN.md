@@ -53,7 +53,9 @@ This is a manual smoke test checklist to run before each beta release. Every ite
 - [ ] **Thumbnail loads** — feed shows thumbnail, not full-size
 - [ ] **Full-size on tap** — tapping photo loads full resolution
 - [ ] **Save to device** — long press or menu → "Save to Device" → photo in gallery
-- [ ] **Batch download** — select multiple photos → download all → verify in gallery
+- [ ] **Batch download (photos)** — select multiple photos → download all → verify in gallery
+- [ ] **Batch download (mixed)** — select photos + videos → download all → verify both types in gallery
+- [ ] **Batch download label** — photos only → "Download N Photos"; videos only → "Download N Videos"; mixed → "Download N Items"
 - [ ] **Share externally** — share sheet opens, can send via Messages/WhatsApp/etc.
 - [ ] **React** — tap heart/laugh/fire/wow, reaction appears, other device sees it
 - [ ] **Delete own photo** — uploader deletes, photo disappears from both feeds
@@ -88,6 +90,8 @@ This is a manual smoke test checklist to run before each beta release. Every ite
 ### Actions
 
 - [ ] **Save video to device** — player menu → "Save to Device" → video in gallery
+- [ ] **Multi-select video download** — enter selection mode → video cards show checkboxes → select videos → download
+- [ ] **Processing video excluded from selection** — video still processing → no checkbox shown
 - [ ] **Share video** — player menu → "Share" → OS share sheet opens
 - [ ] **Delete video** — player menu → "Delete" → confirmation → video removed from feed
 - [ ] **Delete during processing** — delete a video that's still processing, card disappears cleanly

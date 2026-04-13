@@ -137,8 +137,11 @@ A persistent group of people (e.g., “Girls Night Out” or bachelor party)
 
 ### 5.9 Save & Download
 - Save individual photo to device from photo detail screen
-- Multi-select download: enter selection mode in event feed, tap photos to select, Select All / Deselect All, download selected photos to device with progress indicator
-- Batch download saves full-resolution originals (falls back to thumbnail if unavailable)
+- Save individual video to device from video player menu (uses MP4 fallback URL)
+- Multi-select download: enter selection mode in event feed, tap photos and/or videos to select, Select All / Deselect All, download selected media to device with progress indicator
+- Dynamic download label: "Download 3 Photos" / "Download 2 Videos" / "Download 5 Items" depending on selection
+- Processing or failed videos are excluded from selection (not yet downloadable)
+- Batch download saves full-resolution photo originals (falls back to thumbnail if unavailable) and MP4 video fallbacks
 
 ---
 

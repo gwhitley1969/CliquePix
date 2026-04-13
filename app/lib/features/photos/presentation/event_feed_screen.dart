@@ -111,32 +111,50 @@ class _EventFeedScreenState extends ConsumerState<EventFeedScreen> {
     super.dispose();
   }
 
-  Future<void> _downloadSelected(List<({String url, String photoId})> photos) async {
+  Future<void> _downloadSelectedMedia({
+    required List<({String url, String id})> photos,
+    required List<({String url, String id})> videos,
+  }) async {
+    final total = photos.length + videos.length;
     setState(() {
       _isDownloading = true;
       _downloadProgress = 0;
-      _downloadTotal = photos.length;
+      _downloadTotal = total;
     });
 
     final storageService = ref.read(storageServiceProvider);
-    final saved = await storageService.savePhotosToGallery(
-      photos,
-      (completed, total) {
-        if (mounted) {
-          setState(() {
-            _downloadProgress = completed;
-            _downloadTotal = total;
-          });
-        }
-      },
-    );
+    int saved = 0;
+    int completed = 0;
+
+    for (final photo in photos) {
+      try {
+        await storageService.savePhotoToGallery(photo.url, photo.id);
+        saved++;
+      } catch (_) {}
+      completed++;
+      if (mounted) setState(() => _downloadProgress = completed);
+    }
+
+    for (final video in videos) {
+      try {
+        await storageService.saveVideoToGallery(video.url, video.id);
+        saved++;
+      } catch (_) {}
+      completed++;
+      if (mounted) setState(() => _downloadProgress = completed);
+    }
 
     if (mounted) {
       setState(() => _isDownloading = false);
-      ref.read(photoSelectionProvider(widget.eventId).notifier).exitSelectionMode();
+      ref.read(mediaSelectionProvider(widget.eventId).notifier).exitSelectionMode();
+      final label = photos.isNotEmpty && videos.isNotEmpty
+          ? 'items'
+          : videos.isNotEmpty
+              ? (total == 1 ? 'video' : 'videos')
+              : (total == 1 ? 'photo' : 'photos');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Saved $saved of ${photos.length} photos to gallery'),
+          content: Text('Saved $saved of $total $label to gallery'),
           backgroundColor: const Color(0xFF1A2035),
         ),
       );
@@ -147,7 +165,7 @@ class _EventFeedScreenState extends ConsumerState<EventFeedScreen> {
   Widget build(BuildContext context) {
     final photosAsync = ref.watch(eventPhotosProvider(widget.eventId));
     final videosAsync = ref.watch(eventVideosProvider(widget.eventId));
-    final selectionState = ref.watch(photoSelectionProvider(widget.eventId));
+    final selectionState = ref.watch(mediaSelectionProvider(widget.eventId));
     final isSelecting = selectionState.isSelecting;
     final selectedIds = selectionState.selectedIds;
 
@@ -238,28 +256,32 @@ class _EventFeedScreenState extends ConsumerState<EventFeedScreen> {
           );
         }
 
+        final readyVideos = filteredVideos.where((v) => v.isReady).toList();
+        final selectableCount = photos.length + readyVideos.length;
+
         return Column(
           children: [
-            // Selection toolbar (still uses photo IDs only — videos are excluded
-            // from multi-select download in v1; the user can save individual
-            // videos via the video player screen)
+            // Selection toolbar for photos + ready videos
             _SelectionToolbar(
               isSelecting: isSelecting,
               selectedCount: selectedIds.length,
-              totalCount: photos.length,
-              allSelected: selectedIds.length == photos.length,
+              totalCount: selectableCount,
+              allSelected: selectableCount > 0 && selectedIds.length == selectableCount,
               onEnterSelection: () {
-                ref.read(photoSelectionProvider(widget.eventId).notifier).enterSelectionMode();
+                ref.read(mediaSelectionProvider(widget.eventId).notifier).enterSelectionMode();
               },
               onSelectAll: () {
-                ref.read(photoSelectionProvider(widget.eventId).notifier)
-                    .selectAll(photos.map((p) => p.id).toList());
+                final allIds = [
+                  ...photos.map((p) => p.id),
+                  ...readyVideos.map((v) => v.id),
+                ];
+                ref.read(mediaSelectionProvider(widget.eventId).notifier).selectAll(allIds);
               },
               onDeselectAll: () {
-                ref.read(photoSelectionProvider(widget.eventId).notifier).deselectAll();
+                ref.read(mediaSelectionProvider(widget.eventId).notifier).deselectAll();
               },
               onCancel: () {
-                ref.read(photoSelectionProvider(widget.eventId).notifier).exitSelectionMode();
+                ref.read(mediaSelectionProvider(widget.eventId).notifier).exitSelectionMode();
               },
             ),
 
@@ -288,16 +310,21 @@ class _EventFeedScreenState extends ConsumerState<EventFeedScreen> {
                         isSelecting: isSelecting,
                         isSelected: selectedIds.contains(photo.id),
                         onSelectionToggle: () {
-                          ref.read(photoSelectionProvider(widget.eventId).notifier)
-                              .togglePhoto(photo.id);
+                          ref.read(mediaSelectionProvider(widget.eventId).notifier)
+                              .toggleItem(photo.id);
                         },
                       );
                     } else {
-                      // Video card — selection mode doesn't apply to videos in v1
+                      final video = item.video!;
                       return VideoCardWidget(
-                        video: item.video!,
+                        video: video,
                         eventId: widget.eventId,
-                        isSelecting: false,
+                        isSelecting: isSelecting && video.isReady,
+                        isSelected: selectedIds.contains(video.id),
+                        onSelectionToggle: () {
+                          ref.read(mediaSelectionProvider(widget.eventId).notifier)
+                              .toggleItem(video.id);
+                        },
                       );
                     }
                   },
@@ -307,24 +334,36 @@ class _EventFeedScreenState extends ConsumerState<EventFeedScreen> {
 
             // Download action bar
             if (isSelecting && selectedIds.isNotEmpty)
-              _DownloadActionBar(
-                selectedCount: selectedIds.length,
-                isDownloading: _isDownloading,
-                progress: _downloadTotal > 0 ? _downloadProgress / _downloadTotal : 0,
-                onDownload: _isDownloading
-                    ? null
-                    : () {
-                        final selected = photos
-                            .where((p) => selectedIds.contains(p.id))
-                            .map((p) => (
-                                  url: p.originalUrl ?? p.thumbnailUrl ?? '',
-                                  photoId: p.id,
-                                ))
-                            .where((p) => p.url.isNotEmpty)
-                            .toList();
-                        _downloadSelected(selected);
-                      },
-              ),
+              Builder(builder: (context) {
+                final photoIds = photos.map((p) => p.id).toSet();
+                final videoIds = readyVideos.map((v) => v.id).toSet();
+                final selectedPhotoCount = selectedIds.where(photoIds.contains).length;
+                final selectedVideoCount = selectedIds.where(videoIds.contains).length;
+                final downloadLabel = selectedPhotoCount > 0 && selectedVideoCount > 0
+                    ? '${selectedIds.length} ${selectedIds.length == 1 ? 'Item' : 'Items'}'
+                    : selectedVideoCount > 0
+                        ? '$selectedVideoCount ${selectedVideoCount == 1 ? 'Video' : 'Videos'}'
+                        : '$selectedPhotoCount ${selectedPhotoCount == 1 ? 'Photo' : 'Photos'}';
+                return _DownloadActionBar(
+                  label: downloadLabel,
+                  isDownloading: _isDownloading,
+                  progress: _downloadTotal > 0 ? _downloadProgress / _downloadTotal : 0,
+                  onDownload: _isDownloading
+                      ? null
+                      : () {
+                          final selectedPhotos = photos
+                              .where((p) => selectedIds.contains(p.id))
+                              .map((p) => (url: p.originalUrl ?? p.thumbnailUrl ?? '', id: p.id))
+                              .where((p) => p.url.isNotEmpty)
+                              .toList();
+                          final selectedVideos = readyVideos
+                              .where((v) => selectedIds.contains(v.id) && v.mp4FallbackUrl != null)
+                              .map((v) => (url: v.mp4FallbackUrl!, id: v.id))
+                              .toList();
+                          _downloadSelectedMedia(photos: selectedPhotos, videos: selectedVideos);
+                        },
+                );
+              }),
           ],
         );
       },
@@ -428,13 +467,13 @@ class _SelectionToolbar extends StatelessWidget {
 }
 
 class _DownloadActionBar extends StatelessWidget {
-  final int selectedCount;
+  final String label;
   final bool isDownloading;
   final double progress;
   final VoidCallback? onDownload;
 
   const _DownloadActionBar({
-    required this.selectedCount,
+    required this.label,
     required this.isDownloading,
     required this.progress,
     required this.onDownload,
@@ -482,9 +521,7 @@ class _DownloadActionBar extends StatelessWidget {
                       )
                     : const Icon(Icons.download_rounded, size: 20),
                 label: Text(
-                  isDownloading
-                      ? 'Downloading...'
-                      : 'Download $selectedCount Photo${selectedCount == 1 ? '' : 's'}',
+                  isDownloading ? 'Downloading...' : 'Download $label',
                   style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
                 style: ElevatedButton.styleFrom(

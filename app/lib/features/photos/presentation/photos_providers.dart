@@ -34,43 +34,43 @@ final photoDetailProvider = FutureProvider.family<PhotoModel, String>((ref, phot
   return repo.getPhoto(photoId);
 });
 
-// Photo selection state for multi-select download
-class PhotoSelectionState {
+// Media selection state for multi-select download (photos + videos)
+class MediaSelectionState {
   final bool isSelecting;
   final Set<String> selectedIds;
-  const PhotoSelectionState({this.isSelecting = false, this.selectedIds = const {}});
+  const MediaSelectionState({this.isSelecting = false, this.selectedIds = const {}});
 }
 
-class PhotoSelectionNotifier extends StateNotifier<PhotoSelectionState> {
-  PhotoSelectionNotifier() : super(const PhotoSelectionState());
+class MediaSelectionNotifier extends StateNotifier<MediaSelectionState> {
+  MediaSelectionNotifier() : super(const MediaSelectionState());
 
   void enterSelectionMode() {
-    state = const PhotoSelectionState(isSelecting: true);
+    state = const MediaSelectionState(isSelecting: true);
   }
 
   void exitSelectionMode() {
-    state = const PhotoSelectionState();
+    state = const MediaSelectionState();
   }
 
-  void togglePhoto(String id) {
+  void toggleItem(String id) {
     final updated = Set<String>.from(state.selectedIds);
     if (updated.contains(id)) {
       updated.remove(id);
     } else {
       updated.add(id);
     }
-    state = PhotoSelectionState(isSelecting: true, selectedIds: updated);
+    state = MediaSelectionState(isSelecting: true, selectedIds: updated);
   }
 
   void selectAll(List<String> ids) {
-    state = PhotoSelectionState(isSelecting: true, selectedIds: Set<String>.from(ids));
+    state = MediaSelectionState(isSelecting: true, selectedIds: Set<String>.from(ids));
   }
 
   void deselectAll() {
-    state = const PhotoSelectionState(isSelecting: true);
+    state = const MediaSelectionState(isSelecting: true);
   }
 }
 
-final photoSelectionProvider = StateNotifierProvider.family<PhotoSelectionNotifier, PhotoSelectionState, String>(
-  (ref, eventId) => PhotoSelectionNotifier(),
+final mediaSelectionProvider = StateNotifierProvider.family<MediaSelectionNotifier, MediaSelectionState, String>(
+  (ref, eventId) => MediaSelectionNotifier(),
 );
