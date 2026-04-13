@@ -12,6 +12,7 @@ import { Event } from '../shared/models/event';
 
 interface EventWithPhotoCount extends Event {
   photo_count: number;
+  video_count: number;
   created_by_name: string;
 }
 
@@ -91,10 +92,11 @@ async function listEvents(req: HttpRequest, context: InvocationContext): Promise
 
     const events = await query<EventWithPhotoCount>(
       `SELECT e.*, u.display_name AS created_by_name,
-              COALESCE(COUNT(p.id), 0)::int AS photo_count
+              COALESCE(COUNT(CASE WHEN p.media_type = 'photo' THEN 1 END), 0)::int AS photo_count,
+              COALESCE(COUNT(CASE WHEN p.media_type = 'video' THEN 1 END), 0)::int AS video_count
        FROM events e
        JOIN users u ON u.id = e.created_by_user_id
-       LEFT JOIN photos p ON p.event_id = e.id AND p.status = 'active' AND p.media_type = 'photo'
+       LEFT JOIN photos p ON p.event_id = e.id AND p.status = 'active'
        WHERE e.clique_id = $1
        GROUP BY e.id, u.display_name
        ORDER BY e.created_at DESC`,
@@ -118,10 +120,11 @@ async function getEvent(req: HttpRequest, context: InvocationContext): Promise<H
 
     const event = await queryOne<EventWithPhotoCount>(
       `SELECT e.*, u.display_name AS created_by_name,
-              COALESCE(COUNT(p.id), 0)::int AS photo_count
+              COALESCE(COUNT(CASE WHEN p.media_type = 'photo' THEN 1 END), 0)::int AS photo_count,
+              COALESCE(COUNT(CASE WHEN p.media_type = 'video' THEN 1 END), 0)::int AS video_count
        FROM events e
        JOIN users u ON u.id = e.created_by_user_id
-       LEFT JOIN photos p ON p.event_id = e.id AND p.status = 'active' AND p.media_type = 'photo'
+       LEFT JOIN photos p ON p.event_id = e.id AND p.status = 'active'
        WHERE e.id = $1
        GROUP BY e.id, u.display_name`,
       [eventId],
@@ -147,13 +150,14 @@ async function listAllEvents(req: HttpRequest, context: InvocationContext): Prom
       `SELECT e.*,
               c.name AS clique_name,
               u.display_name AS created_by_name,
-              COALESCE(COUNT(p.id), 0)::int AS photo_count,
+              COALESCE(COUNT(CASE WHEN p.media_type = 'photo' THEN 1 END), 0)::int AS photo_count,
+              COALESCE(COUNT(CASE WHEN p.media_type = 'video' THEN 1 END), 0)::int AS video_count,
               (SELECT COUNT(*)::int FROM clique_members cm2 WHERE cm2.clique_id = e.clique_id) AS member_count
        FROM events e
        JOIN clique_members cm ON cm.clique_id = e.clique_id AND cm.user_id = $1
        JOIN cliques c ON c.id = e.clique_id
        JOIN users u ON u.id = e.created_by_user_id
-       LEFT JOIN photos p ON p.event_id = e.id AND p.status = 'active' AND p.media_type = 'photo'
+       LEFT JOIN photos p ON p.event_id = e.id AND p.status = 'active'
        GROUP BY e.id, c.name, u.display_name
        ORDER BY e.created_at DESC`,
       [authUser.id],

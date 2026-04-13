@@ -189,11 +189,13 @@ A persistent group of people (e.g., “Girls Night Out” or bachelor party)
 ### 5.14 Privacy & Controls
 - Private by default
 - No public feed
+- **Privacy Policy** — accessible from the profile screen, opens `https://clique-pix.com/privacy.html` in an in-app browser. Covers photos, videos, DMs, data retention, security, and user rights. 14 sections.
+- **Terms of Service** — accessible from the profile screen, opens `https://clique-pix.com/terms.html` in an in-app browser. 16 sections.
 - Controls:
   - Leave event
-  - Remove own photos
+  - Remove own photos and videos
   - Mute notifications
-  - **Delete account** — permanently removes user account, photos, and clique memberships. Shared cliques/events are preserved for other members (creator set to null). Required by Apple App Store Review Guideline 5.1.1(v).
+  - **Delete account** — permanently removes user account, photos, videos, DM history, and clique memberships. Shared cliques/events are preserved for other members (creator set to null). Required by Apple App Store Review Guideline 5.1.1(v).
 
 ---
 

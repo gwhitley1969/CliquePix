@@ -70,10 +70,10 @@ Last updated: 2026-04-07 (video v1 implementation complete on `feature/video`)
 | Auth feature (MSAL integration) | Done | `msal_auth` 3.3.0, custom API scope, auto-login on startup, MSAL error recovery, dismiss button |
 | 5-layer token refresh defense | Done | All layers wired; loginHint threaded through Layer 5 |
 | Cliques feature (API, repository, providers, 6 screens) | Done | Dark theme, gradient-bordered cards, gradient-ringed avatars, labeled "Create Clique" FAB, pull-to-refresh + 30s polling on list and detail screens, JoinCliqueScreen with dark theme |
-| Events feature (API, repository, providers, 4 screens) | Done | Event-first flow, events home screen, dark-themed event detail with hero header, labeled "Create Event" FAB, `listAllEvents` backend endpoint |
+| Events feature (API, repository, providers, 4 screens) | Done | Event-first flow, events home screen, dark-themed event detail with hero header, labeled "Create Event" FAB, `listAllEvents` backend endpoint, event cards show photo + video counts |
 | Photos feature (API, repository, services, providers, 6 screens/widgets) | Done | `pro_image_editor` for crop/draw/stickers/filters, prominent "Upload to Event" button, step-by-step progress overlay, `uploaded_by_name` in responses, multi-select photo download with progress, debug logging throughout pipeline |
 | Notifications feature (API, repository, providers, 1 screen) | Done | Dark theme, colored icon badges, unread/read styling, `member_joined` type with clique navigation |
-| Profile feature (1 screen) | Done | Dark theme, gradient profile card, grouped settings with gradient icons |
+| Profile feature (1 screen) | Done | Dark theme, gradient profile card, grouped settings with gradient icons, Privacy Policy + Terms of Service open `clique-pix.com` in-app browser via `url_launcher` |
 | App entry point (main.dart) | Done | Firebase, timezone, WorkManager, local notifications plugin (top-level), `cliquepix_default` channel creation, Android 13+ permission request, FCM `onMessage` foreground listener, background message handler |
 | All API providers wired to ApiClient | Done | No UnimplementedError providers |
 | App launcher icon | Done | Clique Pix camera logo at all Android densities |
@@ -90,8 +90,8 @@ Last updated: 2026-04-07 (video v1 implementation complete on `feature/video`)
 | Component | Status | Notes |
 |-----------|--------|-------|
 | Landing page (index.html) | Done | Brand design, feature highlights, download CTAs |
-| Privacy policy (privacy.html) | Done | Photo sharing-specific, Xtend-AI LLC, NC jurisdiction |
-| Terms of service (terms.html) | Done | 16 sections, effective March 25, 2026 |
+| Privacy policy (privacy.html) | Done | Photo + video + DM coverage, 14 sections, Xtend-AI LLC, NC jurisdiction, effective April 13, 2026 |
+| Terms of service (terms.html) | Done | Photo + video + DM coverage, 16 sections, effective April 13, 2026 |
 | Invite landing page (invite.html) | Done | Dark-themed, platform detection, intent:// for Android, app store buttons, OG meta tags |
 | Static Web App config | Done | MIME types for well-known files, security headers, `/invite/*` rewrite to invite.html |
 | Well-known files | Done | apple-app-site-association (Team ID: `4ML27KY869`) + assetlinks.json (debug SHA256 fingerprint) |

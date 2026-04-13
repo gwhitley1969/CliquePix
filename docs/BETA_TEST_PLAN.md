@@ -1,6 +1,6 @@
 # Clique Pix — Open Beta Smoke Test Plan
 
-**Last Updated:** April 10, 2026
+**Last Updated:** April 13, 2026
 
 This is a manual smoke test checklist to run before each beta release. Every item must pass on **both iOS and Android** unless noted otherwise.
 
@@ -37,6 +37,8 @@ This is a manual smoke test checklist to run before each beta release. Every ite
 
 - [ ] **Create event** — pick clique, enter name, select duration (24h / 3 days / 7 days), event appears in list
 - [ ] **Event visible to member** — Device B sees the event in their list
+- [ ] **Event card shows photo count** — event card displays correct photo count with proper singular/plural ("1 photo" / "3 photos")
+- [ ] **Event card shows video count** — after uploading a video, event card shows video count with videocam icon (e.g., "1 photo 🎥 1 video")
 - [ ] **Delete event** — organizer deletes, event disappears from both devices
 - [ ] **Delete push notification** — Device B receives "Event Deleted" push when Device A deletes
 
@@ -132,7 +134,15 @@ This is a manual smoke test checklist to run before each beta release. Every ite
 - [ ] **Empty states** — new user with no cliques/events → appropriate empty state messages shown
 - [ ] **Account deletion** — Settings → Delete Account → confirm → user removed, can't sign in
 
-## 10. Performance Checks
+## 10. Profile & Legal
+
+- [ ] **Privacy Policy** — tap "Privacy Policy" on profile screen → in-app browser opens `https://clique-pix.com/privacy.html`
+- [ ] **Terms of Service** — tap "Terms of Service" on profile screen → in-app browser opens `https://clique-pix.com/terms.html`
+- [ ] **Privacy Policy content** — page loads, 14 sections visible, covers photos, videos, DMs, effective date April 13, 2026
+- [ ] **About dialog** — tap "About Clique Pix" → dialog shows version and "Private photo and video sharing" legalese
+- [ ] **Delete account** — confirmation dialog appears, account deletion succeeds, redirects to login
+
+## 11. Performance Checks
 
 - [ ] **Photo upload speed** — capture to visible in feed: < 5 seconds on WiFi
 - [ ] **Video transcoding** — compatible source (H.264 SDR): ready within ~25 seconds total

@@ -140,6 +140,7 @@ Leave it out. A missing feature can be added later. A cluttered v1 cannot be un-
 - **Deep links:** app_links
 - **QR code generation:** qr_flutter
 - **MSAL authentication:** msal_auth (^3.3.0, v2 embedding, custom API scope `access_as_user`)
+- **URL launcher:** url_launcher (^6.2.5) — opens Privacy Policy and Terms of Service in platform-native in-app browser (`LaunchMode.inAppBrowserView` → SFSafariViewController on iOS, Custom Tabs on Android). Points to `https://clique-pix.com/privacy.html` and `https://clique-pix.com/terms.html`.
 
 Do not introduce dependencies not listed here without discussing the tradeoff first.
 

@@ -8,6 +8,7 @@ class EventModel {
   final int retentionHours;
   final String status;
   final int photoCount;
+  final int videoCount;
   final String? cliqueName;
   final int? memberCount;
   final DateTime createdAt;
@@ -23,6 +24,7 @@ class EventModel {
     required this.retentionHours,
     required this.status,
     this.photoCount = 0,
+    this.videoCount = 0,
     this.cliqueName,
     this.memberCount,
     required this.createdAt,
@@ -44,6 +46,7 @@ class EventModel {
       retentionHours: (json['retention_hours'] as num).toInt(),
       status: json['status'] as String,
       photoCount: (json['photo_count'] as num?)?.toInt() ?? 0,
+      videoCount: (json['video_count'] as num?)?.toInt() ?? 0,
       cliqueName: json['clique_name'] as String?,
       memberCount: (json['member_count'] as num?)?.toInt(),
       createdAt: DateTime.parse(json['created_at'] as String),

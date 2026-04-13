@@ -154,9 +154,18 @@ class ActiveEventCard extends StatelessWidget {
                       Icon(Icons.photo_rounded, size: 14, color: Colors.white.withValues(alpha: 0.35)),
                       const SizedBox(width: 5),
                       Text(
-                        '${event.photoCount} photos',
+                        '${event.photoCount} ${event.photoCount == 1 ? 'photo' : 'photos'}',
                         style: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.4)),
                       ),
+                      if (event.videoCount > 0) ...[
+                        const SizedBox(width: 10),
+                        Icon(Icons.videocam_rounded, size: 14, color: Colors.white.withValues(alpha: 0.35)),
+                        const SizedBox(width: 5),
+                        Text(
+                          '${event.videoCount} ${event.videoCount == 1 ? 'video' : 'videos'}',
+                          style: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.4)),
+                        ),
+                      ],
                       const Spacer(),
                       Icon(
                         Icons.arrow_forward_ios_rounded,

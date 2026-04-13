@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_gradients.dart';
 import '../../../widgets/avatar_widget.dart';
@@ -146,7 +147,7 @@ class ProfileScreen extends ConsumerWidget {
                             context: context,
                             applicationName: 'Clique Pix',
                             applicationVersion: '1.0.0',
-                            applicationLegalese: 'Private photo sharing for your inner circle.',
+                            applicationLegalese: 'Private photo and video sharing for your inner circle.',
                           );
                         },
                       ),
@@ -154,13 +155,19 @@ class ProfileScreen extends ConsumerWidget {
                         icon: Icons.privacy_tip_outlined,
                         iconColors: [AppColors.deepBlue, AppColors.violetAccent],
                         title: 'Privacy Policy',
-                        onTap: () {},
+                        onTap: () => launchUrl(
+                          Uri.parse('https://clique-pix.com/privacy.html'),
+                          mode: LaunchMode.inAppBrowserView,
+                        ),
                       ),
                       _SettingsTile(
                         icon: Icons.description_outlined,
                         iconColors: [AppColors.violetAccent, const Color(0xFFEC4899)],
                         title: 'Terms of Service',
-                        onTap: () {},
+                        onTap: () => launchUrl(
+                          Uri.parse('https://clique-pix.com/terms.html'),
+                          mode: LaunchMode.inAppBrowserView,
+                        ),
                         showDivider: false,
                       ),
                     ],

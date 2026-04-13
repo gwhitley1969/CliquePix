@@ -248,9 +248,11 @@ GET    /api/events/{eventId}
 DELETE /api/events/{eventId}
 ```
 
+**Event list response fields:** `GET` endpoints return `photo_count` and `video_count` (conditional aggregation on `media_type`), along with `clique_name` and `member_count` for the all-events endpoint.
+
 **Event deletion:**
 - `DELETE /api/events/{eventId}` — only the event owner (organizer) can delete
-- Deletes all photo blobs from Azure Storage before cascading the database delete (photos + reactions)
+- Deletes all photo blobs and video assets (original + HLS segments + MP4 fallback + poster) from Azure Storage before cascading the database delete (photos, videos, reactions, DM threads, DM messages)
 - Sends push notification and in-app notification to clique members
 - Hard delete — permanent, not recoverable
 
@@ -832,8 +834,11 @@ Every API endpoint must enforce:
 ## Privacy
 
 - Private by default — no public feeds, no user directory, no content discovery
-- Photo URLs are never permanent or publicly accessible (always behind short-lived SAS)
-- EXIF data stripped client-side before upload (GPS, device info, timestamps)
+- Photo and video URLs are never permanent or publicly accessible (always behind short-lived SAS)
+- Photo EXIF data stripped client-side before upload (GPS, device info, timestamps)
+- Video metadata is NOT stripped client-side — original file is uploaded as-is; transcoded delivery files do not carry original metadata forward
+- DM messages are event-scoped, text-only, and auto-deleted when the event expires
+- Privacy Policy and Terms of Service accessible from the profile screen via in-app browser (`https://clique-pix.com/privacy.html`, `https://clique-pix.com/terms.html`)
 
 ## Client-Side Security
 

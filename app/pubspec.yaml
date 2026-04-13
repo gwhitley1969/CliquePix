@@ -40,6 +40,9 @@ dependencies:
   go_router: ^14.0.2
   app_links: ^6.1.1
 
+  # URL launcher (privacy policy, terms of service in-app browser)
+  url_launcher: ^6.2.5
+
   # QR code
   qr_flutter: ^4.1.0
 
