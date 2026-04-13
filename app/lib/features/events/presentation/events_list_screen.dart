@@ -194,34 +194,40 @@ class _EventCard extends StatelessWidget {
                           ),
                         ],
                         const SizedBox(height: 6),
-                        Row(
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 4,
+                          crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
-                            Icon(
-                              event.isExpired ? Icons.timer_off_rounded : Icons.timer_rounded,
-                              size: 13,
-                              color: colors[0].withValues(alpha: 0.6),
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              _timeRemaining,
-                              style: TextStyle(fontSize: 12, color: colors[0].withValues(alpha: 0.7)),
-                            ),
-                            const SizedBox(width: 12),
-                            Icon(Icons.photo_rounded, size: 13, color: Colors.white.withValues(alpha: 0.35)),
-                            const SizedBox(width: 4),
-                            Text(
-                              '${event.photoCount} ${event.photoCount == 1 ? 'photo' : 'photos'}',
-                              style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.35)),
-                            ),
-                            if (event.videoCount > 0) ...[
-                              const SizedBox(width: 10),
-                              Icon(Icons.videocam_rounded, size: 13, color: Colors.white.withValues(alpha: 0.35)),
+                            Row(mainAxisSize: MainAxisSize.min, children: [
+                              Icon(
+                                event.isExpired ? Icons.timer_off_rounded : Icons.timer_rounded,
+                                size: 13,
+                                color: colors[0].withValues(alpha: 0.6),
+                              ),
                               const SizedBox(width: 4),
                               Text(
-                                '${event.videoCount} ${event.videoCount == 1 ? 'video' : 'videos'}',
+                                _timeRemaining,
+                                style: TextStyle(fontSize: 12, color: colors[0].withValues(alpha: 0.7)),
+                              ),
+                            ]),
+                            Row(mainAxisSize: MainAxisSize.min, children: [
+                              Icon(Icons.photo_rounded, size: 13, color: Colors.white.withValues(alpha: 0.35)),
+                              const SizedBox(width: 4),
+                              Text(
+                                '${event.photoCount} ${event.photoCount == 1 ? 'photo' : 'photos'}',
                                 style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.35)),
                               ),
-                            ],
+                            ]),
+                            if (event.videoCount > 0)
+                              Row(mainAxisSize: MainAxisSize.min, children: [
+                                Icon(Icons.videocam_rounded, size: 13, color: Colors.white.withValues(alpha: 0.35)),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '${event.videoCount} ${event.videoCount == 1 ? 'video' : 'videos'}',
+                                  style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.35)),
+                                ),
+                              ]),
                           ],
                         ),
                       ],

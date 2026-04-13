@@ -612,26 +612,17 @@ class _PastEventRow extends StatelessWidget {
                     ],
                   ),
                 ),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      '${event.photoCount} ${event.photoCount == 1 ? 'photo' : 'photos'}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.white.withValues(alpha: 0.3),
-                      ),
+                Flexible(
+                  child: Text(
+                    event.videoCount > 0
+                        ? '${event.photoCount} ${event.photoCount == 1 ? 'photo' : 'photos'} · ${event.videoCount} ${event.videoCount == 1 ? 'video' : 'videos'}'
+                        : '${event.photoCount} ${event.photoCount == 1 ? 'photo' : 'photos'}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.white.withValues(alpha: 0.3),
                     ),
-                    if (event.videoCount > 0) ...[
-                      Text(
-                        ' · ${event.videoCount} ${event.videoCount == 1 ? 'video' : 'videos'}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.white.withValues(alpha: 0.3),
-                        ),
-                      ),
-                    ],
-                  ],
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ],
             ),
