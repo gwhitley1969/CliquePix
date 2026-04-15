@@ -41,6 +41,8 @@ This is a manual smoke test checklist to run before each beta release. Every ite
 - [ ] **Event card shows video count** — after uploading a video, event card shows video count with videocam icon (e.g., "1 photo 🎥 1 video")
 - [ ] **Delete event** — organizer deletes, event disappears from both devices
 - [ ] **Delete push notification** — Device B receives "Event Deleted" push when Device A deletes
+- [ ] **Event Detail bottom nav** — open an event → 4-tab bottom nav (Home, Cliques, Notifications, Profile) is visible with Home highlighted. Tap each tab in turn: each transitions directly to the corresponding tab's root screen. Reopen the event and confirm the AppBar back arrow still returns to the previous screen (Home dashboard, events list, or notifications).
+- [ ] **Full-screen children stay immersive** — from Event Detail: tap Photo (camera), Video → upload → player, and Messages → DM chat. Confirm NONE of these screens show the bottom nav.
 
 ## 4. Photos
 

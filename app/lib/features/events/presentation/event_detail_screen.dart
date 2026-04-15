@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_gradients.dart';
 import '../../../core/utils/date_utils.dart';
+import '../../../widgets/app_bottom_nav.dart';
 import '../../../widgets/error_widget.dart';
 import '../../../models/event_model.dart';
 import '../../auth/presentation/auth_providers.dart';
@@ -37,6 +38,25 @@ class EventDetailScreen extends ConsumerWidget {
           promptInviteCliqueId: promptInviteCliqueId,
           promptInviteCliqueName: promptInviteCliqueName,
         ),
+      ),
+      bottomNavigationBar: AppBottomNav(
+        selectedIndex: 0,
+        onDestinationSelected: (index) {
+          switch (index) {
+            case 0:
+              context.go('/events');
+              break;
+            case 1:
+              context.go('/cliques');
+              break;
+            case 2:
+              context.go('/notifications');
+              break;
+            case 3:
+              context.go('/profile');
+              break;
+          }
+        },
       ),
     );
   }

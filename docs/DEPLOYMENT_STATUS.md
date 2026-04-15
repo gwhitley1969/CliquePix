@@ -1,6 +1,6 @@
 # DEPLOYMENT_STATUS.md — Clique Pix v1
 
-Last updated: 2026-04-15 (About dialog cleanup)
+Last updated: 2026-04-15 (Event Detail bottom nav)
 
 ## Video v1 Status
 
@@ -463,6 +463,7 @@ Scanning a clique invite QR code navigated to `https://clique-pix.com/invite/{co
 |------|--------|-------|
 | Profile: remove "View Licenses" from About dialog | Done | Replaced Flutter's built-in `showAboutDialog()` (which always injects a VIEW LICENSES button) with a custom `showDialog` + `AlertDialog` containing only a Close action. Title, version, and legalese text preserved. `profile_screen.dart:145-166` |
 | Cliques list: remove "+ Create Clique" FAB | Done | Deleted the always-visible gradient FAB from `CliquesListScreen` to eliminate duplication with the empty-state card's "Create Clique" button. Reduced list bottom padding from 100 → 24 now that the FAB no longer needs clearance. Users with existing cliques still reach Create Clique via the Home tab's "+ New Clique" quick-start chip. `cliques_list_screen.dart:135` |
+| Event Detail: add 4-tab bottom nav | Done | Event Detail (`/events/:eventId`) previously had no way to jump directly to Home / Cliques / Notifications / Profile — only a back arrow. Extracted the shell's nav bar into a shared `AppBottomNav` widget (`app/lib/widgets/app_bottom_nav.dart`), refactored `ShellScreen` to use it (pixel-identical), and added `bottomNavigationBar: AppBottomNav(...)` to `EventDetailScreen`'s Scaffold. Taps use `context.go('/events' \| '/cliques' \| '/notifications' \| '/profile')` — go_router's `StatefulShellRoute` activates the correct branch cleanly. `selectedIndex: 0` (Home highlighted) since events live under `/events`. Zero routing changes, zero cross-branch push concerns. Full-screen children (camera, photo detail, video capture/upload/player, DM list/chat) remain without the nav. Rejected alternative of moving `/events/:eventId` into the Home shell branch due to go_router 14 cross-branch `push` ambiguity from `events_list_screen.dart:137` and notification tap handlers. `event_detail_screen.dart:29-62`, `shell_screen.dart`, `app_bottom_nav.dart` (new) |
 
 ### Not Started
 

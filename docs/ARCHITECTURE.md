@@ -913,7 +913,7 @@ Feature-based organization with clean separation of data, domain, and presentati
 
 ## Routing Architecture
 
-**GoRouter** with `StatefulShellRoute.indexedStack` for bottom tab navigation (Home, Cliques, Notifications, Profile). Each tab is a `StatefulShellBranch` with its own navigation stack.
+**GoRouter** with `StatefulShellRoute.indexedStack` for bottom tab navigation (Home, Cliques, Notifications, Profile). Each tab is a `StatefulShellBranch` with its own navigation stack. The shell's nav bar is rendered via the shared `AppBottomNav` widget (`app/lib/widgets/app_bottom_nav.dart`) — used by both `ShellScreen` and `EventDetailScreen` to guarantee visual parity.
 
 **Cross-shell navigation rule:** Screens outside the shell (e.g., Event Detail at `/events/:eventId`) must NOT push to routes inside a shell branch (e.g., `/cliques/:cliqueId`). Doing so causes broken back-navigation — the user gets stranded in the wrong tab instead of returning to the originating screen.
 
@@ -921,6 +921,8 @@ Feature-based organization with clean separation of data, domain, and presentati
 - `/view-clique/:cliqueId` → `CliqueDetailScreen` (for Event Detail → Clique)
 - `/invite-to-clique/:cliqueId` → `InviteScreen` (for post-creation invite flow)
 - Shell-internal routes (`/cliques/:cliqueId`, `/cliques/:cliqueId/invite`) remain for tab-based navigation
+
+**Event Detail bottom nav (outside-shell screens with tab access):** `EventDetailScreen` lives outside the shell (to preserve cross-branch `push` semantics from `events_list_screen`, `notifications_screen`, and FCM tap handlers) but renders its own `AppBottomNav` via its Scaffold's `bottomNavigationBar`. Taps use `context.go('/events' | '/cliques' | '/notifications' | '/profile')` — go_router's `StatefulShellRoute` activates the correct branch and the shell reappears with its own nav bar taking over. `selectedIndex: 0` (Home) is displayed since events live under the `/events` URL namespace. This pattern is the template for any future outside-shell screen that needs tab access without being relocated into a branch.
 
 **Post-creation invite prompt:** When creating an event with a NEW clique, `GoRouter.extra` passes `{cliqueId, cliqueName}` to Event Detail. On `initState`, a modal bottom sheet prompts the user to invite friends. `extra` is ephemeral (not in URL, not restorable from deep links) — the prompt fires once per creation.
 
