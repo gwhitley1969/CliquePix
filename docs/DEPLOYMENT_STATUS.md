@@ -1,6 +1,6 @@
 # DEPLOYMENT_STATUS.md — Clique Pix v1
 
-Last updated: 2026-04-13 (iOS auth fix + bundle ID reconciliation)
+Last updated: 2026-04-15 (About dialog cleanup)
 
 ## Video v1 Status
 
@@ -456,6 +456,12 @@ Scanning a clique invite QR code navigated to `https://clique-pix.com/invite/{co
 | Firebase packages upgraded | Done | `firebase_core` 2.x → 4.7.0, `firebase_messaging` 14.x → 16.2.0 (old versions incompatible with Xcode 26.2), `share_plus` 9.x → 12.x (dependency conflict with new firebase_core) |
 | iOS code signing configured | Done | `DEVELOPMENT_TEAM = 4ML27KY869`, `CODE_SIGN_STYLE = Automatic` on all Runner build configs |
 | iOS on-device verification | Done | App builds, installs, and authenticates successfully on physical iPhone (iOS 26.3.1) |
+
+### Recently Completed (2026-04-15)
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Profile: remove "View Licenses" from About dialog | Done | Replaced Flutter's built-in `showAboutDialog()` (which always injects a VIEW LICENSES button) with a custom `showDialog` + `AlertDialog` containing only a Close action. Title, version, and legalese text preserved. `profile_screen.dart:145-166` |
 
 ### Not Started
 

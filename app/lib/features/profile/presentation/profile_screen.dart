@@ -143,11 +143,26 @@ class ProfileScreen extends ConsumerWidget {
                         iconColors: [AppColors.electricAqua, AppColors.deepBlue],
                         title: 'About Clique Pix',
                         onTap: () {
-                          showAboutDialog(
+                          showDialog<void>(
                             context: context,
-                            applicationName: 'Clique Pix',
-                            applicationVersion: '1.0.0',
-                            applicationLegalese: 'Private photo and video sharing for your inner circle.',
+                            builder: (ctx) => AlertDialog(
+                              title: const Text('Clique Pix'),
+                              content: const Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('Version 1.0.0'),
+                                  SizedBox(height: 12),
+                                  Text('Private photo and video sharing for your inner circle.'),
+                                ],
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.of(ctx).pop(),
+                                  child: const Text('Close'),
+                                ),
+                              ],
+                            ),
                           );
                         },
                       ),
