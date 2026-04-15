@@ -61,6 +61,7 @@ This is a manual smoke test checklist to run before each beta release. Every ite
 - [ ] **Share externally** — share sheet opens, can send via Messages/WhatsApp/etc.
 - [ ] **React** — tap heart/laugh/fire/wow, reaction appears, other device sees it
 - [ ] **Delete own photo** — uploader deletes, photo disappears from both feeds
+- [ ] **Upload error — friendly message, not raw exception** — if the upload fails, the Share Photo screen shows a user-facing message (e.g., "Upload permission expired. Tap retry." / "Network timed out. Check your connection and retry."), NOT a raw `DioException`/stack-trace dump. The retry button re-runs the full flow from a fresh SAS.
 
 ## 5. Videos
 

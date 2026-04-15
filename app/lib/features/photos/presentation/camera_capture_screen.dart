@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,6 +10,7 @@ import 'package:pro_image_editor/pro_image_editor.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_gradients.dart';
+import '../domain/blob_upload_service.dart';
 import 'photos_providers.dart';
 
 class CameraCaptureScreen extends ConsumerStatefulWidget {
@@ -120,11 +122,49 @@ class _CameraCaptureScreenState extends ConsumerState<CameraCaptureScreen> {
       if (mounted) {
         setState(() {
           _isUploading = false;
-          _errorText = 'Upload failed at: $_statusText\n$e';
+          _errorText = _friendlyError(e, _statusText);
           _statusText = '';
         });
       }
     }
+  }
+
+  String _friendlyError(Object e, String stage) {
+    if (e is BlobUploadFailure) {
+      switch (e.azureCode) {
+        case 'AuthorizationFailure':
+        case 'AuthenticationFailed':
+          return 'Upload permission expired. Tap retry.';
+        case 'InvalidHeaderValue':
+          return 'Upload rejected by storage. Please try again. (InvalidHeaderValue)';
+        case 'RequestBodyTooLarge':
+          return 'This photo is too large to upload.';
+      }
+      final code = e.azureCode ?? e.statusCode?.toString() ?? 'unknown';
+      return 'Upload failed. Please try again. (code: $code)';
+    }
+    if (e is DioException) {
+      if (e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.sendTimeout ||
+          e.type == DioExceptionType.receiveTimeout) {
+        return 'Network timed out. Check your connection and retry.';
+      }
+      final status = e.response?.statusCode;
+      switch (status) {
+        case 401:
+          return "You've been signed out. Please sign in again.";
+        case 403:
+          return 'You can no longer post to this event.';
+        case 404:
+          return 'This event no longer exists. Go back and pick another.';
+      }
+      if (status != null && status >= 500) {
+        return 'Something went wrong on our end. Please try again.';
+      }
+    }
+    return kDebugMode
+        ? 'Upload failed at: $stage\n$e'
+        : 'Upload failed. Please try again.';
   }
 
   @override

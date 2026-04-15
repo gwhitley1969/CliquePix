@@ -42,6 +42,11 @@ export async function generateUploadSas(
 
   const permissions = new BlobSASPermissions();
   permissions.write = true;
+  // `create` is required by Put Blob to create a new blob at a path that
+  // doesn't exist yet; `write` alone is insufficient. Regressed in 8d8decf;
+  // caused 403 AuthorizationFailure on all photo uploads.
+  // learn.microsoft.com/rest/api/storageservices/create-user-delegation-sas
+  permissions.create = true;
 
   const now = new Date();
   const expiresOn = new Date(now.getTime() + expirySeconds * 1000);

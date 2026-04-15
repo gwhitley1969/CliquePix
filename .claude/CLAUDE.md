@@ -351,7 +351,7 @@ POST   /api/realtime/dm/negotiate
 2. Client calls `POST /api/events/{eventId}/photos/upload-url`
 3. Function validates Entra token and confirms user is a member of the event's clique
 4. Function generates a photo ID and blob path (`photos/{cliqueId}/{eventId}/{photoId}/original.jpg`), creates a photo record with status `pending`
-5. Function uses managed identity to request a **User Delegation Key**, generates a **write-only User Delegation SAS** scoped to that exact blob path, 5-minute expiry
+5. Function uses managed identity to request a **User Delegation Key**, generates a **write+create User Delegation SAS** scoped to that exact blob path, 5-minute expiry. Both permissions are required: `create` lets the client Put Blob at a path where no blob exists yet; `write` permits overwrite on retry of the same path. `write` alone is insufficient for first-time blob creation (see `backend/src/shared/services/sasService.ts`).
 6. Function returns the SAS upload URL and photo ID to the client
 7. Client uploads compressed image directly to Blob Storage using the SAS URL
 8. Client calls `POST /api/events/{eventId}/photos` with photo ID and metadata (dimensions, MIME type)
@@ -393,7 +393,7 @@ If the client does not call the commit URL (step 6) within **30 minutes** (longe
 - Video block upload SAS expiry: 30 minutes (covers slow connections mid-upload)
 - Photo view SAS expiry: 5 minutes
 - Video HLS segment view SAS expiry: 15 minutes (covers longer playback sessions)
-- Upload SAS permissions: write-only (client cannot read, list, or delete)
+- Upload SAS permissions: photos use `write+create` (Put Blob requires both for first-time creation); videos use `write` only (Put Block on existing blob). In all cases the client cannot read, list, or delete.
 - View SAS permissions: read-only
 - SAS scope: single blob path only, never container-level, even for HLS (manifest rewriting signs each segment individually)
 - User Delegation Key: cache and reuse for up to 1 hour (valid for up to 7 days, but rotate frequently)

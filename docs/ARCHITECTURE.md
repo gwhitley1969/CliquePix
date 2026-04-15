@@ -554,7 +554,7 @@ Calling `Navigator.pop()` in both callbacks causes a double-pop that removes bot
 1. Client calls `POST /api/events/{eventId}/photos/upload-url`
 2. Function validates Entra token and confirms user is a member of the event's clique
 3. Function generates a photo ID and blob path, creates a photo record with status `pending`
-4. Function uses managed identity to request a User Delegation Key, generates a write-only User Delegation SAS scoped to the exact blob path, 5-minute expiry
+4. Function uses managed identity to request a User Delegation Key, generates a `write+create` User Delegation SAS scoped to the exact blob path, 5-minute expiry. `create` is required by Put Blob to create a brand-new blob; `write` permits overwrite on retry of the same path.
 5. Function returns the SAS upload URL and photo ID
 6. Client uploads compressed image directly to Blob Storage using the SAS URL
 7. Client calls `POST /api/events/{eventId}/photos` with photo ID and client-side metadata (dimensions, MIME type)
