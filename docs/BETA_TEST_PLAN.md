@@ -43,6 +43,7 @@ This is a manual smoke test checklist to run before each beta release. Every ite
 - [ ] **Delete push notification** — Device B receives "Event Deleted" push when Device A deletes
 - [ ] **Event Detail bottom nav** — open an event → 4-tab bottom nav (Home, Cliques, Notifications, Profile) is visible with Home highlighted. Tap each tab in turn: each transitions directly to the corresponding tab's root screen. Reopen the event and confirm the AppBar back arrow still returns to the previous screen (Home dashboard, events list, or notifications).
 - [ ] **Full-screen children stay immersive** — from Event Detail: tap Photo (camera), Video → upload → player, and Messages → DM chat. Confirm NONE of these screens show the bottom nav.
+- [ ] **Home Create Event buttons — single entry point per state** — open Home tab: no bottom-right `+ Create Event` FAB visible in any state. Confirm each state has exactly ONE Create Event CTA: brand-new account shows "Create Your First Event"; account with cliques but no active events shows "Create Event"; account with ≥1 active event shows "Start Another Event" below the active event cards; account with only expired events shows "Start a New Event". Tapping any of them opens `/events/create`.
 
 ## 4. Photos
 

@@ -86,12 +86,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     final userName = authState is AuthAuthenticated ? authState.user.displayName : '';
 
-    // Compute home state at build level so FAB can be conditionally hidden
-    _HomeState? homeState;
-    if (eventsAsync.hasValue && cliquesAsync.hasValue && _prefsLoaded) {
-      homeState = _computeState(eventsAsync.value!, cliquesAsync.value!);
-    }
-
     return Scaffold(
       backgroundColor: const Color(0xFF0E1525),
       body: CustomScrollView(
@@ -135,7 +129,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           _buildContent(eventsAsync, cliquesAsync, userName),
         ],
       ),
-      floatingActionButton: homeState == _HomeState.brandNew ? null : _buildFab(),
     );
   }
 
@@ -254,7 +247,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   Widget _buildHasCliquesNoActive(List<CliqueModel> cliques, List<EventModel> expiredEvents) {
     return SliverPadding(
-      padding: const EdgeInsets.fromLTRB(0, 16, 0, 100),
+      padding: const EdgeInsets.fromLTRB(0, 16, 0, 24),
       sliver: SliverList(
         delegate: SliverChildListDelegate([
           // Heading
@@ -306,7 +299,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     List<CliqueModel> cliques,
   ) {
     return SliverPadding(
-      padding: const EdgeInsets.fromLTRB(0, 12, 0, 100),
+      padding: const EdgeInsets.fromLTRB(0, 12, 0, 24),
       sliver: SliverList(
         delegate: SliverChildListDelegate([
           // Greeting
@@ -363,6 +356,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               children: activeEvents.map((e) => ActiveEventCard(event: e)).toList(),
             ),
           ),
+          // Create another event CTA
+          const SizedBox(height: 28),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: _buildCreateEventCTA('Start Another Event'),
+          ),
           // Past events
           if (expiredEvents.isNotEmpty) ...[
             const SizedBox(height: 24),
@@ -377,7 +376,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   Widget _buildOnlyExpired(List<CliqueModel> cliques, List<EventModel> expiredEvents) {
     return SliverPadding(
-      padding: const EdgeInsets.fromLTRB(0, 16, 0, 100),
+      padding: const EdgeInsets.fromLTRB(0, 16, 0, 24),
       sliver: SliverList(
         delegate: SliverChildListDelegate([
           // Encouragement
@@ -436,32 +435,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   // ── Shared widgets ────────────────────────────────────────────────────
-
-  Widget _buildFab() {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: AppGradients.primary,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.deepBlue.withValues(alpha: 0.4),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: FloatingActionButton.extended(
-        onPressed: () => context.go('/events/create'),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        icon: const Icon(Icons.add_rounded, color: Colors.white, size: 22),
-        label: const Text(
-          'Create Event',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15),
-        ),
-      ),
-    );
-  }
 
   Widget _buildCreateEventCTA(String label) {
     return Container(
