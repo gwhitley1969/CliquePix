@@ -142,10 +142,14 @@ This is a manual smoke test checklist to run before each beta release. Every ite
 
 ## 10. Profile & Legal
 
+- [ ] **Settings tile order** — first settings group reads top-to-bottom: `About Clique Pix → Terms of Service → Privacy Policy → Contact Us`
 - [ ] **Privacy Policy** — tap "Privacy Policy" on profile screen → in-app browser opens `https://clique-pix.com/privacy.html`
 - [ ] **Terms of Service** — tap "Terms of Service" on profile screen → in-app browser opens `https://clique-pix.com/terms.html`
 - [ ] **Privacy Policy content** — page loads, 14 sections visible, covers photos, videos, DMs, effective date April 13, 2026
 - [ ] **About dialog** — tap "About Clique Pix" → dialog shows version and "Private photo and video sharing" legalese
+- [ ] **Contact Us dialog** — tap "Contact Us" → dark-themed dialog shows `support@xtend-ai.com` (selectable)
+- [ ] **Contact Us — Copy Email** — tap "Copy Email" → dialog closes, "Email copied!" snackbar appears; pasting into another app yields `support@xtend-ai.com`
+- [ ] **Contact Us — Send Email** — tap "Send Email" → device mail app opens with To `support@xtend-ai.com` and Subject `Clique Pix Support` pre-populated (Android requires the `mailto` `<queries>` entry in `AndroidManifest.xml`)
 - [ ] **Delete account** — confirmation dialog appears, account deletion succeeds, redirects to login
 
 ## 11. Performance Checks

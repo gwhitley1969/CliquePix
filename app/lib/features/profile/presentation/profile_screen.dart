@@ -8,6 +8,8 @@ import '../../../widgets/avatar_widget.dart';
 import '../../auth/presentation/auth_providers.dart';
 import '../../auth/domain/auth_state.dart';
 
+const _supportEmail = 'support@xtend-ai.com';
+
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
 
@@ -167,8 +169,17 @@ class ProfileScreen extends ConsumerWidget {
                         },
                       ),
                       _SettingsTile(
-                        icon: Icons.privacy_tip_outlined,
+                        icon: Icons.description_outlined,
                         iconColors: [AppColors.deepBlue, AppColors.violetAccent],
+                        title: 'Terms of Service',
+                        onTap: () => launchUrl(
+                          Uri.parse('https://clique-pix.com/terms.html'),
+                          mode: LaunchMode.inAppBrowserView,
+                        ),
+                      ),
+                      _SettingsTile(
+                        icon: Icons.privacy_tip_outlined,
+                        iconColors: [AppColors.violetAccent, const Color(0xFFEC4899)],
                         title: 'Privacy Policy',
                         onTap: () => launchUrl(
                           Uri.parse('https://clique-pix.com/privacy.html'),
@@ -176,14 +187,78 @@ class ProfileScreen extends ConsumerWidget {
                         ),
                       ),
                       _SettingsTile(
-                        icon: Icons.description_outlined,
-                        iconColors: [AppColors.violetAccent, const Color(0xFFEC4899)],
-                        title: 'Terms of Service',
-                        onTap: () => launchUrl(
-                          Uri.parse('https://clique-pix.com/terms.html'),
-                          mode: LaunchMode.inAppBrowserView,
-                        ),
+                        icon: Icons.mail_outline_rounded,
+                        iconColors: [const Color(0xFFEC4899), AppColors.electricAqua],
+                        title: 'Contact Us',
                         showDivider: false,
+                        onTap: () {
+                          showDialog<void>(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              backgroundColor: const Color(0xFF1A2035),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                              title: const Text(
+                                'Contact Us',
+                                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                              ),
+                              content: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'For help, feedback, or bug reports:',
+                                    style: TextStyle(color: Colors.white.withValues(alpha: 0.7)),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  const SelectableText(
+                                    _supportEmail,
+                                    style: TextStyle(
+                                      color: AppColors.electricAqua,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 15,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () {
+                                    Clipboard.setData(const ClipboardData(text: _supportEmail));
+                                    Navigator.pop(ctx);
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: const Text('Email copied!'),
+                                        backgroundColor: AppColors.deepBlue,
+                                        behavior: SnackBarBehavior.floating,
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                      ),
+                                    );
+                                  },
+                                  child: Text(
+                                    'Copy Email',
+                                    style: TextStyle(color: Colors.white.withValues(alpha: 0.8)),
+                                  ),
+                                ),
+                                TextButton(
+                                  onPressed: () async {
+                                    Navigator.pop(ctx);
+                                    await launchUrl(
+                                      Uri.parse(
+                                        'mailto:$_supportEmail'
+                                        '?subject=${Uri.encodeComponent('Clique Pix Support')}',
+                                      ),
+                                      mode: LaunchMode.externalApplication,
+                                    );
+                                  },
+                                  child: const Text(
+                                    'Send Email',
+                                    style: TextStyle(color: AppColors.electricAqua, fontWeight: FontWeight.w600),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
                       ),
                     ],
                   ),

@@ -94,12 +94,17 @@
 
     </application>
 
-    <!-- Required for file provider (image_picker) -->
+    <!-- Required for file provider (image_picker) and url_launcher scheme resolution -->
     <queries>
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <category android:name="android.intent.category.BROWSABLE" />
             <data android:scheme="https" />
+        </intent>
+        <!-- Required for url_launcher to resolve mailto: on Android 11+ (API 30+) -->
+        <intent>
+            <action android:name="android.intent.action.SENDTO" />
+            <data android:scheme="mailto" />
         </intent>
     </queries>
 
