@@ -132,7 +132,7 @@ class _CliquesListScreenState extends ConsumerState<CliquesListScreen>
               }
 
               return SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                 sliver: SliverList(
                   delegate: SliverChildBuilderDelegate(
                     (context, index) => _CliqueCard(clique: cliques[index]),
@@ -144,29 +144,6 @@ class _CliquesListScreenState extends ConsumerState<CliquesListScreen>
           ),
         ],
       ),
-      ),
-      floatingActionButton: Container(
-        decoration: BoxDecoration(
-          gradient: AppGradients.primary,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.deepBlue.withValues(alpha: 0.4),
-              blurRadius: 16,
-              offset: const Offset(0, 6),
-            ),
-          ],
-        ),
-        child: FloatingActionButton.extended(
-          onPressed: () => context.go('/cliques/create'),
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          icon: const Icon(Icons.add_rounded, color: Colors.white, size: 22),
-          label: const Text(
-            'Create Clique',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15),
-          ),
-        ),
       ),
     );
   }

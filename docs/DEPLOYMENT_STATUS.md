@@ -462,6 +462,7 @@ Scanning a clique invite QR code navigated to `https://clique-pix.com/invite/{co
 | Task | Status | Notes |
 |------|--------|-------|
 | Profile: remove "View Licenses" from About dialog | Done | Replaced Flutter's built-in `showAboutDialog()` (which always injects a VIEW LICENSES button) with a custom `showDialog` + `AlertDialog` containing only a Close action. Title, version, and legalese text preserved. `profile_screen.dart:145-166` |
+| Cliques list: remove "+ Create Clique" FAB | Done | Deleted the always-visible gradient FAB from `CliquesListScreen` to eliminate duplication with the empty-state card's "Create Clique" button. Reduced list bottom padding from 100 → 24 now that the FAB no longer needs clearance. Users with existing cliques still reach Create Clique via the Home tab's "+ New Clique" quick-start chip. `cliques_list_screen.dart:135` |
 
 ### Not Started
 
