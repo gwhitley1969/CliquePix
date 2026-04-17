@@ -8,6 +8,9 @@ import '../../../core/utils/date_utils.dart';
 import '../../../models/video_model.dart';
 import '../../../widgets/avatar_widget.dart';
 import '../../../widgets/loading_shimmer.dart';
+import '../../../widgets/media_owner_menu.dart';
+import '../../auth/domain/auth_state.dart';
+import '../../auth/presentation/auth_providers.dart';
 import '../../photos/presentation/reaction_bar_widget.dart';
 import 'videos_providers.dart';
 
@@ -33,6 +36,12 @@ class VideoCardWidget extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final authState = ref.watch(authStateProvider);
+    final currentUserId =
+        authState is AuthAuthenticated ? authState.user.id : null;
+    final isOwner =
+        currentUserId != null && video.uploadedByUserId == currentUserId;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppTheme.standardPadding, vertical: 8),
       child: GestureDetector(
@@ -66,6 +75,7 @@ class VideoCardWidget extends ConsumerWidget {
                               fontWeight: FontWeight.w600,
                               color: Colors.white,
                             ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                           Text(
                             AppDateUtils.timeAgo(video.createdAt),
@@ -76,6 +86,31 @@ class VideoCardWidget extends ConsumerWidget {
                           ),
                         ],
                       ),
+                    ),
+                    MediaOwnerMenu(
+                      mediaLabel: 'Video',
+                      isOwner: isOwner,
+                      isSelecting: isSelecting,
+                      onDelete: () async {
+                        final repo =
+                            await ref.read(videosRepositoryProvider.future);
+                        await repo.deleteVideo(video.id);
+                        ref.invalidate(eventVideosProvider(video.eventId));
+
+                        // Retire any local-pending entry whose serverVideoId
+                        // matches this deleted video. Without this the feed
+                        // merge in event_feed_screen would re-render a ghost
+                        // "Polishing your video" card after the server delete.
+                        final pending = ref.read(
+                            localPendingVideosProvider(video.eventId));
+                        final notifier = ref.read(
+                            localPendingVideosProvider(video.eventId)
+                                .notifier);
+                        for (final item in pending
+                            .where((p) => p.serverVideoId == video.id)) {
+                          notifier.remove(item.localTempId);
+                        }
+                      },
                     ),
                   ],
                 ),

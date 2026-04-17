@@ -63,6 +63,9 @@ This is a manual smoke test checklist to run before each beta release. Every ite
 - [ ] **React** — tap heart/laugh/fire/wow, reaction appears, other device sees it
 - [ ] **Delete own photo** — uploader deletes, photo disappears from both feeds
 - [ ] **Upload error — friendly message, not raw exception** — if the upload fails, the Share Photo screen shows a user-facing message (e.g., "Upload permission expired. Tap retry." / "Network timed out. Check your connection and retry."), NOT a raw `DioException`/stack-trace dump. The retry button re-runs the full flow from a fresh SAS.
+- [ ] **Delete own photo from feed 3-dot** — your own photo card shows a 3-dot icon in the header; tap → "Delete" (red) → dark "Delete Photo?" dialog → Confirm → card disappears immediately (no 30s flicker). SnackBar "Photo deleted".
+- [ ] **Non-uploader sees no 3-dot on others' photos** — another user's photo card in the same feed has no 3-dot icon. Tapping into detail → PopupMenu shows Save + Share but no Delete.
+- [ ] **Photo detail delete — feed invalidation** — delete a photo from the AppBar PopupMenu in detail view → pop back → feed is already missing the photo (no 30s wait).
 
 ## 5. Videos
 
@@ -107,6 +110,10 @@ This is a manual smoke test checklist to run before each beta release. Every ite
 - [ ] **Video limit reached** — upload 10 videos, attempt 11th → error message shows correct limit ("10-video limit")
 - [ ] **Network error** — start upload, disable WiFi mid-upload → error message, retry possible
 - [ ] **Failed upload card** — if upload fails, card shows error state with Play + Retry buttons
+- [ ] **Delete own video from feed 3-dot** — your own video card (any state: processing / failed / ready) shows a 3-dot icon in the header; tap → "Delete" → confirm → card disappears. SnackBar "Video deleted".
+- [ ] **Non-uploader sees no 3-dot on others' videos** — another user's video card has no 3-dot icon. Player screen PopupMenu shows Save + Share but no Delete.
+- [ ] **Delete own processing video — no ghost card** — tap Delete while the video is still transcoding → card disappears → does NOT re-appear as a "Polishing your video" ghost card after 30s (local-pending retire loop must have cleared it).
+- [ ] **Dialog consistency** — open each destructive dialog (event delete, leave clique, delete clique, remove member, delete account, delete photo, delete video). All 7 dialogs are pixel-identical (dark `#1A2035` bg, 16px corners, red `#EF4444` destructive button, 70% alpha body text).
 
 ## 6. Direct Messages
 

@@ -7,7 +7,10 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/utils/date_utils.dart';
 import '../../../services/storage_service.dart';
+import '../../../widgets/confirm_destructive_dialog.dart';
 import '../../../widgets/error_widget.dart';
+import '../../auth/domain/auth_state.dart';
+import '../../auth/presentation/auth_providers.dart';
 import 'photos_providers.dart';
 import 'reaction_bar_widget.dart';
 
@@ -42,7 +45,14 @@ class PhotoDetailScreen extends ConsumerWidget {
         ),
         actions: [
           photoAsync.when(
-            data: (photo) => PopupMenuButton<String>(
+            data: (photo) {
+              final authState = ref.watch(authStateProvider);
+              final currentUserId = authState is AuthAuthenticated
+                  ? authState.user.id
+                  : null;
+              final isOwner = currentUserId != null &&
+                  photo.uploadedByUserId == currentUserId;
+              return PopupMenuButton<String>(
               icon: const Icon(Icons.more_vert, color: AppColors.whiteSurface),
               onSelected: (value) async {
                 switch (value) {
@@ -83,23 +93,17 @@ class PhotoDetailScreen extends ConsumerWidget {
                     }
                     break;
                   case 'delete':
-                    final confirm = await showDialog<bool>(
-                      context: context,
-                      builder: (ctx) => AlertDialog(
-                        title: const Text('Delete Photo'),
-                        content: const Text('This photo will be permanently deleted.'),
-                        actions: [
-                          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-                          TextButton(
-                            onPressed: () => Navigator.pop(ctx, true),
-                            child: const Text('Delete', style: TextStyle(color: AppColors.error)),
-                          ),
-                        ],
-                      ),
+                    final confirm = await confirmDestructive(
+                      context,
+                      title: 'Delete Photo?',
+                      body: 'This photo will be permanently deleted.',
                     );
-                    if (confirm == true) {
+                    if (confirm) {
                       try {
                         await ref.read(photosRepositoryProvider).deletePhoto(photo.id);
+                        // Invalidate feed before popping so the card vanishes
+                        // immediately on return (without waiting for 30s poll).
+                        ref.invalidate(eventPhotosProvider(photo.eventId));
                         if (context.mounted) context.pop();
                       } catch (e) {
                         if (context.mounted) {
@@ -115,9 +119,11 @@ class PhotoDetailScreen extends ConsumerWidget {
               itemBuilder: (_) => [
                 const PopupMenuItem(value: 'save', child: Row(children: [Icon(Icons.download), SizedBox(width: 8), Text('Save to Device')])),
                 const PopupMenuItem(value: 'share', child: Row(children: [Icon(Icons.share), SizedBox(width: 8), Text('Share')])),
-                const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete, color: AppColors.error), SizedBox(width: 8), Text('Delete', style: TextStyle(color: AppColors.error))])),
+                if (isOwner)
+                  const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete, color: Color(0xFFEF4444)), SizedBox(width: 8), Text('Delete', style: TextStyle(color: Color(0xFFEF4444)))])),
               ],
-            ),
+              );
+            },
             loading: () => const SizedBox.shrink(),
             error: (_, __) => const SizedBox.shrink(),
           ),

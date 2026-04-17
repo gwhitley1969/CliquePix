@@ -8,6 +8,9 @@ import '../../../core/utils/date_utils.dart';
 import '../../../models/photo_model.dart';
 import '../../../widgets/avatar_widget.dart';
 import '../../../widgets/loading_shimmer.dart';
+import '../../../widgets/media_owner_menu.dart';
+import '../../auth/domain/auth_state.dart';
+import '../../auth/presentation/auth_providers.dart';
 import 'photos_providers.dart';
 import 'reaction_bar_widget.dart';
 
@@ -29,6 +32,12 @@ class PhotoCardWidget extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final authState = ref.watch(authStateProvider);
+    final currentUserId =
+        authState is AuthAuthenticated ? authState.user.id : null;
+    final isOwner =
+        currentUserId != null && photo.uploadedByUserId == currentUserId;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppTheme.standardPadding, vertical: 8),
       child: GestureDetector(
@@ -62,6 +71,7 @@ class PhotoCardWidget extends ConsumerWidget {
                               fontWeight: FontWeight.w600,
                               color: Colors.white,
                             ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                           Text(
                             AppDateUtils.timeAgo(photo.createdAt),
@@ -72,6 +82,17 @@ class PhotoCardWidget extends ConsumerWidget {
                           ),
                         ],
                       ),
+                    ),
+                    MediaOwnerMenu(
+                      mediaLabel: 'Photo',
+                      isOwner: isOwner,
+                      isSelecting: isSelecting,
+                      onDelete: () async {
+                        await ref
+                            .read(photosRepositoryProvider)
+                            .deletePhoto(photo.id);
+                        ref.invalidate(eventPhotosProvider(photo.eventId));
+                      },
                     ),
                   ],
                 ),

@@ -9,6 +9,9 @@ import 'package:video_player/video_player.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../models/video_model.dart';
 import '../../../services/storage_service.dart';
+import '../../../widgets/confirm_destructive_dialog.dart';
+import '../../auth/domain/auth_state.dart';
+import '../../auth/presentation/auth_providers.dart';
 import 'videos_providers.dart';
 
 /// In-app video player screen.
@@ -314,28 +317,29 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
   /// HDR blobs from pre-v0.1.5 transcodes) because the AppBar is rendered
   /// unconditionally — the menu stays reachable in the error state.
   Future<void> _confirmAndDeleteVideo() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete Video'),
-        content: const Text('This video will be permanently deleted.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete', style: TextStyle(color: AppColors.error)),
-          ),
-        ],
-      ),
+    final confirm = await confirmDestructive(
+      context,
+      title: 'Delete Video?',
+      body: 'This video will be permanently deleted.',
     );
-    if (confirm != true) return;
+    if (!confirm) return;
     try {
       final repo = await ref.read(videosRepositoryProvider.future);
       await repo.deleteVideo(widget.videoId);
       ref.invalidate(eventVideosProvider(widget.eventId));
+
+      // Retire any local-pending entry whose serverVideoId matches.
+      // Without this, the feed merge in event_feed_screen would re-render
+      // a ghost "Polishing your video" card after the server delete.
+      final pending =
+          ref.read(localPendingVideosProvider(widget.eventId));
+      final notifier = ref
+          .read(localPendingVideosProvider(widget.eventId).notifier);
+      for (final item
+          in pending.where((p) => p.serverVideoId == widget.videoId)) {
+        notifier.remove(item.localTempId);
+      }
+
       if (mounted) context.pop();
     } catch (e) {
       if (!mounted) return;
@@ -347,6 +351,17 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Watch the video detail so we can gate the Delete action on ownership.
+    // `.valueOrNull` gives us null while loading / on error — in both cases
+    // we hide the Delete item (it's the safer default; the menu still works
+    // for Save/Share when the player has playback info).
+    final videoAsync = ref.watch(videoDetailProvider(widget.videoId));
+    final authState = ref.watch(authStateProvider);
+    final currentUserId =
+        authState is AuthAuthenticated ? authState.user.id : null;
+    final isOwner = currentUserId != null &&
+        videoAsync.valueOrNull?.uploadedByUserId == currentUserId;
+
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -391,16 +406,18 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
                   ),
                 ),
               ],
-              const PopupMenuItem(
-                value: 'delete',
-                child: Row(
-                  children: [
-                    Icon(Icons.delete, color: AppColors.error),
-                    SizedBox(width: 8),
-                    Text('Delete', style: TextStyle(color: AppColors.error)),
-                  ],
+              if (isOwner)
+                const PopupMenuItem(
+                  value: 'delete',
+                  child: Row(
+                    children: [
+                      Icon(Icons.delete, color: Color(0xFFEF4444)),
+                      SizedBox(width: 8),
+                      Text('Delete',
+                          style: TextStyle(color: Color(0xFFEF4444))),
+                    ],
+                  ),
                 ),
-              ),
             ],
           ),
         ],

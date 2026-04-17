@@ -126,10 +126,15 @@ This tests the FCM `video_ready` push routing in `push_notification_service.dart
 
 ### 9. Video deletion
 
-- [ ] Find a video you uploaded
-- [ ] Delete it via the delete action (TODO: confirm how this is exposed)
-- [ ] Verify the video disappears from the feed
-- [ ] Verify the corresponding blob is cleaned up by checking Azure Storage Explorer (or wait for the next timer cleanup)
+Delete is exposed in **two** places:
+- **Feed card 3-dot menu** (`MediaOwnerMenu` in `video_card_widget.dart`) — visible on your own videos in all three states (processing / failed / ready); hidden when the feed is in multi-select download mode.
+- **Video player AppBar PopupMenu** — gated on `videoDetailProvider.valueOrNull?.uploadedByUserId == currentUser.id`.
+
+- [ ] Find a video you uploaded; tap its 3-dot in the feed header → "Delete" (red) → dark "Delete Video?" dialog → Confirm → card disappears immediately. SnackBar "Video deleted".
+- [ ] Try the same from the player screen PopupMenu — same flow, pops back to feed on success.
+- [ ] Delete while video is still processing → card disappears → NO ghost "Polishing your video" card re-appears (local-pending retire loop).
+- [ ] Non-uploader viewing the same clique sees NO 3-dot on your videos.
+- [ ] Verify the corresponding blob is cleaned up by checking Azure Storage Explorer (or wait for the next timer cleanup).
 
 ### 10. Event expiration
 

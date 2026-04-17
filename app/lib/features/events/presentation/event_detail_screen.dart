@@ -5,6 +5,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_gradients.dart';
 import '../../../core/utils/date_utils.dart';
 import '../../../widgets/app_bottom_nav.dart';
+import '../../../widgets/confirm_destructive_dialog.dart';
 import '../../../widgets/error_widget.dart';
 import '../../../models/event_model.dart';
 import '../../auth/presentation/auth_providers.dart';
@@ -126,33 +127,14 @@ class _EventDetailBodyState extends ConsumerState<_EventDetailBody> {
   }
 
   Future<void> _showDeleteEventDialog() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1A2035),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Delete Event?',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
-        ),
-        content: Text(
+    final confirmed = await confirmDestructive(
+      context,
+      title: 'Delete Event?',
+      body:
           'Are you sure you want to delete "${event.name}"? All photos in this event will be permanently deleted and cannot be recovered.',
-          style: TextStyle(color: Colors.white.withValues(alpha: 0.7)),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text('Cancel', style: TextStyle(color: Colors.white.withValues(alpha: 0.5))),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete', style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.w600)),
-          ),
-        ],
-      ),
     );
 
-    if (confirmed == true && mounted) {
+    if (confirmed && mounted) {
       try {
         await ref.read(eventsRepositoryProvider).deleteEvent(eventId);
         ref.invalidate(allEventsListProvider);

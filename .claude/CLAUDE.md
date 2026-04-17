@@ -1163,7 +1163,7 @@ A user can:
 10. React to others' photos and videos
 11. Save a photo or video to their device — individually via the detail/player screen, or in bulk via multi-select download (photos and videos together, with progress)
 12. Share a photo or video externally via the OS share sheet
-13. **Delete their own video** via the PopupMenu in the video player AppBar (works even when the player fails to init on a broken blob)
+13. **Delete their own photo or video** via the 3-dot menu on the feed card (visible to the uploader only, on all three video states) or the PopupMenu on the photo detail / video player AppBar (works even when the video player fails to init on a broken blob). Shared `confirmDestructive` helper backs all 7 destructive-confirm dialogs in the app with identical dark-theme styling.
 14. Receive push notifications when new photos are added and when videos finish processing (uploader gets the Web PubSub signal but NOT the FCM push for their own video)
 15. See backend error codes mapped to friendly messages on the upload screen (`VIDEO_LIMIT_REACHED`, `DURATION_EXCEEDED`, etc. — read from `e.response.data.error.code` on a `DioException`)
 16. See photos and videos automatically disappear from the cloud when the event expires

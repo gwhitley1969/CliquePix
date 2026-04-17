@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_gradients.dart';
 import '../../../widgets/avatar_widget.dart';
+import '../../../widgets/confirm_destructive_dialog.dart';
 import '../../auth/presentation/auth_providers.dart';
 import '../../auth/domain/auth_state.dart';
 
@@ -313,29 +314,14 @@ class ProfileScreen extends ConsumerWidget {
                         titleColor: const Color(0xFFEF4444),
                         showDivider: false,
                         onTap: () async {
-                          final confirm = await showDialog<bool>(
-                            context: context,
-                            builder: (ctx) => AlertDialog(
-                              backgroundColor: const Color(0xFF1A2035),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                              title: const Text('Delete Account?', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
-                              content: Text(
+                          final confirm = await confirmDestructive(
+                            context,
+                            title: 'Delete Account?',
+                            body:
                                 'This will permanently delete your account, remove you from all cliques, and delete all your photos. This action cannot be undone.',
-                                style: TextStyle(color: Colors.white.withValues(alpha: 0.7)),
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.pop(ctx, false),
-                                  child: Text('Cancel', style: TextStyle(color: Colors.white.withValues(alpha: 0.6))),
-                                ),
-                                TextButton(
-                                  onPressed: () => Navigator.pop(ctx, true),
-                                  child: const Text('Delete My Account', style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.w600)),
-                                ),
-                              ],
-                            ),
+                            confirmLabel: 'Delete My Account',
                           );
-                          if (confirm == true) {
+                          if (confirm) {
                             try {
                               await ref.read(authStateProvider.notifier).deleteAccount();
                             } catch (e) {

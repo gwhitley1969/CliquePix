@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_gradients.dart';
 import '../../../widgets/avatar_widget.dart';
+import '../../../widgets/confirm_destructive_dialog.dart';
 import '../../../widgets/error_widget.dart';
 import '../../auth/domain/auth_state.dart';
 import '../../auth/presentation/auth_providers.dart';
@@ -56,30 +57,14 @@ class _CliqueDetailScreenState extends ConsumerState<CliqueDetailScreen>
   }
 
   Future<void> _showRemoveMemberDialog(String memberName, String memberId) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1A2035),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Remove Member', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
-        content: Text(
-          'Remove $memberName from this clique?',
-          style: TextStyle(color: Colors.white.withValues(alpha: 0.7)),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text('Cancel', style: TextStyle(color: Colors.white.withValues(alpha: 0.5))),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Remove', style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.w600)),
-          ),
-        ],
-      ),
+    final confirmed = await confirmDestructive(
+      context,
+      title: 'Remove Member',
+      body: 'Remove $memberName from this clique?',
+      confirmLabel: 'Remove',
     );
 
-    if (confirmed == true && mounted) {
+    if (confirmed && mounted) {
       try {
         await ref.read(cliquesRepositoryProvider).removeMember(cliqueId, memberId);
         ref.invalidate(cliqueMembersProvider(cliqueId));
@@ -99,30 +84,15 @@ class _CliqueDetailScreenState extends ConsumerState<CliqueDetailScreen>
   }
 
   Future<void> _showLeaveCliqueDialog(String cliqueName) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1A2035),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Leave Clique', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
-        content: Text(
+    final confirmed = await confirmDestructive(
+      context,
+      title: 'Leave Clique',
+      body:
           'Leave $cliqueName? You will no longer have access to its events and photos.',
-          style: TextStyle(color: Colors.white.withValues(alpha: 0.7)),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text('Cancel', style: TextStyle(color: Colors.white.withValues(alpha: 0.5))),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Leave', style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.w600)),
-          ),
-        ],
-      ),
+      confirmLabel: 'Leave',
     );
 
-    if (confirmed == true && mounted) {
+    if (confirmed && mounted) {
       try {
         await ref.read(cliquesRepositoryProvider).leaveClique(cliqueId);
         ref.invalidate(cliquesListProvider);
@@ -138,30 +108,14 @@ class _CliqueDetailScreenState extends ConsumerState<CliqueDetailScreen>
   }
 
   Future<void> _showDeleteCliqueDialog(String cliqueName) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1A2035),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Delete Clique', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
-        content: Text(
+    final confirmed = await confirmDestructive(
+      context,
+      title: 'Delete Clique',
+      body:
           'Delete $cliqueName? This will permanently remove the clique and all its events and photos.',
-          style: TextStyle(color: Colors.white.withValues(alpha: 0.7)),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text('Cancel', style: TextStyle(color: Colors.white.withValues(alpha: 0.5))),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete', style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.w600)),
-          ),
-        ],
-      ),
     );
 
-    if (confirmed == true && mounted) {
+    if (confirmed && mounted) {
       try {
         await ref.read(cliquesRepositoryProvider).leaveClique(cliqueId);
         ref.invalidate(cliquesListProvider);
