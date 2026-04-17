@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
@@ -7,12 +8,14 @@ import '../../../core/utils/date_utils.dart';
 import '../../../models/video_model.dart';
 import '../../../widgets/avatar_widget.dart';
 import '../../../widgets/loading_shimmer.dart';
+import '../../photos/presentation/reaction_bar_widget.dart';
+import 'videos_providers.dart';
 
 /// Feed card variant for videos. Three visual states based on video.status:
 ///   1. processing — placeholder card with spinner (poster doesn't exist yet)
 ///   2. active     — poster + duration overlay + play icon (tap to open player)
 ///   3. rejected   — error card with friendly message
-class VideoCardWidget extends StatelessWidget {
+class VideoCardWidget extends ConsumerWidget {
   final VideoModel video;
   final String eventId;
   final bool isSelecting;
@@ -29,7 +32,7 @@ class VideoCardWidget extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppTheme.standardPadding, vertical: 8),
       child: GestureDetector(
@@ -79,6 +82,24 @@ class VideoCardWidget extends StatelessWidget {
               ),
               // Body — switches based on processing state
               _buildBody(context),
+              // Reactions (only for ready videos — backend rejects reactions on non-active media)
+              if (video.isReady)
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: ReactionBarWidget(
+                    mediaId: video.id,
+                    reactionCounts: video.reactionCounts,
+                    userReactions: video.userReactions,
+                    onAdd: (type) async {
+                      final repo = await ref.read(videosRepositoryProvider.future);
+                      return repo.addReaction(video.id, type);
+                    },
+                    onRemove: (reactionId) async {
+                      final repo = await ref.read(videosRepositoryProvider.future);
+                      await repo.removeReaction(video.id, reactionId);
+                    },
+                  ),
+                ),
               const SizedBox(height: 8),
             ],
           ),

@@ -1,27 +1,32 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
-import 'photos_providers.dart';
 
-class ReactionBarWidget extends ConsumerStatefulWidget {
-  final String photoId;
+/// Media-agnostic reaction row. Receives two async callbacks so the same
+/// widget can drive photo reactions and video reactions without coupling
+/// to either repository.
+class ReactionBarWidget extends StatefulWidget {
+  final String mediaId;
   final Map<String, int> reactionCounts;
   final List<({String id, String type})> userReactions;
+  final Future<({String id, String type})> Function(String reactionType) onAdd;
+  final Future<void> Function(String reactionId) onRemove;
 
   const ReactionBarWidget({
     super.key,
-    required this.photoId,
+    required this.mediaId,
     required this.reactionCounts,
     required this.userReactions,
+    required this.onAdd,
+    required this.onRemove,
   });
 
   @override
-  ConsumerState<ReactionBarWidget> createState() => _ReactionBarWidgetState();
+  State<ReactionBarWidget> createState() => _ReactionBarWidgetState();
 }
 
-class _ReactionBarWidgetState extends ConsumerState<ReactionBarWidget> {
+class _ReactionBarWidgetState extends State<ReactionBarWidget> {
   late Map<String, int> _counts;
   late Set<String> _userReactions;
   late Map<String, String> _userReactionIds; // type -> id
@@ -38,7 +43,6 @@ class _ReactionBarWidgetState extends ConsumerState<ReactionBarWidget> {
   }
 
   void _toggleReaction(String type) async {
-    final repo = ref.read(photosRepositoryProvider);
     final wasActive = _userReactions.contains(type);
 
     // Optimistic update
@@ -57,13 +61,20 @@ class _ReactionBarWidgetState extends ConsumerState<ReactionBarWidget> {
       if (wasActive) {
         final reactionId = _userReactionIds[type];
         if (reactionId != null && reactionId.isNotEmpty) {
-          await repo.removeReaction(widget.photoId, reactionId);
+          await widget.onRemove(reactionId);
+          if (mounted) {
+            setState(() => _userReactionIds.remove(type));
+          }
         }
       } else {
-        await repo.addReaction(widget.photoId, type);
+        final result = await widget.onAdd(type);
+        if (mounted) {
+          // Capture the id so a subsequent unlike can DELETE correctly.
+          setState(() => _userReactionIds[type] = result.id);
+        }
       }
     } catch (_) {
-      // Revert on failure
+      if (!mounted) return;
       setState(() {
         if (wasActive) {
           _userReactions.add(type);

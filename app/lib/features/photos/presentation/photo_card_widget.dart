@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
@@ -7,9 +8,10 @@ import '../../../core/utils/date_utils.dart';
 import '../../../models/photo_model.dart';
 import '../../../widgets/avatar_widget.dart';
 import '../../../widgets/loading_shimmer.dart';
+import 'photos_providers.dart';
 import 'reaction_bar_widget.dart';
 
-class PhotoCardWidget extends StatelessWidget {
+class PhotoCardWidget extends ConsumerWidget {
   final PhotoModel photo;
   final String eventId;
   final bool isSelecting;
@@ -26,7 +28,7 @@ class PhotoCardWidget extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppTheme.standardPadding, vertical: 8),
       child: GestureDetector(
@@ -126,9 +128,14 @@ class PhotoCardWidget extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.all(12),
                 child: ReactionBarWidget(
-                  photoId: photo.id,
+                  mediaId: photo.id,
                   reactionCounts: photo.reactionCounts,
                   userReactions: photo.userReactions,
+                  onAdd: (type) =>
+                      ref.read(photosRepositoryProvider).addReaction(photo.id, type),
+                  onRemove: (reactionId) => ref
+                      .read(photosRepositoryProvider)
+                      .removeReaction(photo.id, reactionId),
                 ),
               ),
             ],

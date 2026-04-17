@@ -53,8 +53,12 @@ class PhotosRepository {
     await api.deletePhoto(photoId);
   }
 
-  Future<void> addReaction(String photoId, String reactionType) async {
-    await api.addReaction(photoId, reactionType);
+  Future<({String id, String type})> addReaction(String photoId, String reactionType) async {
+    final data = await api.addReaction(photoId, reactionType);
+    return (
+      id: data['id'] as String,
+      type: data['reaction_type'] as String,
+    );
   }
 
   Future<void> removeReaction(String photoId, String reactionId) async {

@@ -161,9 +161,14 @@ class PhotoDetailScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: 12),
                   ReactionBarWidget(
-                    photoId: photo.id,
+                    mediaId: photo.id,
                     reactionCounts: photo.reactionCounts,
                     userReactions: photo.userReactions,
+                    onAdd: (type) =>
+                        ref.read(photosRepositoryProvider).addReaction(photo.id, type),
+                    onRemove: (reactionId) => ref
+                        .read(photosRepositoryProvider)
+                        .removeReaction(photo.id, reactionId),
                   ),
                 ],
               ),

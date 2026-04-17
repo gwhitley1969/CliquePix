@@ -116,13 +116,13 @@ This tests the FCM `video_ready` push routing in `push_notification_service.dart
 
 ### 8. Reactions on videos
 
-- [ ] In the feed, find a video card
-- [ ] Long-press or use the reaction button (matching the photo reaction UI pattern)
-- [ ] Add a reaction (heart/laugh/fire/wow)
-- [ ] Verify the reaction count updates immediately
-- [ ] Reload the feed and verify the reaction persists
+- [ ] In the feed, find a ready (non-processing, non-failed) video card — the ❤️ 😂 🔥 😮 row is visible below the poster
+- [ ] Tap each reaction in turn — pill highlights + count increments immediately
+- [ ] Tap an active reaction again — pill de-highlights, count decrements, DELETE fires against `/api/videos/{id}/reactions/{reactionId}`
+- [ ] Pull-to-refresh — counts match backend state (no flicker)
+- [ ] Verify the bar does NOT appear on a processing video card, failed video card, or a local-pending (still-uploading) video card — backend rejects reactions on non-active media, UI gates on `video.isReady`
 
-**Note:** The reaction UI in `video_card_widget.dart` may need to be added — currently the card doesn't show the reaction bar like `photo_card_widget.dart` does. This is a v1.5 polish item if missing.
+**Implementation note (2026-04-17):** `ReactionBarWidget` was refactored from photo-repo-coupled to media-agnostic (callback-based). Both `photo_card_widget.dart` and `video_card_widget.dart` now use the same widget via `onAdd` / `onRemove` closures constructed from their respective repos.
 
 ### 9. Video deletion
 
@@ -189,7 +189,7 @@ These were noted during the implementation and don't block v1 merge:
 
 1. **KEDA scaler didn't auto-trigger during Phase 5 integration test.** Manual `az containerapp job start` was needed. Could be polling-interval lag, scaler config, or RBAC. Investigate before relying on automatic scale-up under real load.
 2. **`allowSharedKeyAccess: True` on storage account** — CLAUDE.md says it should be `False`. Audit code paths and disable it.
-3. **Video reactions UI not wired** — `video_card_widget.dart` doesn't currently show the reaction bar. Add it to match `photo_card_widget.dart`.
+3. ~~**Video reactions UI not wired** — `video_card_widget.dart` doesn't currently show the reaction bar. Add it to match `photo_card_widget.dart`.~~ **Shipped 2026-04-17** — `ReactionBarWidget` refactored to media-agnostic callback API, rendered on ready video cards. Video player screen reactions remain a separate follow-up (out of scope for this change).
 4. **Save-to-device button missing on player screen** — the `saveVideoToGallery` service method exists but no button calls it. Add to the player UI.
 5. **Video delete button missing** — the API endpoint exists but no UI calls it. Add a delete action to the video card or player.
 6. **Function App on Node 20** (EOL 2026-04-30) — migrate to Node 24.

@@ -1,6 +1,6 @@
 # Clique Pix — Open Beta Smoke Test Plan
 
-**Last Updated:** April 13, 2026
+**Last Updated:** April 17, 2026
 
 This is a manual smoke test checklist to run before each beta release. Every item must pass on **both iOS and Android** unless noted otherwise.
 
@@ -99,6 +99,8 @@ This is a manual smoke test checklist to run before each beta release. Every ite
 - [ ] **Share video** — player menu → "Share" → OS share sheet opens
 - [ ] **Delete video** — player menu → "Delete" → confirmation → video removed from feed
 - [ ] **Delete during processing** — delete a video that's still processing, card disappears cleanly
+- [ ] **React to video** — on a ready video card in the feed, tap each of ❤️ 😂 🔥 😮 below the poster; pill highlights immediately and count increments. Tap again to unlike — count decrements and pill de-highlights. Pull-to-refresh: counts match server state. Bar should NOT appear on processing / failed / local-pending video cards.
+- [ ] **Same-session add+remove on a fresh reaction** — like a photo OR video that you haven't reacted to before, then immediately unlike it without refreshing the feed. 30s later (after the feed polls), the reaction must stay removed — regression check for the pre-2026-04-17 bug where the DELETE silently no-op'd and the reaction re-appeared.
 
 ### Error handling
 
