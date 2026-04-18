@@ -138,6 +138,10 @@ Supports:
 - social providers (Google, Apple) configured via Entra identity providers
 - no Firebase dependency (FCM used for push transport only)
 
+## Age gate (13+)
+
+Sign-up enforces a 13+ age gate via claim-based backend validation. The Entra External ID `SignUpSignIn` user flow collects `dateOfBirth` as a required custom attribute once on first sign-up; Entra emits it on every subsequent access token as a Directory schema extension claim (`extension_<b2cAppId>_dateOfBirth`). Our backend (`authVerify` in `backend/src/functions/auth.ts`) reads the claim on first login, computes age via `ageUtils.calculateAge`, and branches: **≥13** upserts the user with `age_verified_at = NOW()` and fires `age_gate_passed`; **<13** returns HTTP 403 `AGE_VERIFICATION_FAILED`, fires `age_gate_denied_under_13`, and best-effort deletes the Entra account via `deleteEntraUserByOid` (`backend/src/shared/auth/entraGraphClient.ts`) using the Function App's managed identity against Microsoft Graph. Returning users are never re-prompted — Entra holds DOB, the claim rides the token, and `authVerify`'s user upsert uses `COALESCE` to preserve the original `age_verified_at`. Clique Pix's Postgres stores only the verification timestamp, never DOB. See `docs/AGE_VERIFICATION_RUNBOOK.md` for the full runbook + the Deprecated appendix documenting why the Custom Authentication Extension approach (MAB's pattern) was abandoned: Microsoft's own migration docs state *"Age gating isn't currently supported in Microsoft Entra External ID"*, and we hit days of opaque "Something went wrong" failures before pivoting.
+
 ## Token Acquisition (MSAL)
 
 The app uses `msal_auth` (^3.3.0) with a **custom API scope** to get a properly signed access token:

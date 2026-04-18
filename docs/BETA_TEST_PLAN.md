@@ -23,6 +23,14 @@ This is a manual smoke test checklist to run before each beta release. Every ite
 - [ ] **Token refresh** — leave app closed for 6+ hours, reopen, still signed in (Android: verify AlarmManager fired in logs)
 - [ ] **Sign out** — tap sign out, returns to login screen, reopening app shows login
 - [ ] **Re-login after 12h** — if token expired, graceful "Welcome back" dialog appears (Layer 5)
+> **Age gate enforced server-side** in `authVerify` via the `dateOfBirth` token claim. Entra collects DOB once at signup; backend reads the claim on first login; under-13 returns HTTP 403 and the Entra account is best-effort deleted via Microsoft Graph. See `docs/AGE_VERIFICATION_RUNBOOK.md`.
+
+- [ ] **Age gate — new sign-up over 13** — tap Get Started → Entra sign-up form asks for DOB once → **DOB ≥ 13** (e.g. 1990-05-15) → signup completes → app lands on home screen. App Insights: `age_gate_passed` event with coarse `ageBucket` (never raw DOB). SQL: `SELECT age_verified_at FROM users WHERE email_or_phone = '<test>'` returns a recent timestamp.
+- [ ] **Age gate — new sign-up under 13** — tap Get Started → Entra sign-up form → **DOB < 13** (e.g. 2020-01-01) → Entra signup completes, but Clique Pix shows "You must be 13+ to use Clique Pix" and does NOT let them in. App Insights: `age_gate_denied_under_13`. Within ~60s verify the Entra account is deleted: `az rest --method GET --uri "https://graph.microsoft.com/v1.0/users?\$filter=mail eq '<test-email>'"` returns empty `value: []`.
+- [ ] **Age gate — returning user — no re-prompt** — sign out of a valid over-13 account, tap Get Started → Entra sign-in only (no DOB field) → lands on home screen. `age_verified_at` unchanged (COALESCE preserves it).
+- [ ] **Age gate — different account on same device** — sign out, register a NEW account with a different email → Entra sign-up form asks for DOB (new account). Independent of prior account's verification.
+- [ ] **Age gate — JWT claim check** — decode a post-login access token at `https://jwt.ms`. Verify `extension_<GUID>_dateOfBirth` is present in claims.
+- [ ] **Age gate — endpoint check** — unauth `curl -X POST https://func-cliquepix-fresh.azurewebsites.net/api/auth/verify` returns 401 with `UNAUTHORIZED`. `validate-age` endpoint returns 404 (deleted — expected).
 
 ## 2. Cliques
 

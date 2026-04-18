@@ -35,6 +35,8 @@ Primary:
 Secondary:
 - Mixed groups (friends, couples, events)
 
+**Minimum age: 13.** Verified at sign-up via a self-declared date of birth on the Entra External ID signup form. The DOB is stored on the Entra user principal (never in Clique Pix's product database) and emitted as a `dateOfBirth` claim on every access token. Clique Pix's backend reads the claim on first login (`POST /api/auth/verify`), computes age server-side, and either stamps `users.age_verified_at` on ≥13 or returns HTTP 403 + best-effort Microsoft Graph account deletion on <13. See `docs/ARCHITECTURE.md` §5, `docs/AGE_VERIFICATION_RUNBOOK.md`, and `website/privacy.html` §2.2 + §11.
+
 ---
 
 ## 4. Core Concepts

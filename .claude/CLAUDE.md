@@ -498,6 +498,36 @@ photos/{cliqueId}/{eventId}/{videoId}/poster.jpg           # video poster frame
 
 ---
 
+## Age Gate (13+) — Claim-based backend enforcement
+
+Clique Pix enforces a 13+ minimum using a claim-based backend check. **DOB is collected by the Entra External ID signup form once**, stored on the Entra user principal, and emitted as a `dateOfBirth` claim on every access token. Our backend (`authVerify` in `backend/src/functions/auth.ts`) reads the claim on first login, computes age server-side, and branches: ≥13 upserts the user with `age_verified_at = NOW()`; <13 returns HTTP 403 and best-effort deletes the Entra account via Microsoft Graph. Returning users are never re-prompted — Entra holds DOB, claim rides the token, backend sees `age_verified_at` is already set and fast-paths.
+
+**Why not a Custom Authentication Extension?** Microsoft's own migration docs state plainly: *"Age gating isn't currently supported in Microsoft Entra External ID."* We tried the CAE-on-`OnAttributeCollectionSubmit` pattern (MAB's approach) and burned multiple days fighting opaque EasyAuth rejections, token `iss` disagreements with Microsoft's own documented format, and the generic "Something went wrong" page with no diagnostics. The claim-based path uses officially-supported Entra features and runs inside code we own, so failures are debuggable. See `docs/AGE_VERIFICATION_RUNBOOK.md` → "Deprecated" appendix for the CAE failure modes.
+
+**The Clique Pix client has NO login-screen DOB picker.** The login screen is unchanged — just the "Get Started" button that triggers MSAL. DOB collection happens inside the Entra-hosted signup form.
+
+Backend pieces (CliquePix-controlled):
+- `backend/src/functions/auth.ts` — `decideAgeGate(payload, now?)` (pure function, exported for tests), `extractDobFromClaims` (handles GUID-prefixed `extension_<b2cAppId>_dateOfBirth` key form via case-insensitive substring match), `parseAnyDob` (YYYY-MM-DD, MM/DD/YYYY, MMDDYYYY). The `authVerify` handler calls `decideAgeGate` between JWT validation and user upsert; blocks under-13 with HTTP 403 `AGE_VERIFICATION_FAILED`.
+- `backend/src/shared/auth/entraGraphClient.ts` — thin Graph client with `deleteEntraUserByOid(oid)`. Uses `DefaultAzureCredential` for managed-identity token acquisition. Best-effort: failure logged as `age_gate_entra_delete_failed` but does not block the 403 response.
+- `backend/src/shared/utils/ageUtils.ts` — shared `MIN_AGE = 13`, `parseDob`, `calculateAge`, `ageBucket`. 20 unit tests in `backend/src/__tests__/ageUtils.test.ts`; 16 additional tests for the auth.ts helpers in `backend/src/__tests__/auth.test.ts`.
+- `backend/src/shared/db/migrations/008_user_age_verification.sql` — adds `users.age_verified_at TIMESTAMPTZ`. Null for grandfathered pre-age-gate users; upsert uses `COALESCE` so the original timestamp is never overwritten.
+
+Entra portal pieces (manual, one-time — see `docs/AGE_VERIFICATION_RUNBOOK.md`):
+- Custom user attribute `dateOfBirth` (string) — collected by the `SignUpSignIn` user flow as required.
+- Clique Pix Enterprise App → Single sign-on → Attributes & Claims → add `dateOfBirth` claim (source: Directory schema extension from `b2c-extensions-app`).
+- Clique Pix app manifest: `acceptMappedClaims: true`, `accessTokenAcceptedVersion: 2` (required for extension claims to appear in tokens).
+- Function App `func-cliquepix-fresh` managed identity: `User.ReadWrite.All` application permission on Microsoft Graph, admin-consented (for the under-13 cleanup delete).
+
+Privacy posture: Clique Pix's Postgres `users` table stores only `age_verified_at` (a timestamp), never DOB. Entra stores DOB on the user principal (same as email + displayName). Users can delete their Entra account to remove all traces. Privacy Policy §2.2 + §11 (`website/privacy.html`) describe this accurately.
+
+Policy constant: `MIN_AGE = 13` in `backend/src/shared/utils/ageUtils.ts`. Terms §2 (`website/terms.html`) + Privacy Policy §11 declare the minimum. If policy ever changes, three files move together: `ageUtils.ts`, `privacy.html`, `terms.html`.
+
+Telemetry: `authVerify` fires `age_gate_passed` (with coarse `ageBucket`), `age_gate_denied_under_13`, `age_gate_entra_delete_failed` — never logs raw DOB or precise age. `auth_verify_success` continues to fire for the normal login path.
+
+History note: two prior attempts were reverted. (1) A client-side login-screen DatePicker + `auth.ts` validation, reverted because email-bound client caching leaked sign-in to unverified users in sign-out → different-new-user scenarios. (2) An Entra Custom Authentication Extension on `OnAttributeCollectionSubmit`, reverted on 2026-04-18 after multi-day debugging confirmed the approach is unsupported and inherently opaque. The current claim-based approach is the third iteration.
+
+---
+
 ## Entra External ID — Known Bug & Required Workaround
 
 ### The Problem
