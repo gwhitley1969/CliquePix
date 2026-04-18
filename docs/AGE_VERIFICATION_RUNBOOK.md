@@ -144,7 +144,7 @@ If the delete call fails at runtime, the user still can't use Clique Pix (403 st
 
 1. Fresh private browser + fresh email
 2. Trigger signup → enter DOB `2020-01-01` → submit
-3. Expect: signup completes *in Entra* (new account created), but Clique Pix shows a friendly "You must be 13+ to use Clique Pix" screen and doesn't let them in
+3. Expect: signup completes *in Entra* (new account created), but the app returns to the login screen with a red error banner reading *"You must be at least 13 years old to use Clique Pix."* (surfaced from backend `AGE_VERIFICATION_FAILED` response via `app/lib/features/auth/presentation/auth_providers.dart:AuthNotifier.signIn`; `resetSession()` is called to clear the MSAL cache so retries start clean)
 4. App Insights:
    ```kql
    customEvents
