@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../domain/auth_state.dart';
 import '../domain/auth_repository.dart';
@@ -53,6 +54,24 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final user = await _repository.signIn(loginHint: loginHint);
       state = AuthAuthenticated(user);
     } catch (e) {
+      // Backend 403 AGE_VERIFICATION_FAILED: user is under 13. Surface the
+      // backend's message (or a canonical fallback). Also reset MSAL so
+      // subsequent attempts start clean rather than re-using a token that
+      // will keep failing the /auth/verify age check.
+      if (e is DioException && e.response?.statusCode == 403) {
+        final err = e.response?.data is Map<String, dynamic>
+            ? e.response!.data['error'] as Map<String, dynamic>?
+            : null;
+        if (err?['code'] == 'AGE_VERIFICATION_FAILED') {
+          await _repository.resetSession();
+          final serverMessage = err?['message'] as String?;
+          state = AuthError(
+            serverMessage ?? 'You must be at least 13 years old to use Clique Pix.',
+          );
+          return;
+        }
+      }
+
       final msg = e.toString();
       // MSAL errors (cache corruption, user cancel, session expired):
       // reset session and show clean login — not a persistent error loop.
