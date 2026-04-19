@@ -2,10 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/app_gradients.dart';
-import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/date_utils.dart';
-import '../../../widgets/empty_state_widget.dart';
 import '../../../widgets/error_widget.dart';
 import 'notifications_providers.dart';
 

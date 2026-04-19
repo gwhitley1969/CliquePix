@@ -190,35 +190,6 @@ class EventsHomeScreen extends ConsumerWidget {
   }
 }
 
-class _CreateEventButton extends StatelessWidget {
-  final VoidCallback onTap;
-  const _CreateEventButton({required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: AppGradients.primary,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(12),
-          child: const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-            child: Text(
-              'Create Event',
-              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _EventCard extends StatelessWidget {
   final EventModel event;
   const _EventCard({required this.event});
