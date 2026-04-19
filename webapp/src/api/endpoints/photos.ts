@@ -2,8 +2,11 @@ import { api } from '../client';
 import type { Photo, ReactionSummary, ReactionType } from '../../models';
 
 export async function listEventPhotos(eventId: string): Promise<Photo[]> {
-  const res = await api.get<{ data: Photo[] }>(`/api/events/${eventId}/photos`);
-  return res.data.data;
+  // Backend envelope: { data: { photos: [...], nextCursor: string|null } }
+  const res = await api.get<{ data: { photos: Photo[]; nextCursor?: string | null } }>(
+    `/api/events/${eventId}/photos`,
+  );
+  return res.data.data.photos ?? [];
 }
 
 export async function getPhoto(photoId: string): Promise<Photo> {
@@ -11,15 +14,19 @@ export async function getPhoto(photoId: string): Promise<Photo> {
   return res.data.data;
 }
 
+// Response fields arrive as snake_case from the backend and get camelCased by
+// the global response interceptor, so this interface matches post-transform shape.
 export interface PhotoUploadUrl {
-  photo_id: string;
-  upload_url: string;
+  photoId: string;
+  uploadUrl: string;
 }
 
 export async function getPhotoUploadUrl(
   eventId: string,
   meta: { mime_type: string; file_size_bytes: number; width: number; height: number },
 ): Promise<PhotoUploadUrl> {
+  // Request body stays snake_case because the backend validates on those keys;
+  // our global camelize runs on RESPONSES only, not requests.
   const res = await api.post<{ data: PhotoUploadUrl }>(
     `/api/events/${eventId}/photos/upload-url`,
     meta,

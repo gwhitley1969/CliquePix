@@ -46,13 +46,13 @@ export function NotificationsScreen() {
     markNotificationRead(n.id).then(() =>
       qc.invalidateQueries({ queryKey: ['notifications'] }),
     );
-    const payload = n.payload as { event_id?: string; clique_id?: string; thread_id?: string };
-    if (payload.thread_id && payload.event_id) {
-      navigate(`/events/${payload.event_id}/messages/${payload.thread_id}`);
-    } else if (payload.event_id) {
-      navigate(`/events/${payload.event_id}`);
-    } else if (payload.clique_id) {
-      navigate(`/cliques/${payload.clique_id}`);
+    const payload = n.payloadJson as { eventId?: string; cliqueId?: string; threadId?: string };
+    if (payload.threadId && payload.eventId) {
+      navigate(`/events/${payload.eventId}/messages/${payload.threadId}`);
+    } else if (payload.eventId) {
+      navigate(`/events/${payload.eventId}`);
+    } else if (payload.cliqueId) {
+      navigate(`/cliques/${payload.cliqueId}`);
     }
   };
 
