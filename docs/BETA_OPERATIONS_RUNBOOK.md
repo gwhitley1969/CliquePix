@@ -477,3 +477,69 @@ customEvents
 | where timestamp > ago(24h)
 | project timestamp, name, customDimensions
 ```
+
+---
+
+## Web Client Troubleshooting
+
+### "Web users report empty Cliques / Events / notifications even though mobile shows data"
+
+This class of bug has struck twice during the web-client rollout and is the first thing to check when web and mobile diverge.
+
+1. **Network-tab check**: have the user open DevTools → Network and filter by `api.clique-pix.com`. Look at the Request Headers of any `/api/*` call.
+   - **No `Authorization: Bearer …` header present** → the MSAL-singleton wiring in `main.tsx` is broken. See `docs/WEB_CLIENT_ARCHITECTURE.md §4.1`. Check `webapp/src/main.tsx` — `setApiMsalInstance(msalInstance)` must be called after `await msalInstance.initialize()` and before `ReactDOM.createRoot(...).render(...)`. Regression fix was PR #4.
+   - **Request returns 200 but response body looks wrong shape** (array where object expected, or vice versa) → the global camelize interceptor or an envelope-unwrap is the likely culprit. See `docs/WEB_CLIENT_ARCHITECTURE.md §6`. Confirm the endpoint module unwraps `{ notifications: [...] }` / `{ photos: [...] }` / `{ videos: [...] }` / `{ messages: [...] }` for the relevant list endpoint. Regression fix was PR #5.
+   - **Request returns 401 in a normal session** (not mid-playback SAS expiry) → the MSAL session is bad. `useAuthVerify` should already force `logoutRedirect` on 401 at app mount; if the user is looping through Entra, check for clock skew on their device.
+
+2. **Duplicate-user check** (only if claim-extraction is the cause, very rare): query Postgres for rows where the `email_or_phone` matches the user's login but `external_auth_id` differs from the mobile row. Backend upserts on `external_auth_id`, so a drift would create a second row. No duplicate path has ever been observed in practice since the JWT `sub` claim is stable across MSAL.js and msal_auth for the same Entra user.
+
+### "Web client deploy failed with 'maximum number of staging environments'"
+
+SWA Free tier caps PR preview environments at 3. Every PR creates one. Cleanup is currently manual.
+
+List current staging envs:
+```bash
+az rest --method GET \
+  --uri "https://management.azure.com/subscriptions/25410e67-b3c8-49a2-8cf0-ab9f77ce613f/resourceGroups/rg-cliquepix-prod/providers/Microsoft.Web/staticSites/swa-cliquepix-prod/builds?api-version=2023-12-01" \
+  | grep -oE '"name":\s*"[^"]+"'
+```
+
+Delete the staging env for a merged / closed PR by number:
+```bash
+az rest --method DELETE \
+  --uri "https://management.azure.com/subscriptions/25410e67-b3c8-49a2-8cf0-ab9f77ce613f/resourceGroups/rg-cliquepix-prod/providers/Microsoft.Web/staticSites/swa-cliquepix-prod/builds/<PR_NUMBER>?api-version=2023-12-01"
+```
+
+Then `gh run rerun <run-id>` on the failed workflow, or push an empty commit to re-trigger.
+
+Long-term fix: add a cleanup step to `.github/workflows/webapp-deploy.yml` that runs on PR close and deletes the associated staging env. Tracked as a follow-up; not yet implemented.
+
+### "Invite accept on web shows a 404 or 'invalid invite' message"
+
+The web `joinCliqueByCode` URL must be `POST /api/cliques/_/join` (underscore placeholder), NOT `POST /api/cliques/join`. The backend route pattern is `cliques/{cliqueId}/join` — Azure Functions returns 404 if the segment is missing. The handler ignores the path param and resolves the clique from `invite_code` in the body. See `webapp/src/api/endpoints/cliques.ts`.
+
+### "Invite dialog shows 'Generating…' forever, or the Print QR page renders 'undefined'"
+
+Both screens read the backend response using `inviteUrl` / `inviteCode` (camelCase, post-interceptor). If a bad merge reverts to `invite_url` / `invite_code` (snake_case), the values resolve to `undefined`, the QR falls through to the placeholder, and the Print page shows `undefined`. Regression fix was PR #7.
+
+### "Video playback hangs or shows 'Couldn't play this video' after 15+ minutes paused"
+
+Expected behavior — the 15-minute SAS window on HLS segments and the MP4 fallback URL has expired. `<VideoPlayer>` catches the `video.error` event and triggers `recoverFromError()` which re-fetches `/api/videos/:id/playback` for fresh SAS tokens and re-initializes at the saved `currentTime`. Look for `web_playback_sas_recovered` events in App Insights.
+
+If recovery is failing:
+```kql
+exceptions
+| where timestamp > ago(24h)
+| where customDimensions.stage == "video_playback_init"
+| project outerMessage, customDimensions
+```
+
+Most common failure: the video transitioned from `active` back to a non-playable state server-side (deleted, flagged), which returns 404 on `/playback`. Confirm video status in Postgres.
+
+### "Landing page doesn't appear — `clique-pix.com` jumps straight to sign-in"
+
+Almost certainly means the latest deploy hasn't shipped yet. Check:
+```bash
+curl -s "https://clique-pix.com/" | grep -oE 'assets/index-[A-Za-z0-9_-]+\.js' | head -1
+```
+Compare to the most recent `webapp-deploy.yml` run's bundle hash on `main`. If they match but the page still redirects, verify `webapp/src/app/router.tsx` has `{ path: '/', element: <LandingPage /> }` as a public route (NOT under the AuthGuard parent).
