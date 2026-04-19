@@ -26,13 +26,25 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Print styles for the invite QR route. */
+/* Print styles — primarily for the branded invite QR route. Forcing
+ * color-adjust: exact makes browsers render gradient bands and logos
+ * without the user having to toggle "Background graphics" in print
+ * settings. The cards themselves opt in via inline styles; this rule
+ * covers the document-level defaults. */
 @media print {
+  html,
   body {
     background: white !important;
     color: black !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
   .no-print {
     display: none !important;
+  }
+  @page {
+    margin: 0.4in;
   }
 }
