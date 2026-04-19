@@ -103,3 +103,8 @@ coverage/
 # ----- Misc -----
 *.log
 .cache/
+
+# ----- Claude Code local state -----
+.claude/claudeold.md
+.claude/scheduled_tasks.lock
+.claude/settings.local.json
