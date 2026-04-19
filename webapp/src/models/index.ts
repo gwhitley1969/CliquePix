@@ -44,10 +44,16 @@ export interface MediaBase {
   id: string;
   eventId: string;
   uploadedByUserId: string;
-  uploaderDisplayName?: string;
+  // Joined from users.display_name at read time; matches backend enriched shape.
+  uploadedByName?: string;
   createdAt: string;
   status: 'pending' | 'active' | 'processing' | 'rejected' | 'deleted';
-  reactions?: ReactionSummary[];
+  // Backend enriched shape: reactionCounts is a { type -> count } map, and
+  // userReactions is the list of reaction types the current user has added.
+  // Reaction IDs are not returned in-line; clients track them locally after
+  // a POST completes (mirroring the mobile app's reaction_bar_widget).
+  reactionCounts?: Record<string, number>;
+  userReactions?: string[];
 }
 
 export interface Photo extends MediaBase {
@@ -72,11 +78,17 @@ export type Media = Photo | Video;
 
 export type ReactionType = 'heart' | 'laugh' | 'fire' | 'wow';
 
-export interface ReactionSummary {
-  type: ReactionType;
-  count: number;
-  hasReacted?: boolean;
-  reactionId?: string;
+/**
+ * POST /api/photos/:id/reactions and POST /api/videos/:id/reactions return a
+ * single reaction row (camelized from the backend's reactions table schema).
+ * The client captures `id` so a subsequent unreact can DELETE by ID.
+ */
+export interface ReactionRecord {
+  id: string;
+  mediaId: string;
+  userId: string;
+  reactionType: ReactionType;
+  createdAt: string;
 }
 
 export interface DmThread {

@@ -1,5 +1,5 @@
 import { api } from '../client';
-import type { Photo, ReactionSummary, ReactionType } from '../../models';
+import type { Photo, ReactionRecord, ReactionType } from '../../models';
 
 export async function listEventPhotos(eventId: string): Promise<Photo[]> {
   // Backend envelope: { data: { photos: [...], nextCursor: string|null } }
@@ -52,10 +52,13 @@ export async function deletePhoto(photoId: string): Promise<void> {
 
 export async function addPhotoReaction(
   photoId: string,
-  type: ReactionType,
-): Promise<ReactionSummary> {
-  const res = await api.post<{ data: ReactionSummary }>(`/api/photos/${photoId}/reactions`, {
-    type,
+  reactionType: ReactionType,
+): Promise<ReactionRecord> {
+  // Backend validates on `reaction_type` in the body — not `type`. POST is
+  // upsert-idempotent via ON CONFLICT, so re-sending an existing reaction
+  // returns the same ID (which the caller captures to enable a later DELETE).
+  const res = await api.post<{ data: ReactionRecord }>(`/api/photos/${photoId}/reactions`, {
+    reaction_type: reactionType,
   });
   return res.data.data;
 }
