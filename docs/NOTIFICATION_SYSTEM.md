@@ -33,6 +33,9 @@ FCM is a **transport mechanism only** — no Firebase backend services (Auth, Fi
 | User joins clique | `member_joined` | All existing members except joiner | -- | All except joiner | `{ clique_id }` |
 | Event expiring (24h) | `event_expiring` | All event members | -- | All members | `{ event_id }` |
 | Event deleted | `event_deleted` | All clique members except deleter | -- | All except deleter | `{ event_id }` |
+| **Token refresh (silent / invisible)** | `token_refresh` (silent) | Users inactive 9-11h, max 1/6h per user | -- | -- | `{ type: 'token_refresh', userId }` |
+
+The `token_refresh` push is **silent** (no `notification` block, no user-visible UI). It wakes the app in the background so MSAL `acquireTokenSilent` can run before the Entra 12h inactivity cliff. Triggered by `refreshTokenPushTimer` in `backend/src/functions/timers.ts`. See `docs/ENTRA_REFRESH_TOKEN_WORKAROUND.md` for the full Layer 2 design.
 
 ### Explicit non-triggers
 
@@ -68,10 +71,12 @@ Other clique members need both channels: Web PubSub for instant feed refresh whe
 
 | Function | Purpose |
 |----------|---------|
-| `sendPushNotification(message)` | Single-token send via FCM HTTP v1 API |
-| `sendToMultipleTokens(tokens, title, body, data)` | Batch send via `Promise.all()` — returns array of failed tokens for cleanup |
+| `sendPushNotification(message)` | Single-token send via FCM HTTP v1 API. `message.silent` routes through `buildFcmMessageBody` for background delivery |
+| `sendToMultipleTokens(tokens, title, body, data)` | Batch visible-push send via `Promise.all()` — returns array of failed tokens for cleanup |
+| `sendSilentToMultipleTokens(tokens, data)` | Batch silent-push send. Used by `refreshTokenPushTimer` (Entra Layer 2) |
+| `buildFcmMessageBody(message)` | Exported for unit tests — builds the FCM v1 body, branching on `message.silent` |
 
-**Payload structure:**
+**Visible payload structure** (`new_photo`, `video_ready`, DMs, etc.):
 ```json
 {
   "token": "<fcm_token>",
@@ -87,6 +92,34 @@ Other clique members need both channels: Web PubSub for instant feed refresh whe
 ```
 
 The `notification` payload drives OS-level display (title, body, sound). The `data` payload drives client-side routing on tap.
+
+**Silent payload structure** (`token_refresh` — new 2026-04-19):
+```json
+{
+  "token": "<fcm_token>",
+  "data": {
+    "type": "token_refresh",
+    "userId": "uuid"
+  },
+  "android": { "priority": "high" },
+  "apns": {
+    "headers": {
+      "apns-push-type": "background",
+      "apns-priority": "5",
+      "apns-topic": "com.cliquepix.app"
+    },
+    "payload": { "aps": { "content-available": 1 } }
+  }
+}
+```
+
+No `notification` block — this push must NOT display anything to the user. Required headers:
+- **iOS:** `apns-push-type: background` + `apns-priority: 5` + `content-available: 1` wakes the app in the background. Priority 10 would be rejected by APNs for background-type pushes.
+- **Android:** `android.priority: high` is required for data-only messages to wake the app. Without it, FCM may delay delivery until the next user-initiated action.
+
+Client handling:
+- **Foreground:** `PushNotificationService` listens on `FirebaseMessaging.onMessage` and branches on `data['type'] == 'token_refresh'` → calls `AuthRepository.refreshToken()`. The separate `_handleForegroundFcmMessage` listener in `main.dart` is a no-op for silent pushes because `message.notification` is null and the function returns early.
+- **Background / terminated:** `_firebaseMessagingBackgroundHandler` (top-level, `@pragma('vm:entry-point')`) creates a fresh `SingleAccountPca` and runs `acquireTokenSilent`. On iOS plugin-channel failure, it sets `pendingRefreshFlagKey` in SharedPreferences which `AppLifecycleService` picks up on next foreground.
 
 ### Stale token cleanup
 

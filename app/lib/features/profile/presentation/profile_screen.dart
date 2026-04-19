@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_gradients.dart';
@@ -337,10 +338,7 @@ class ProfileScreen extends ConsumerWidget {
                     ],
                   ),
                   const SizedBox(height: 32),
-                  Text(
-                    'Version 1.0.0',
-                    style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.25)),
-                  ),
+                  const _VersionTapCounter(),
                   const SizedBox(height: 48),
                 ],
               ),
@@ -348,6 +346,66 @@ class ProfileScreen extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Tap the version 7 times to unlock the Token Diagnostics screen. The
+/// unlock persists — once tapped, a discrete "Token Diagnostics" link
+/// appears below the version for the remainder of the session.
+class _VersionTapCounter extends ConsumerStatefulWidget {
+  const _VersionTapCounter();
+
+  @override
+  ConsumerState<_VersionTapCounter> createState() =>
+      _VersionTapCounterState();
+}
+
+class _VersionTapCounterState extends ConsumerState<_VersionTapCounter> {
+  int _taps = 0;
+  bool _unlocked = false;
+
+  void _tap() {
+    if (_unlocked) {
+      context.push('/diagnostics/tokens');
+      return;
+    }
+    setState(() => _taps++);
+    if (_taps >= 7) {
+      setState(() => _unlocked = true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Token Diagnostics unlocked')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _tap,
+          child: Text(
+            'Version 1.0.0',
+            style: TextStyle(
+                fontSize: 12, color: Colors.white.withValues(alpha: 0.25)),
+          ),
+        ),
+        if (_unlocked) ...[
+          const SizedBox(height: 4),
+          TextButton(
+            onPressed: () => context.push('/diagnostics/tokens'),
+            child: Text(
+              'Token Diagnostics',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.5),
+                fontSize: 12,
+              ),
+            ),
+          ),
+        ],
+      ],
     );
   }
 }

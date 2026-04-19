@@ -60,7 +60,9 @@ A persistent group of people (e.g., “Girls Night Out” or bachelor party)
 - Sign in with Google, Apple, or email OTP
 - Powered by Microsoft Entra External ID (CIAM)
 - Minimal friction onboarding
-- 5-layer token refresh defense for Entra's 12-hour timeout bug
+- **Stay-signed-in experience.** Users who open the app on a normal cadence (daily, or even every few days) never see a login screen again after the initial sign-in. The app refreshes silently in the background using a combination of server-triggered wake-ups and on-resume checks.
+- **Graceful "Welcome back" recovery.** If background refresh ever fails — for example, an iOS user who force-killed the app and didn't open it for a week — the next launch shows a *"Welcome back, [Name]!"* dialog with their email pre-recognized. One tap re-authenticates and returns them to the app. No cold login screen, no retyping an email address.
+- **Implementation note (not user-facing):** a 5-layer defense backs this — see `docs/ENTRA_REFRESH_TOKEN_WORKAROUND.md`.
 
 ---
 

@@ -35,10 +35,11 @@ class AppConstants {
     'wow': '\uD83D\uDE2E',
   };
 
-  // Token refresh
-  static const tokenRefreshIntervalHours = 6;
+  // Token refresh — see ENTRA_REFRESH_TOKEN_WORKAROUND.md
+  // Layer 3: foreground-resume refresh threshold
+  static const tokenStaleThresholdHours = 6;
+  // Layer 4: WorkManager best-effort Android-only backup
   static const workManagerIntervalHours = 8;
-  static const tokenRefreshChannel = 'token_refresh';
 
   // Feed
   static const feedPageSize = 20;

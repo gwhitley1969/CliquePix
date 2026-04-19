@@ -1,7 +1,7 @@
 import { app, InvocationContext, Timer } from '@azure/functions';
 import { query, queryOne, execute } from '../shared/services/dbService';
 import { deleteBlob, deleteBlobsByPrefix } from '../shared/services/blobService';
-import { sendToMultipleTokens } from '../shared/services/fcmService';
+import { sendToMultipleTokens, sendSilentToMultipleTokens } from '../shared/services/fcmService';
 import { trackEvent } from '../shared/services/telemetryService';
 import { initTelemetry } from '../shared/services/telemetryService';
 import * as path from 'path';
@@ -300,6 +300,86 @@ async function notifyExpiring(myTimer: Timer, context: InvocationContext): Promi
   context.log(`Sent ${notifiedCount} expiration notifications`);
 }
 
+// ====================================================================================
+// refreshTokenPushTimer
+// ====================================================================================
+// Entra External ID (CIAM) has a hardcoded 12-hour refresh-token inactivity
+// timeout. To keep users signed in, this timer finds users whose last
+// authenticated API call was 9-11 hours ago and sends a SILENT FCM push that
+// wakes the app in the background. The app handler performs a silent MSAL
+// refresh, which resets the inactivity clock. Deduped to at most once per 6h
+// per user. See docs/ENTRA_REFRESH_TOKEN_WORKAROUND.md.
+async function refreshTokenPushTimer(myTimer: Timer, context: InvocationContext): Promise<void> {
+  initTelemetry();
+
+  const candidates = await query<{ user_id: string; token: string; platform: string }>(
+    `SELECT pt.user_id, pt.token, pt.platform
+       FROM push_tokens pt
+       JOIN users u ON u.id = pt.user_id
+      WHERE u.last_activity_at BETWEEN NOW() - INTERVAL '11 hours' AND NOW() - INTERVAL '9 hours'
+        AND (u.last_refresh_push_sent_at IS NULL
+             OR u.last_refresh_push_sent_at < NOW() - INTERVAL '6 hours')`,
+  );
+
+  if (candidates.length === 0) {
+    trackEvent('refresh_push_timer_ran', { candidates: '0', sent: '0', failed: '0' });
+    context.log('refreshTokenPushTimer: no candidates in 9-11h inactivity window');
+    return;
+  }
+
+  // Group tokens by user so we can batch the sent-at update.
+  const byUser = new Map<string, string[]>();
+  for (const c of candidates) {
+    const tokens = byUser.get(c.user_id) ?? [];
+    tokens.push(c.token);
+    byUser.set(c.user_id, tokens);
+  }
+
+  let sentCount = 0;
+  let failedCount = 0;
+  const userIdsPushed: string[] = [];
+
+  for (const [userId, tokens] of byUser.entries()) {
+    try {
+      const failed = await sendSilentToMultipleTokens(tokens, {
+        type: 'token_refresh',
+        userId,
+      });
+      sentCount += tokens.length - failed.length;
+      failedCount += failed.length;
+
+      if (failed.length > 0) {
+        // Stale device tokens — same pattern as other timers
+        await execute('DELETE FROM push_tokens WHERE token = ANY($1)', [failed]);
+      }
+
+      if (tokens.length - failed.length > 0) {
+        userIdsPushed.push(userId);
+      }
+    } catch (err) {
+      context.error(`refreshTokenPushTimer: failed for user ${userId}:`, err);
+      failedCount += tokens.length;
+    }
+  }
+
+  if (userIdsPushed.length > 0) {
+    await execute(
+      'UPDATE users SET last_refresh_push_sent_at = NOW() WHERE id = ANY($1)',
+      [userIdsPushed],
+    );
+  }
+
+  trackEvent('refresh_push_timer_ran', {
+    candidates: String(candidates.length),
+    users: String(byUser.size),
+    sent: String(sentCount),
+    failed: String(failedCount),
+  });
+  context.log(
+    `refreshTokenPushTimer: ${sentCount} silent pushes sent to ${userIdsPushed.length} users (${failedCount} failed)`,
+  );
+}
+
 app.timer('cleanupExpired', {
   schedule: '0 */15 * * * *',
   handler: cleanupExpired,
@@ -313,4 +393,11 @@ app.timer('cleanupOrphans', {
 app.timer('notifyExpiring', {
   schedule: '0 0 * * * *',
   handler: notifyExpiring,
+});
+
+// Offset 7 minutes from cleanupExpired to avoid co-scheduling two DB-heavy
+// timers on the same instance at the same second.
+app.timer('refreshTokenPushTimer', {
+  schedule: '0 7,22,37,52 * * * *',
+  handler: refreshTokenPushTimer,
 });

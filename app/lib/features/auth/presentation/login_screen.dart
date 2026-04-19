@@ -5,6 +5,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import 'auth_providers.dart';
 import '../domain/auth_state.dart';
+import 'welcome_back_dialog.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -15,6 +16,8 @@ class LoginScreen extends ConsumerStatefulWidget {
 
 class _LoginScreenState extends ConsumerState<LoginScreen>
     with TickerProviderStateMixin {
+  bool _reloginDialogShown = false;
+
   late AnimationController _pulseController;
   late AnimationController _slideController;
   late Animation<double> _pulseAnimation;
@@ -91,6 +94,33 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
   @override
   Widget build(BuildContext context) {
+    // Layer 5 — when checkAuthStatus fails with a session-expired signature
+    // and we have a last-known user, AuthNotifier emits AuthReloginRequired.
+    // Show WelcomeBackDialog instead of the cold "Get Started" flow.
+    ref.listen<AuthState>(authStateProvider, (previous, next) {
+      if (next is AuthReloginRequired && !_reloginDialogShown) {
+        _reloginDialogShown = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          WelcomeBackDialog.show(
+            context,
+            displayName: next.displayName,
+            email: next.email,
+            onSignIn: (hint) {
+              Navigator.of(context, rootNavigator: true).pop();
+              ref.read(authStateProvider.notifier).signIn(loginHint: hint);
+            },
+            onDifferentAccount: () {
+              Navigator.of(context, rootNavigator: true).pop();
+              ref.read(authStateProvider.notifier).signIn();
+            },
+          );
+        });
+      } else if (next is! AuthReloginRequired) {
+        _reloginDialogShown = false;
+      }
+    });
+
     final authState = ref.watch(authStateProvider);
     final isLoading = authState is AuthLoading;
     final screenHeight = MediaQuery.of(context).size.height;

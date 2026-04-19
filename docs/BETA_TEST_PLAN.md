@@ -20,9 +20,14 @@ This is a manual smoke test checklist to run before each beta release. Every ite
 
 - [ ] **Sign in** — email OTP flow completes, lands on home screen
 - [ ] **Token persists** — kill app, reopen, still signed in
-- [ ] **Token refresh** — leave app closed for 6+ hours, reopen, still signed in (Android: verify AlarmManager fired in logs)
+- [ ] **Token refresh (Layer 3 — foreground resume)** — leave app closed for 6+ hours, reopen. Still signed in. Unlock Token Diagnostics (Profile → tap version 7×) and confirm an entry: `foreground_refresh_success` with timestamp matching the reopen.
 - [ ] **Sign out** — tap sign out, returns to login screen, reopening app shows login
-- [ ] **Re-login after 12h** — if token expired, graceful "Welcome back" dialog appears (Layer 5)
+- [ ] **Re-login after 12h (Layer 5 — Welcome Back)** — wait 13h without opening the app → reopen → "Welcome back, [Name]" dialog appears with email pre-filled. Tap Sign In → one-tap re-auth succeeds, no email re-entry.
+- [ ] **Battery-exempt prompt (Layer 1, Android)** — on first launch after login on Android, the "Stay Signed In" dialog appears. Grant it. Token Diagnostics → `battery_exempt_granted` event appears.
+- [ ] **Silent push refresh (Layer 2) — Android happy path** — in Token Diagnostics, note current `lastRefreshTime`. Background the app for at least the timer cycle (~20 min), or use the backend `refreshTokenPushTimer` to target the user manually by backdating `last_activity_at` to 10h ago. Return to Token Diagnostics → `silent_push_received` + `silent_push_refresh_success` events. `lastRefreshTime` advanced without any UI interaction.
+- [ ] **Silent push refresh (Layer 2) — iOS fallback flag** — same setup on iOS. Acceptable outcomes: either `silent_push_refresh_success` directly, OR `silent_push_fallback_flag_set` followed by `foreground_refresh_success` on next foreground. Both paths keep the user signed in.
+- [ ] **Silent push does not wake — force-kill case (iOS)** — force-kill app, wait 13h, reopen → `cold_start_relogin_required` + Welcome Back dialog. Expected (iOS policy).
+- [ ] **Token Diagnostics unlock** — Profile → tap version 7× → "Token Diagnostics unlocked" snackbar; new "Token Diagnostics" text link appears below the version.
 > **Age gate enforced server-side** in `authVerify` via the `dateOfBirth` token claim. Entra collects DOB once at signup; backend reads the claim on first login; under-13 returns HTTP 403 and the Entra account is best-effort deleted via Microsoft Graph. See `docs/AGE_VERIFICATION_RUNBOOK.md`.
 
 - [ ] **Age gate — new sign-up over 13** — tap Get Started → Entra sign-up form asks for DOB once → **DOB ≥ 13** (e.g. 1990-05-15) → signup completes → app lands on home screen. App Insights: `age_gate_passed` event with coarse `ageBucket` (never raw DOB). SQL: `SELECT age_verified_at FROM users WHERE email_or_phone = '<test>'` returns a recent timestamp.

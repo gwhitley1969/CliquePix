@@ -536,86 +536,107 @@ Entra External ID (CIAM) tenants have a **hardcoded 12-hour inactivity timeout**
 
 Error signature: `AADSTS700082: The refresh token has expired due to inactivity... inactive for 12:00:00`
 
-### Required: 5-Layer Token Refresh Defense
+### Required: 5-Layer Token Refresh Defense (silent-push edition, 2026-04-19)
 
-This pattern is proven in production on My AI Bartender. Implement all five layers.
+Microsoft's documented mitigation for this exact scenario (Azure Communication Services chat → "Implement registration renewal → Solution 2: Remote Notification") is **silent push + background refresh**. That is the current Layer 2. The previous notification-based AlarmManager Layer 2 was deleted because `flutter_local_notifications.zonedSchedule` only schedules a notification to display; it does not execute code, and the silent `Importance.min` notifications the user never tapped never refreshed anything.
 
-| Layer | Mechanism | Trigger | Reliability | Purpose |
-|-------|-----------|---------|-------------|---------|
-| 1 | Battery Optimization Exemption | First login (Android only) | Critical | Allows background tasks on Samsung/Xiaomi/Huawei |
-| 2 | AlarmManager Token Refresh | Every 6 hours | Very High | Fires even in Doze mode via `exactAllowWhileIdle` |
-| 3 | Foreground Refresh on App Resume | Every app open | Very High | Safety net — catches all background failures |
-| 4 | WorkManager Background Task | Every 8 hours | Medium | Backup mechanism |
-| 5 | Graceful Re-Login UX | When all else fails | N/A | "Welcome back" dialog with stored user hint, one-tap re-auth |
+| Layer | Mechanism | Trigger | Platforms | Purpose |
+|-------|-----------|---------|-----------|---------|
+| 1 | Battery-optimization exemption | First home-screen frame after login | Android | Allows OS FCM delivery + WorkManager on Samsung/Xiaomi/Huawei |
+| 2 | **Server-triggered silent FCM push** | Backend timer every 15 min, users inactive 9-11h | both | Wakes the app, runs `acquireTokenSilent` in an isolate. Falls back to `pending_refresh_on_next_resume` flag if iOS isolate can't run MSAL |
+| 3 | Foreground refresh on app resume | `AppLifecycleState.resumed` if token ≥ 6h stale or pending flag set | both | Primary, most-reliable defense |
+| 4 | WorkManager periodic task | Every ~8h, network connected | Android | Best-effort backup |
+| 5 | Graceful re-login via Welcome Back | Silent refresh fails (AADSTS700082 / AADSTS500210 / no cached account) | both | One-tap re-auth with `loginHint` pre-fill |
 
 ### Layer Details
 
 **Layer 1 — Battery Optimization Exemption (Android)**
-- `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` must be requested at **runtime**, not just declared in the manifest
-- Show a user-facing dialog after first login: "To keep you signed in, Clique Pix needs permission to run in the background"
-- Without this, Samsung/Xiaomi/Huawei will kill background tasks
-- Service: `BatteryOptimizationService` (singleton)
+- `Permission.ignoreBatteryOptimizations.request()` at runtime — the manifest-only declaration is not sufficient on API 23+
+- Dialog shown once on the first frame of the home screen after login; `BatteryOptimizationService.requestExemptionIfNeeded(context)` self-gates on the `battery_dialog_shown` SharedPreferences key
+- Without this, Samsung/Xiaomi/Huawei kill background processes and Layer 4 becomes unreliable
 
-**Layer 2 — AlarmManager (Android)**
-- Use `zonedSchedule` with `AndroidScheduleMode.exactAllowWhileIdle`
-- Schedule every 6 hours (half the 12-hour timeout = safe margin)
-- Use a silent notification channel (`Importance.min`, `Priority.min`, `silent: true`)
-- Filter `TOKEN_REFRESH_TRIGGER` payloads in main.dart to prevent navigation errors if user taps the notification
-- Reschedule after each successful refresh
-- Cancel on logout
+**Layer 2 — Server-triggered silent FCM push**
+- Backend timer `refreshTokenPushTimer` (CRON `0 7,22,37,52 * * * *`) selects users with `last_activity_at BETWEEN NOW() - INTERVAL '11 hours' AND NOW() - INTERVAL '9 hours'` AND `last_refresh_push_sent_at < NOW() - INTERVAL '6 hours'`
+- `sendSilentToMultipleTokens(tokens, { type: 'token_refresh', userId })` → FCM v1 with NO `notification` block; `apns-push-type: background`, `apns-priority: 5`, `apns-topic: com.cliquepix.app`, `apns.payload.aps.content-available: 1`, `android.priority: high`
+- Client `_firebaseMessagingBackgroundHandler` (main.dart) branches on `message.data['type'] == 'token_refresh'`, creates a fresh `SingleAccountPca` from `MsalConstants`, calls `acquireTokenSilent`, saves the access token
+- On iOS, if `msal_auth` isn't usable in the background isolate, fall back to writing `pendingRefreshFlagKey` into SharedPreferences; Layer 3 picks up the flag on next foreground
+- Authoritative doc: `docs/ENTRA_REFRESH_TOKEN_WORKAROUND.md`
 
-**Layer 3 — Foreground Refresh (Both platforms, most reliable)**
-- On `AppLifecycleState.resumed`, check token age via `lastRefreshTime` in secure storage
-- If token is > 6 hours old, proactively refresh before it expires
-- If refresh succeeds, reschedule AlarmManager
-- If refresh fails, trigger Layer 5 (graceful re-login)
-- This is the primary iOS defense since iOS lacks reliable background task guarantees
+**Layer 3 — Foreground Refresh (both platforms, primary)**
+- `AppLifecycleService` implements `WidgetsBindingObserver`; on `AppLifecycleState.resumed` it checks `TokenStorageService.isTokenStale()` (≥ 6h since `lastRefreshTime`) AND the `pendingRefreshFlagKey` fallback flag
+- If either is true, calls `AuthRepository.refreshToken()` (MSAL silent acquisition)
+- On success, calls optional `_onRefreshSuccess` hook
+- On failure, invokes `_reloginCallback` → Layer 5
+- Wired in `auth_providers.dart` — `AuthNotifier` starts the observer on `AuthAuthenticated` and stops it on sign-out / unauth
 
-**Layer 4 — WorkManager (Backup)**
-- `registerPeriodicTask` every 8 hours with `NetworkType.connected` constraint
-- With Layer 1 exemption granted, reliability improves on Android
-- This is a backup, not the primary mechanism
+**Layer 4 — WorkManager (Android backup)**
+- `Workmanager().registerPeriodicTask` every 8h (`AppConstants.workManagerIntervalHours`), `NetworkType.connected`
+- `callbackDispatcher` now runs the full MSAL silent refresh in the WorkManager isolate: creates `SingleAccountPca` from `MsalConstants`, calls `acquireTokenSilent`, writes to `TokenStorageService`
+- Isolate-safe because the MSAL cache (Android EncryptedSharedPreferences / iOS Keychain) is process-wide
+- Telemetry is queued into a SharedPreferences ring buffer the main isolate drains on next foreground
 
-**Layer 5 — Graceful Re-Login UX (Fallback)**
-- When all background mechanisms fail, show a "Welcome back, [Name]!" dialog instead of a full login screen
-- Store `lastKnownUser` before clearing auth state
-- Use `loginHint` to pre-fill email in the MSAL interactive flow
-- Try silent acquisition first, fall back to interactive with hint
+**Layer 5 — Graceful Re-Login UX**
+- `AuthState` adds `AuthReloginRequired(email?, displayName?)`
+- `AuthNotifier.checkAuthStatus` detects `AADSTS700082` / `AADSTS500210` / `no account in the cache` on cold start and, if `lastKnownUser.email` is set, emits `AuthReloginRequired` instead of `AuthUnauthenticated`
+- `AuthNotifier._triggerWelcomeBack` does the same on Layer-3 refresh failure during an active session
+- `LoginScreen` listens on `authStateProvider` and calls `WelcomeBackDialog.show` with `loginHint = email`
 
-### Android Permissions Required
+### Known unknowns and honest limits
+
+- **APNs throttles background pushes.** Silent-push deliverability will be < 100%. The `refresh_push_timer_ran.sent` vs. `silent_push_received` ratio in App Insights is the ground truth.
+- **Force-killed iOS apps don't receive silent pushes.** iOS platform policy. Layer 5 is the only recourse.
+- **iOS Background App Refresh disabled.** Layer 2 is dead for that user; Layer 5 still works.
+- **`msal_auth` in iOS background isolate.** Plugin-channel registration may fail. The fallback-flag path (Layer 2 → Layer 3) keeps us correct even then.
+
+### Android Permissions
 
 ```xml
 <uses-permission android:name="android.permission.WAKE_LOCK" />
 <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
-<uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
-<uses-permission android:name="android.permission.USE_EXACT_ALARM" />
 ```
 
-### iOS Considerations
+`SCHEDULE_EXACT_ALARM` and `USE_EXACT_ALARM` remain declared but are no longer on the critical path (the notification-based Layer 2 that used them has been deleted).
 
-- `BGAppRefreshTask` via BGTaskScheduler — request 6-hour intervals, but iOS controls actual timing
-- Foreground refresh (Layer 3) is the most reliable mechanism on iOS
-- Users who disable Background App Refresh will need to re-login after 12 hours — Layer 5 handles this gracefully
+### iOS Info.plist
+
+`UIBackgroundModes` must contain `remote-notification` for silent pushes to wake the app. Already set.
 
 ### Token Storage
 
-- Auth tokens and refresh tokens: `flutter_secure_storage` only — **never** `shared_preferences`
-- Track `lastRefreshTime` in secure storage for proactive refresh decisions
-- Store `lastKnownUser` profile for the graceful re-login dialog
-- Clear all stored tokens, user data, and cancel all background refresh jobs on logout
+- Auth tokens: `flutter_secure_storage` only — never `shared_preferences`
+- `lastRefreshTime`: written atomically in `TokenStorageService.saveTokens`; staleness threshold is `AppConstants.tokenStaleThresholdHours` (6h)
+- `lastKnownUser`: stored on `verifyAndGetUser` success, read by Layer 5
+- `pendingRefreshFlagKey` (SharedPreferences, not secure): bridge between Layer 2 isolate and Layer 3 main isolate
+- Clear all on logout; cancel WorkManager task
 
 ### Key Timing
 
-- Microsoft inactivity timeout: 12 hours (hardcoded, not configurable)
-- AlarmManager interval: 6 hours
-- Foreground refresh threshold: 6 hours since last refresh
-- WorkManager interval: 8 hours (backup)
-- Safety margin: 6 hours (half the timeout)
+- Microsoft inactivity timeout: **12h** (hardcoded)
+- Silent-push window: user inactive **9-11h**
+- Layer 3 stale threshold: **6h**
+- Layer 4 WorkManager interval: **8h**
+- Silent-push dedup: **6h** per user
+
+### Backend — tables touched
+
+| Column | Table | Purpose |
+|--------|-------|---------|
+| `last_activity_at` | users | Updated fire-and-forget by `authMiddleware`, capped 1/min/user; feeds Layer-2 timer |
+| `last_refresh_push_sent_at` | users | Updated by `refreshTokenPushTimer`; enforces 6h dedup |
+
+Both added in migration `009_user_activity_tracking.sql`. Partial index on `last_activity_at WHERE last_activity_at IS NOT NULL`.
+
+### Telemetry + diagnostics
+
+- Events flow through `telemetry_service.dart` (client) → `POST /api/telemetry/auth` → `trackEvent` → App Insights
+- Endpoint accepts JWTs whose signature is valid even if `exp` has passed — this endpoint exists specifically to hear from clients with expiring/expired tokens. `authMiddleware.verifyJwtAllowExpired` powers it
+- Events: `battery_exempt_prompted/_granted`, `silent_push_received/_refresh_success/_refresh_failed/_fallback_flag_set`, `foreground_stale_check/_refresh_success/_refresh_failed`, `wm_task_fired/_refresh_success/_refresh_failed`, `welcome_back_shown/_continue/_switch_account`, `cold_start_relogin_required`, `refresh_push_timer_ran`
+- Tap the version number 7 times in the Profile screen to unlock Token Diagnostics — shows last refresh time, age, pending-flag state, battery-exempt status, and the 50-event ring buffer
 
 ### Reference
 
-Full implementation details, code samples, and debug log tags are in `ENTRA_REFRESH_TOKEN_WORKAROUND.md`.
+Full implementation details, architecture diagrams, and Kusto queries: `docs/ENTRA_REFRESH_TOKEN_WORKAROUND.md`.
 
 ---
 

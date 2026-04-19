@@ -20,6 +20,7 @@ import '../../features/videos/presentation/video_upload_screen.dart';
 import '../../features/videos/presentation/video_player_screen.dart';
 import '../../features/notifications/presentation/notifications_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
+import '../../features/profile/presentation/token_diagnostics_screen.dart';
 import '../../features/dm/presentation/dm_thread_list_screen.dart';
 import '../../features/dm/presentation/dm_chat_screen.dart';
 import '../../features/dm/presentation/dm_member_picker.dart';
@@ -140,6 +141,11 @@ final routerProvider = Provider<GoRouter>((ref) {
             ],
           ),
         ],
+      ),
+      // Hidden diagnostics — unlocked via tap-7-times on profile version.
+      GoRoute(
+        path: '/diagnostics/tokens',
+        builder: (context, state) => const TokenDiagnosticsScreen(),
       ),
       // Top-level routes (outside shell for clean back-navigation)
       GoRoute(

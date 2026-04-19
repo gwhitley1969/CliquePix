@@ -1,6 +1,48 @@
 # DEPLOYMENT_STATUS.md — Clique Pix v1
 
-Last updated: 2026-04-18 (13+ age gate — claim-based, backend-enforced in authVerify)
+Last updated: 2026-04-19 (Entra refresh-token defense — silent-push edition, migration 009)
+
+## Entra Refresh-Token Defense — Silent Push Edition (2026-04-19)
+
+**Status:** ready to ship — backend tests green (134/134), flutter analyze at 60 issues (was 61).
+
+Re-architected the 5-layer Entra External ID 12-hour refresh-token defense after an audit revealed every service was dead code — `AuthRepository` took `alarmRefreshService` and `backgroundTokenService` as optional constructor params and `authRepositoryProvider` never supplied them, so every `?.` callsite was a silent no-op. `AppLifecycleService` and `BatteryOptimizationService` were never instantiated; `WelcomeBackDialog.show()` had no caller; `BackgroundTokenService.callbackDispatcher` was a `TODO` that always returned `true` without calling MSAL; `main.dart:85` filtered the `TOKEN_REFRESH_TRIGGER` notification payload but never triggered a refresh. The original Layer 2 (`flutter_local_notifications.zonedSchedule`) was architecturally flawed — it only displays a notification, it does not execute code; silent `Importance.min` notifications the user never tapped refreshed nothing.
+
+Replaced Layer 2 with server-triggered silent FCM data pushes (Microsoft's own documented pattern in Azure Communication Services → "Solution 2: Remote Notification"):
+
+| Layer | Mechanism | Change |
+|---|---|---|
+| 1 | Battery-optimization exemption | Wired — called from `HomeScreen.initState` |
+| 2 | **Server silent push** (NEW) | `refreshTokenPushTimer` (backend) + `_firebaseMessagingBackgroundHandler` (client) |
+| 3 | Foreground refresh on resume | Wired — `AppLifecycleService.start()` called on `AuthAuthenticated`, `stop()` on sign-out |
+| 4 | WorkManager (Android) | Real MSAL refresh in isolate now implemented (no more `TODO`) |
+| 5 | Welcome Back dialog | New `AuthReloginRequired` state; `LoginScreen` shows `WelcomeBackDialog` via `ref.listen`; `checkAuthStatus` routes cold-start after 12h to this path |
+
+| Phase | Status | Files |
+|---|---|---|
+| Migration 009 (`last_activity_at` + `last_refresh_push_sent_at`) | ⏳ Pending prod apply | `backend/src/shared/db/migrations/009_user_activity_tracking.sql` |
+| Backend: `authMiddleware` last-activity write + `verifyJwtAllowExpired` | ✅ Code done | `backend/src/shared/middleware/authMiddleware.ts` |
+| Backend: `fcmService` silent-push support (`FcmMessage.silent`, `sendSilentToMultipleTokens`) | ✅ Code done + 7 unit tests | `backend/src/shared/services/fcmService.ts`, `backend/src/__tests__/fcmService.test.ts` |
+| Backend: `refreshTokenPushTimer` (CRON `0 7,22,37,52 * * * *`) | ✅ Code done | `backend/src/functions/timers.ts` |
+| Backend: `POST /api/telemetry/auth` endpoint | ✅ Code done | `backend/src/functions/telemetry.ts` |
+| Client: `MsalConstants` extracted (isolate-safe MSAL config) | ✅ | `app/lib/core/constants/msal_constants.dart` |
+| Client: `AuthReloginRequired` state + `checkAuthStatus` cold-start recovery | ✅ | `app/lib/features/auth/domain/auth_state.dart`, `auth_providers.dart` |
+| Client: `AuthRepository` rewired — `alarmRefreshService` deleted, `refreshTokenDetailed()` added | ✅ | `app/lib/features/auth/domain/auth_repository.dart` |
+| Client: `BackgroundTokenService.callbackDispatcher` — real MSAL refresh in isolate | ✅ | `app/lib/features/auth/domain/background_token_service.dart` |
+| Client: `AppLifecycleService` — `pending_refresh_on_next_resume` flag + telemetry | ✅ | `app/lib/features/auth/domain/app_lifecycle_service.dart` |
+| Client: wiring in `auth_providers.dart` — every service now instantiated | ✅ | `app/lib/features/auth/presentation/auth_providers.dart` |
+| Client: `_firebaseMessagingBackgroundHandler` silent-push handler | ✅ | `app/lib/main.dart` |
+| Client: `PushNotificationService` foreground `type: 'token_refresh'` branch | ✅ | `app/lib/services/push_notification_service.dart` |
+| Client: `TelemetryService` (Dio + SharedPreferences ring buffer + isolate drain) | ✅ | `app/lib/services/telemetry_service.dart` |
+| Client: Battery-exempt dialog wired in `HomeScreen.initState` | ✅ | `app/lib/features/home/presentation/home_screen.dart` |
+| Client: Token Diagnostics screen + tap-7-times unlock in Profile | ✅ | `app/lib/features/profile/presentation/token_diagnostics_screen.dart`, `profile_screen.dart` |
+| Client: Dead file deleted | ✅ | `app/lib/features/auth/domain/alarm_refresh_service.dart` removed |
+| Docs | ✅ | `docs/ENTRA_REFRESH_TOKEN_WORKAROUND.md` rewritten, `CLAUDE.md` §"Entra External ID — Known Bug" updated, this file, `docs/BETA_OPERATIONS_RUNBOOK.md` troubleshooting section added |
+| On-device verification (Samsung + iPhone) | ⏳ Not started | See test plan in ENTRA_REFRESH_TOKEN_WORKAROUND §Verifying in production |
+
+Deploy order: migration 009 → backend → client. Backend silent-push path must be live before clients start enforcing the new flow.
+
+## Video v1 Status
 
 ## Video v1 Status
 

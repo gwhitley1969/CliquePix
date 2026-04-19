@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../core/constants/app_constants.dart';
 
 final tokenStorageServiceProvider = Provider<TokenStorageService>((ref) {
   return TokenStorageService();
@@ -54,7 +55,8 @@ class TokenStorageService {
   Future<bool> isTokenStale() async {
     final lastRefresh = await getLastRefreshTime();
     if (lastRefresh == null) return true;
-    return DateTime.now().difference(lastRefresh).inHours >= 6;
+    return DateTime.now().difference(lastRefresh).inHours >=
+        AppConstants.tokenStaleThresholdHours;
   }
 
   Future<void> saveLastKnownUser(String email, String displayName) async {
