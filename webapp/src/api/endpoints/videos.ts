@@ -1,5 +1,5 @@
 import { api } from '../client';
-import type { ReactionSummary, ReactionType, Video } from '../../models';
+import type { ReactionRecord, ReactionType, Video } from '../../models';
 
 export async function listEventVideos(eventId: string): Promise<Video[]> {
   // Backend envelope: { data: { videos: [...] } }
@@ -61,10 +61,10 @@ export async function deleteVideo(videoId: string): Promise<void> {
 
 export async function addVideoReaction(
   videoId: string,
-  type: ReactionType,
-): Promise<ReactionSummary> {
-  const res = await api.post<{ data: ReactionSummary }>(`/api/videos/${videoId}/reactions`, {
-    type,
+  reactionType: ReactionType,
+): Promise<ReactionRecord> {
+  const res = await api.post<{ data: ReactionRecord }>(`/api/videos/${videoId}/reactions`, {
+    reaction_type: reactionType,
   });
   return res.data.data;
 }
