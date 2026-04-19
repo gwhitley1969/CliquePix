@@ -19,6 +19,10 @@ This is a manual smoke test checklist to run before each beta release. Every ite
 ## 1. Authentication
 
 - [ ] **Sign in** — email OTP flow completes, lands on home screen
+- [ ] **Cold start — returning user, no splash** — after a successful sign-in, kill the app and reopen. The first frame drawn must be the Events screen. There should be no splash screen, no "Get Started" button flash, and no button-spinner. `cold_start_optimistic_auth` + `background_verification_success` events appear in Token Diagnostics.
+- [ ] **Cold start — first-time user, enabled button** — uninstall and reinstall. Open the app. The first frame drawn must be LoginScreen with the "Get Started" button fully enabled and labeled (no spinner). `cold_start_unauthenticated` event appears.
+- [ ] **Cold start — expired session routes to Welcome Back** — sign in, then force-expire the session (Token Diagnostics → rewrite `lastRefreshTime` to 13h ago and reset MSAL cache manually if available, or just wait 13+ hours). Kill and reopen the app. Within ~2 seconds the Events shell should appear briefly and then be replaced by the Welcome Back dialog. `background_verification_timeout` or `cold_start_relogin_required` event appears.
+- [ ] **Escape hatch on stuck sign-in** — on LoginScreen, tap "Get Started" and (for test purposes) leave the browser open without completing. At 15 seconds, a "Having trouble? Sign in with a different account" link appears below the button. Tapping it resets MSAL cache and restarts interactive sign-in. `login_screen_escape_hatch_shown` + `login_screen_escape_hatch_tapped` events appear.
 - [ ] **Token persists** — kill app, reopen, still signed in
 - [ ] **Token refresh (Layer 3 — foreground resume)** — leave app closed for 6+ hours, reopen. Still signed in. Unlock Token Diagnostics (Profile → tap version 7×) and confirm an entry: `foreground_refresh_success` with timestamp matching the reopen.
 - [ ] **Sign out** — tap sign out, returns to login screen, reopening app shows login

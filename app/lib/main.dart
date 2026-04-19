@@ -11,7 +11,10 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'core/constants/msal_constants.dart';
 import 'features/auth/domain/app_lifecycle_service.dart'
     show pendingRefreshFlagKey;
+import 'features/auth/domain/auth_state.dart';
 import 'features/auth/domain/background_token_service.dart';
+import 'features/auth/presentation/auth_providers.dart'
+    show authBootstrapStateProvider;
 import 'services/push_notification_service.dart';
 import 'services/token_storage_service.dart';
 import 'app/app.dart';
@@ -185,9 +188,46 @@ void main() async {
   FirebaseMessaging.onMessage.listen(_handleForegroundFcmMessage);
   debugPrint('[CliquePix] FCM onMessage listener registered');
 
+  // Optimistic authentication bootstrap. Read storage once before building
+  // the widget tree so the router resolves to `/events` on the first frame
+  // for returning users — no splash, no "checking auth" spinner ever.
+  // Background verification runs after runApp and either silently refreshes
+  // the cached session or routes to the Welcome Back dialog on failure.
+  final AuthState bootstrapState = await _computeBootstrapAuthState();
+
   runApp(
-    const ProviderScope(
-      child: CliquePix(),
+    ProviderScope(
+      overrides: [
+        authBootstrapStateProvider.overrideWithValue(bootstrapState),
+      ],
+      child: const CliquePix(),
     ),
   );
+}
+
+/// Read tokens + cached user from secure storage and decide the initial
+/// auth state. Typically completes in 10-30ms. Storage read failures are
+/// treated as "no cached session" — the user lands on LoginScreen.
+Future<AuthState> _computeBootstrapAuthState() async {
+  try {
+    final tokenStorage = TokenStorageService();
+    final tokenFuture = tokenStorage.getAccessToken();
+    final userFuture = tokenStorage.getCachedUserModel();
+    final accessToken = await tokenFuture;
+    final cachedUser = await userFuture;
+
+    if (accessToken != null &&
+        accessToken.isNotEmpty &&
+        cachedUser != null) {
+      await _recordIsolateEvent('cold_start_optimistic_auth');
+      return AuthAuthenticated(cachedUser);
+    }
+    await _recordIsolateEvent('cold_start_unauthenticated');
+    return const AuthUnauthenticated();
+  } catch (e) {
+    debugPrint('[CliquePix] bootstrap auth state failed: $e — unauthenticated');
+    await _recordIsolateEvent('cold_start_bootstrap_failed',
+        errorCode: _briefError(e));
+    return const AuthUnauthenticated();
+  }
 }

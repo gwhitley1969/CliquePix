@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
+import '../../../services/telemetry_service.dart';
 import 'auth_providers.dart';
 import '../domain/auth_state.dart';
 import 'welcome_back_dialog.dart';
@@ -17,6 +19,8 @@ class LoginScreen extends ConsumerStatefulWidget {
 class _LoginScreenState extends ConsumerState<LoginScreen>
     with TickerProviderStateMixin {
   bool _reloginDialogShown = false;
+  Timer? _escapeHatchTimer;
+  bool _showEscapeHatch = false;
 
   late AnimationController _pulseController;
   late AnimationController _slideController;
@@ -87,6 +91,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
   @override
   void dispose() {
+    _escapeHatchTimer?.cancel();
     _pulseController.dispose();
     _slideController.dispose();
     super.dispose();
@@ -94,9 +99,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
   @override
   Widget build(BuildContext context) {
-    // Layer 5 — when checkAuthStatus fails with a session-expired signature
-    // and we have a last-known user, AuthNotifier emits AuthReloginRequired.
-    // Show WelcomeBackDialog instead of the cold "Get Started" flow.
+    // Layer 5 — when background verification fails with a session-expired
+    // signature and we have a last-known user, AuthNotifier emits
+    // AuthReloginRequired. Show WelcomeBackDialog instead of the cold
+    // "Get Started" flow.
     ref.listen<AuthState>(authStateProvider, (previous, next) {
       if (next is AuthReloginRequired && !_reloginDialogShown) {
         _reloginDialogShown = true;
@@ -118,6 +124,26 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         });
       } else if (next is! AuthReloginRequired) {
         _reloginDialogShown = false;
+      }
+
+      // Escape-hatch timer: if the user stares at the spinner for 15+
+      // seconds after tapping Get Started, surface a "Sign in with a
+      // different account" link that clears MSAL cache and retries.
+      if (next is AuthLoading && previous is! AuthLoading) {
+        _escapeHatchTimer?.cancel();
+        _escapeHatchTimer = Timer(const Duration(seconds: 15), () {
+          if (!mounted) return;
+          ref.read(telemetryServiceProvider).record(
+                'login_screen_escape_hatch_shown',
+              );
+          setState(() => _showEscapeHatch = true);
+        });
+      } else if (next is! AuthLoading && previous is AuthLoading) {
+        _escapeHatchTimer?.cancel();
+        _escapeHatchTimer = null;
+        if (_showEscapeHatch) {
+          setState(() => _showEscapeHatch = false);
+        }
       }
     });
 
@@ -405,6 +431,28 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                               fontSize: 13,
                             ),
                           ),
+
+                          if (_showEscapeHatch) ...[
+                            const SizedBox(height: 24),
+                            TextButton(
+                              onPressed: () {
+                                ref
+                                    .read(authStateProvider.notifier)
+                                    .resetAndSignIn();
+                              },
+                              child: Text(
+                                'Having trouble? Sign in with a different account',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.7),
+                                  fontSize: 13,
+                                  decoration: TextDecoration.underline,
+                                  decorationColor:
+                                      Colors.white.withValues(alpha: 0.4),
+                                ),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),

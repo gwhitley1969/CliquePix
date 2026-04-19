@@ -221,6 +221,42 @@ customEvents
    ```
 3. For Android users: confirm battery-optimization exemption was granted (`battery_exempt_granted` event for that user). If not, ask the user to grant it in system Settings → Apps → Clique Pix → Battery → Unrestricted.
 
+### User reports stuck "Get Started" spinner on cold launch
+
+**Symptoms:** "When I open the app, the Get Started button just spins forever. Force-closing and reopening doesn't help."
+
+This was the pre-optimistic-auth failure mode. With the current architecture (`main.dart` seeds AuthNotifier from cached storage before `runApp`), returning users skip LoginScreen entirely and first-time users see an enabled button on the first frame. If a user is reporting this *now*, either (a) they are a first-time user experiencing the interactive-sign-in hang (MSAL or backend) after tapping the button, or (b) the optimistic bootstrap is failing.
+
+**Quickest signal — cold-start health:**
+```kql
+customEvents
+| where timestamp > ago(24h)
+| where name in ("cold_start_optimistic_auth", "cold_start_unauthenticated",
+                 "cold_start_bootstrap_failed",
+                 "background_verification_success",
+                 "background_verification_timeout",
+                 "login_screen_escape_hatch_shown",
+                 "login_screen_escape_hatch_tapped")
+| summarize count() by name, bin(timestamp, 1h)
+| render timechart
+```
+
+Target: `cold_start_optimistic_auth` + `background_verification_success` dominate. `background_verification_timeout` and `escape_hatch_shown` should be < 1% of launches.
+
+**Per-user debugging:**
+1. Have the user tap "Get Started" once. If the spinner persists past 15 seconds, the "Having trouble? Sign in with a different account" link should appear. Tapping it clears the MSAL cache and retries. If they report this link doesn't appear, the client build is outdated.
+2. Fetch their user id and check App Insights:
+   ```kql
+   customEvents
+   | where user_Id == "<user-id>"
+   | where timestamp > ago(1h)
+   | where name startswith "cold_start_" or name startswith "background_verification_"
+              or name startswith "login_screen_escape_hatch"
+   | order by timestamp desc
+   ```
+3. If `cold_start_bootstrap_failed` fires repeatedly, the `FlutterSecureStorage` read in `main.dart` is throwing — likely a corrupt secure-storage bucket. Instruct user to reinstall the app.
+4. If `background_verification_timeout` fires and is followed by `cold_start_relogin_required`, the user's cached session is stale / MSAL is wedged. This is the expected graceful-degradation path — the user should see the WelcomeBackDialog within ~8 seconds.
+
 ### Photos/videos not loading — SAS errors
 
 **Symptoms:** Feed shows broken images or video player shows error.
