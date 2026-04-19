@@ -368,24 +368,29 @@ Why Flutter for Clique Pix:
 
 ## 15. Web Client
 
-A browser-based client hosted at `clique-pix.com`. Feature-parity with the mobile app for everything except native camera capture; uses the same backend API (Azure Functions behind APIM) and same Entra External ID tenant.
+A browser-based client at `clique-pix.com`. Feature-parity with the mobile app for everything except native camera capture; uses the same backend API (Azure Functions behind APIM) and the same Entra External ID tenant.
 
-**In scope for v1:**
-- Sign in via MSAL.js (same Entra tenant, 13+ age gate enforced server-side)
-- Create and join Cliques; view members; **print QR invite codes** from the browser
-- Create and manage Events (same 24h / 3 days / 7 days presets)
+**Public landing page at `/`**:
+- Vibrant marketing surface with gradient brand accents, "Now in beta" chips, phone mockup with live tappable reactions, feature grid, use cases, QR code for laptop-to-phone jump, App Store + Google Play badges (placeholder URLs until listings publish)
+- No auto-redirect for authed users — the landing page stays accessible; the top-right CTA swaps to "My Events →"
+
+**Authenticated app (at `/events`, `/cliques`, `/messages`, `/notifications`, `/profile`):**
+- Sign in via MSAL.js (same Entra tenant, 13+ age gate enforced server-side on `/api/auth/verify`)
+- Create and join Cliques; view members; **print branded QR invite cards** (gradient header/footer, logo, wordmark — suitable for wedding reception tables)
+- Create and manage Events (same 24h / 3 days / 7 days presets). Creating a Clique auto-opens the Invite dialog so sharing is one click away
 - Upload photos from a file picker or drag-drop, with client-side compression + EXIF strip + HEIC→JPEG conversion
-- View event feed, open lightbox, react, download individual and batch photos
-- View videos uploaded from mobile (poster + HLS playback — browser-side video *upload* ships in a follow-up)
+- **Upload videos** from the browser via block-based upload (sequential 4 MB blocks, 5-retry exponential backoff, sessionStorage resume). Same backend endpoints as mobile
+- Event feed: vertical full-width cards mirroring mobile — uploader header + photo/video + ❤️ 😂 🔥 😮 reaction pills + one-click download + owner 3-dot menu with Delete
+- **Play HLS video** in the lightbox: native HLS on Safari, `hls.js` (code-split) elsewhere, MP4 fallback, SAS-expiry recovery on mid-playback errors
 - Event-centric DMs with real-time delivery via Azure Web PubSub
 - In-app notifications list (polling + real-time signals while the tab is open)
 - Profile: sign out, delete account, links to Privacy/Terms
 
 **Not in v1 (web):**
 - Browser push notifications (Web Push / VAPID) — users who want background alerts use the mobile app
-- Video upload from the browser (planned follow-up; upload-url/commit endpoints already present on the backend)
-- In-browser photo editor (pro_image_editor is Flutter-only)
+- In-browser photo editor (pro_image_editor is Flutter-only; web is upload-and-share)
 - PWA / installable
+- In-browser camera capture (file-upload only)
 
 Privacy Policy and Terms now live at `clique-pix.com/docs/privacy` and `clique-pix.com/docs/terms`. Legacy `/privacy.html` and `/terms.html` 301-redirect.
 

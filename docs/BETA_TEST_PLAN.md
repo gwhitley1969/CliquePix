@@ -171,8 +171,8 @@ This is a manual smoke test checklist to run before each beta release. Every ite
 ## 10. Profile & Legal
 
 - [ ] **Settings tile order** — first settings group reads top-to-bottom: `About Clique Pix → Terms of Service → Privacy Policy → Contact Us`
-- [ ] **Privacy Policy** — tap "Privacy Policy" on profile screen → in-app browser opens `https://clique-pix.com/privacy.html`
-- [ ] **Terms of Service** — tap "Terms of Service" on profile screen → in-app browser opens `https://clique-pix.com/terms.html`
+- [ ] **Privacy Policy** — tap "Privacy Policy" on profile screen → in-app browser opens `https://clique-pix.com/docs/privacy` (legacy `/privacy.html` 301-redirects to this)
+- [ ] **Terms of Service** — tap "Terms of Service" on profile screen → in-app browser opens `https://clique-pix.com/docs/terms` (legacy `/terms.html` 301-redirects to this)
 - [ ] **Privacy Policy content** — page loads, 14 sections visible, covers photos, videos, DMs, effective date April 13, 2026
 - [ ] **About dialog** — tap "About Clique Pix" → dialog shows version and "Private photo and video sharing" legalese
 - [ ] **Contact Us dialog** — tap "Contact Us" → dark-themed dialog shows `support@xtend-ai.com` (selectable)
@@ -187,6 +187,80 @@ This is a manual smoke test checklist to run before each beta release. Every ite
 - [ ] **Feed scroll** — 60fps, no jank with 20+ items
 - [ ] **App cold start** — splash to usable: < 3 seconds
 - [ ] **Thumbnail load** — feed thumbnails load within 500ms on 4G
+
+---
+
+## 12. Web Client (`https://clique-pix.com`)
+
+Run in a fresh browser window per test where possible; for cross-browser coverage hit the full flow in Chrome AND Safari at minimum. Incognito for first-time-user tests.
+
+### 12.1 Landing page (unauthenticated)
+
+- [ ] **First-visit render** — fresh incognito → `https://clique-pix.com` → lands on marketing page; no login redirect, no flash of a sign-in screen
+- [ ] **Hero** — reads "Your moments. Your people. No strangers."; gradient spotlights drift gently behind the content; phone mockup renders on the right with a `DemoMediaCard`
+- [ ] **Tappable reactions** — clicking ❤️ 😂 🔥 😮 in the phone mockup increments the counter; clicking again decrements
+- [ ] **Nav CTA (unauthed)** — top-right reads "Sign in" → routes to `/login`
+- [ ] **HowItWorks** — 3 steps in order: Start an Event / Create or invite your Clique / Share, react, save what matters
+- [ ] **App Store + Google Play badges** — render with styled black background + icons; `href="#"` placeholder is expected until listings publish
+- [ ] **Live QR code** — Download section renders a scannable QR of `https://clique-pix.com`; scan with phone camera → opens the site
+- [ ] **Footer links** — Privacy routes to `/docs/privacy`, Terms to `/docs/terms`
+
+### 12.2 Landing page (authenticated)
+
+- [ ] **Nav CTA (authed)** — sign in, then navigate back to `/` in same tab; top-right now reads "My Events →" (no auto-redirect)
+- [ ] **Hero primary CTA** — authed, the "Get Started" button reads "Open my events" and routes to `/events`
+
+### 12.3 Auth
+
+- [ ] **Sign in** — Get Started → Entra hosted form → returns to `/auth/callback` → lands on `/events` without any visible error state
+- [ ] **Age gate** — if a new test account under 13 signs up, the backend returns 403 AGE_VERIFICATION_FAILED → toast "You must be at least 13…" → logoutRedirect back to `/`
+- [ ] **Network tab** — every request to `api.clique-pix.com` carries `Authorization: Bearer …`; no 401s in a normal session
+- [ ] **Sign-out** — profile → sign out → MSAL clears → lands on `/` with "Sign in" visible again
+
+### 12.4 Cliques
+
+- [ ] **Create** — Cliques tab → New Clique → submit → URL becomes `/cliques/<id>?invite=1` and the **Invite dialog auto-opens** with a scannable QR + readable invite code
+- [ ] **Print QR card** — Invite dialog → Print QR code → new route renders branded card with gradient header/footer, logo, "You're invited to join", Clique name, QR, and code. Print preview shows full-color gradient bands (no need to toggle "Background graphics")
+- [ ] **Accept invite on web** — copy invite link → paste in incognito / second account → sign in → lands on `/invite/<code>` → "Joined" toast → routed to the Clique as a new member
+- [ ] **Accept invite on mobile** — tap the same link on a physical iPhone/Android → Flutter app opens via Universal Links / App Links
+
+### 12.5 Events + media
+
+- [ ] **Create event** — works end-to-end, including picking or creating a Clique inline
+- [ ] **Upload photo** — drag-drop a JPEG or HEIC → compressed + uploaded → appears in feed card within seconds
+- [ ] **HEIC on Chrome** — HEIC from iPhone library pre-converts via heic2any and uploads successfully
+- [ ] **Upload video** — pick a short (10-30 s) MP4/MOV → progress bar shows filename + percent + MB counter → card appears "Processing" → within ~30 s (fast path) transitions to active via Web PubSub `video_ready`
+- [ ] **Video validation** — try a file > 500 MB OR > 5 min → rejected client-side before any network call
+- [ ] **Media card** — each card shows uploader avatar (initials + gradient) + name + relative time + photo + reaction pills + download icon
+- [ ] **Reactions** — tap ❤️ on a photo → counter increments optimistically → persists after page refresh
+- [ ] **Delete own media** — 3-dot menu visible only on your own cards → Delete → confirm dialog → card disappears
+- [ ] **Photo download** — download icon saves `cliquepix-<id>.jpg` to Downloads folder
+- [ ] **Video download** — download icon on a video card saves the MP4 fallback as `cliquepix-<id>.mp4`
+- [ ] **Video playback (lightbox)** — tap a video card → lightbox opens; video auto-initializes and plays. Test on Safari (native HLS) AND Chrome (`hls.js` loads as a separate chunk)
+- [ ] **SAS-expiry recovery** — leave the player paused > 15 minutes, then seek → player should re-fetch `/playback` and resume. Look for `web_playback_sas_recovered` in App Insights
+
+### 12.6 DMs + notifications
+
+- [ ] **DM thread real-time** — two accounts in the same Clique/event → account A sends a message → account B sees it within ~1 s (no refresh)
+- [ ] **Rate limit** — send >10 messages in a minute → toast "Slow down — max 10 messages per minute"
+- [ ] **Notifications bell** — a new photo upload by someone else triggers the notification bell badge (polling every 60s + Web PubSub real-time while the tab is open)
+- [ ] **Expired event** — messages in an expired event's thread are read-only (composer hidden, banner shown)
+
+### 12.7 Cross-browser matrix
+
+- [ ] Chrome latest (desktop) — full pass
+- [ ] Safari latest (desktop) — native HLS playback path, Web Share fallback
+- [ ] Firefox latest (desktop) — `hls.js` playback path
+- [ ] Edge latest (desktop) — should match Chrome
+- [ ] iOS Safari — sign in, video playback, file picker (HEIC native)
+- [ ] Android Chrome — video playback, file picker, drag-drop
+
+### 12.8 Accessibility + performance
+
+- [ ] **Keyboard navigation** — tab through landing page hero → CTA → badges → sections; no keyboard traps
+- [ ] **`prefers-reduced-motion`** — enable in OS accessibility settings → gradient-drift animations stop on the landing hero; scroll-reveal falls through to immediate visibility
+- [ ] **Lighthouse** — desktop, incognito landing page → Performance ≥ 90, Accessibility ≥ 90
+- [ ] **Bundle budget** — initial JS ≤ 400 KB total / 130 KB gzip; `hls.js` loads as a separate on-demand chunk
 
 ---
 
