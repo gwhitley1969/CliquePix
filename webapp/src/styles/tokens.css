@@ -1,0 +1,22 @@
+:root {
+  --electric-aqua: #00c2d1;
+  --deep-blue: #2563eb;
+  --violet-accent: #7c3aed;
+  --pink-accent: #ec4899;
+  --dark-bg: #0e1525;
+  --dark-surface: #111827;
+  --dark-card: #1a1f35;
+  --soft-aqua-bg: #e6fbff;
+  --white-surface: #ffffff;
+  --text-primary-dark: rgba(255, 255, 255, 0.9);
+  --text-secondary-dark: rgba(255, 255, 255, 0.5);
+  --text-primary-light: #0f172a;
+  --text-secondary-light: #64748b;
+  --color-error: #dc2626;
+  --color-success: #16a34a;
+  --color-warning: #f59e0b;
+  --gradient-primary: linear-gradient(135deg, #00c2d1 0%, #2563eb 50%, #7c3aed 100%);
+  --radius: 12px;
+  --radius-sm: 8px;
+  --radius-lg: 16px;
+}

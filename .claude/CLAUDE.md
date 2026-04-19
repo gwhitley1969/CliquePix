@@ -140,9 +140,28 @@ Leave it out. A missing feature can be added later. A cluttered v1 cannot be un-
 - **Deep links:** app_links
 - **QR code generation:** qr_flutter
 - **MSAL authentication:** msal_auth (^3.3.0, v2 embedding, custom API scope `access_as_user`)
-- **URL launcher:** url_launcher (^6.2.5) — opens Privacy Policy and Terms of Service in platform-native in-app browser (`LaunchMode.inAppBrowserView` → SFSafariViewController on iOS, Custom Tabs on Android). Points to `https://clique-pix.com/privacy.html` and `https://clique-pix.com/terms.html`.
+- **URL launcher:** url_launcher (^6.2.5) — opens Privacy Policy and Terms of Service in platform-native in-app browser (`LaunchMode.inAppBrowserView` → SFSafariViewController on iOS, Custom Tabs on Android). Points to `https://clique-pix.com/docs/privacy` and `https://clique-pix.com/docs/terms` (the policy docs moved from root when the web client launched; legacy `/privacy.html` and `/terms.html` URLs 301-redirect to `/docs/*`).
 
 Do not introduce dependencies not listed here without discussing the tradeoff first.
+
+### Web Client
+
+- **Framework:** React 18 + Vite 5 + TypeScript 5
+- **Styling:** Tailwind CSS with CSS variables mapped to the Clique Pix design tokens (Electric Aqua / Deep Blue / Violet Accent palette matches mobile)
+- **Primitives:** Radix UI (Dialog, Dropdown, Toast, Tabs)
+- **Routing:** React Router v6 (`createBrowserRouter`)
+- **State:** `@tanstack/react-query` for server state, Zustand for UI state
+- **Auth:** `@azure/msal-browser` + `@azure/msal-react` (Entra External ID, SPA redirect flow, PKCE). Reuses the mobile app's Entra tenant, client ID (`7db01206-135b-4a34-a4d5-2622d1a888bf`), and custom API scope. MSAL.js uses hidden iframes for silent renewal, so the 12-hour CIAM refresh-token bug does NOT apply to web — no 5-layer defense needed.
+- **Real-time:** `@azure/web-pubsub-client` — same Web PubSub hub the mobile app uses for DMs and video-ready events.
+- **Media:** `browser-image-compression` + `heic2any` for photo uploads, `hls.js` for HLS playback (code-split), `@azure/storage-blob` for video block uploads (code-split).
+- **Icons:** `lucide-react` (matches mobile's stated icon set).
+- **Telemetry:** `@microsoft/applicationinsights-web` shares the same App Insights resource as mobile. Event prefix `web_*`.
+- **Hosting:** Azure Static Web Apps (same SWA resource that previously hosted only `/privacy.html` + `/terms.html`). Web app at `clique-pix.com` root; static docs at `/docs/*`; deep-link files at `/.well-known/*` preserved byte-for-byte so Universal Links and App Links still work.
+- **Domain separation:** web at `clique-pix.com`, API at `api.clique-pix.com` — different origins, so CORS is mandatory (configured at APIM in `apim_policy.xml`).
+- **Hard rule:** no Web Push in v1. No background notifications in browsers. Users who want background alerts use the mobile app. Notifications list is in-app (polling + Web PubSub real-time while the tab is open).
+- **Hard rule:** no blocking splash at launch. Optimistic-auth philosophy applies here too — sessionStorage cache + React Router redirect + background `/auth/verify` = no spinner blocking the login screen or the app shell.
+
+Do not introduce npm dependencies not listed in `docs/WEB_CLIENT_ARCHITECTURE.md` §1 without discussing the tradeoff first.
 
 ### Backend (Azure)
 
@@ -1254,3 +1273,4 @@ If all sixteen of these work cleanly on both iOS and Android, v1 is done. (Local
 | `docs/VIDEO_LOCAL_FIRST_UPLOADER_ARCHITECTURE.md` | Local-first uploader playback handoff doc — architecture and implementation status |
 | `docs/BETA_TEST_PLAN.md` | Manual smoke test checklist (60+ items) for beta releases — dual-device testing |
 | `docs/BETA_OPERATIONS_RUNBOOK.md` | Incident response, troubleshooting, DB backup/restore, key rotation, cost monitoring |
+| `docs/WEB_CLIENT_ARCHITECTURE.md` | Web client architecture, deployment, CORS/CSP config, MSAL.js setup, deferred video upload parity |

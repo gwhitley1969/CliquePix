@@ -175,7 +175,7 @@ class ProfileScreen extends ConsumerWidget {
                         iconColors: [AppColors.deepBlue, AppColors.violetAccent],
                         title: 'Terms of Service',
                         onTap: () => launchUrl(
-                          Uri.parse('https://clique-pix.com/terms.html'),
+                          Uri.parse('https://clique-pix.com/docs/terms'),
                           mode: LaunchMode.inAppBrowserView,
                         ),
                       ),
@@ -184,7 +184,7 @@ class ProfileScreen extends ConsumerWidget {
                         iconColors: [AppColors.violetAccent, const Color(0xFFEC4899)],
                         title: 'Privacy Policy',
                         onTap: () => launchUrl(
-                          Uri.parse('https://clique-pix.com/privacy.html'),
+                          Uri.parse('https://clique-pix.com/docs/privacy'),
                           mode: LaunchMode.inAppBrowserView,
                         ),
                       ),

@@ -366,6 +366,33 @@ Why Flutter for Clique Pix:
 
 ---
 
+## 15. Web Client
+
+A browser-based client hosted at `clique-pix.com`. Feature-parity with the mobile app for everything except native camera capture; uses the same backend API (Azure Functions behind APIM) and same Entra External ID tenant.
+
+**In scope for v1:**
+- Sign in via MSAL.js (same Entra tenant, 13+ age gate enforced server-side)
+- Create and join Cliques; view members; **print QR invite codes** from the browser
+- Create and manage Events (same 24h / 3 days / 7 days presets)
+- Upload photos from a file picker or drag-drop, with client-side compression + EXIF strip + HEIC→JPEG conversion
+- View event feed, open lightbox, react, download individual and batch photos
+- View videos uploaded from mobile (poster + HLS playback — browser-side video *upload* ships in a follow-up)
+- Event-centric DMs with real-time delivery via Azure Web PubSub
+- In-app notifications list (polling + real-time signals while the tab is open)
+- Profile: sign out, delete account, links to Privacy/Terms
+
+**Not in v1 (web):**
+- Browser push notifications (Web Push / VAPID) — users who want background alerts use the mobile app
+- Video upload from the browser (planned follow-up; upload-url/commit endpoints already present on the backend)
+- In-browser photo editor (pro_image_editor is Flutter-only)
+- PWA / installable
+
+Privacy Policy and Terms now live at `clique-pix.com/docs/privacy` and `clique-pix.com/docs/terms`. Legacy `/privacy.html` and `/terms.html` 301-redirect.
+
+Full technical detail: `docs/WEB_CLIENT_ARCHITECTURE.md`.
+
+---
+
 ## 14. Summary
 
 Clique Pix v1.0 focuses on one core experience:
@@ -383,4 +410,5 @@ Everything in this version supports that loop and avoids unnecessary complexity.
 | `ARCHITECTURE.md` | Full technical architecture, data model, security, deployment |
 | `CLAUDE.md` | Development guardrails and locked decisions for Claude Code |
 | `ENTRA_REFRESH_TOKEN_WORKAROUND.md` | Authentication token refresh implementation details |
+| `WEB_CLIENT_ARCHITECTURE.md` | Web client architecture, deployment, CORS/CSP config |
 
