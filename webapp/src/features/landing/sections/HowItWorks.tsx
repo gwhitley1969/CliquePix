@@ -1,25 +1,29 @@
-import { Calendar, Camera, Download } from 'lucide-react';
+import { Calendar, Camera, Users } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useRevealOnScroll } from '../hooks/useRevealOnScroll';
 
+// Marketing narrative splits "Event creation" and "Clique setup" into two
+// distinct steps so the "your people" message from the hero has its own beat.
+// The real app keeps those in a single flow (Clique picker appears inside
+// Event creation) — the landing page just decomposes them for clarity.
 const STEPS: { index: string; title: string; body: string; icon: LucideIcon }[] = [
   {
     index: '01',
     title: 'Start an Event',
-    body: 'Name the moment, pick a duration — 24 hours, 3 days, or a week. Invite your Clique or create one inline.',
+    body: 'Name the moment, pick a duration — 24 hours, 3 days, or a week.',
     icon: Calendar,
   },
   {
     index: '02',
-    title: 'Share in real time',
-    body: 'Take a photo, record a video, or upload from your gallery. Everyone in the Clique sees it instantly.',
-    icon: Camera,
+    title: 'Create or invite your Clique',
+    body: 'Spin up a new group, or invite people from a Clique you already use. Share a link, QR code, or SMS — they join in a tap.',
+    icon: Users,
   },
   {
     index: '03',
-    title: 'Save what matters',
-    body: 'React, download the shots you love to your device. Everything else auto-deletes when the event ends.',
-    icon: Download,
+    title: 'Share, react, save what matters',
+    body: 'Everyone uploads in real time. React, save the shots you love — the rest auto-deletes when the event ends.',
+    icon: Camera,
   },
 ];
 
