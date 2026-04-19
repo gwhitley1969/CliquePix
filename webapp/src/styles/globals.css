@@ -26,6 +26,30 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Gradient spotlight drift for the landing hero. Three independent
+ * keyframes so each blob moves on its own cadence. Respecting
+ * prefers-reduced-motion happens at the component level via the
+ * useRevealOnScroll hook for scroll-in, but these slow drifts are
+ * decorative background motion that should also pause when reduced
+ * motion is preferred. */
+@keyframes landing-drift-a {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(8%, 6%, 0) scale(1.08); }
+}
+@keyframes landing-drift-b {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(-6%, 4%, 0) scale(1.1); }
+}
+@keyframes landing-drift-c {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(4%, -8%, 0) scale(0.95); }
+}
+@media (prefers-reduced-motion: reduce) {
+  [class*='landing-drift'] {
+    animation: none !important;
+  }
+}
+
 /* Print styles — primarily for the branded invite QR route. Forcing
  * color-adjust: exact makes browsers render gradient bands and logos
  * without the user having to toggle "Background graphics" in print
