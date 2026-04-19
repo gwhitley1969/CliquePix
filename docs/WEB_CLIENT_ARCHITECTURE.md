@@ -174,7 +174,7 @@ customEvents
 Before a new environment can work end-to-end:
 
 1. **Entra app registration** (`7db01206-135b-4a34-a4d5-2622d1a888bf`) — add SPA platform redirect URIs for both production (`https://clique-pix.com/auth/callback`) and dev (`http://localhost:5173/auth/callback`); front-channel logout URL `https://clique-pix.com/`. Implicit grant stays unchecked.
-2. **APIM CORS** — `apim_policy.xml` in this repo has the `<cors>` block; deploy the policy via Azure Portal (APIM → APIs → All APIs → Policies) or `az apim api policy create`.
+2. **APIM CORS** — `apim_policy.xml` in this repo is the **CliquePix API v1 → All operations** policy (per-API scope; NOT the global/All APIs scope). It contains the `<cors>` block. Deploy via Azure Portal (APIM → APIs → CliquePix API v1 → Design → All operations → Inbound processing → `</>` icon → paste) or `az apim api policy create --api-id cliquepix-api-v1`. The policy also retains a `rate-limit-by-key` at 120 calls/min keyed by JWT subject (per-user) with IP fallback for unauthenticated requests — do not regress these values.
 3. **Azure Blob Storage CORS** — `stcliquepixprod` → Resource sharing (CORS) → Blob service: origins `https://clique-pix.com` and `http://localhost:5173`, methods `GET PUT HEAD OPTIONS`, headers `*`, exposed headers `*`, max-age `3600`. CLI: `az storage cors add --services b --methods GET PUT HEAD OPTIONS --origins "https://clique-pix.com" "http://localhost:5173" --allowed-headers "*" --exposed-headers "*" --max-age 3600 --account-name stcliquepixprod`.
 4. **Front Door** — no changes; CORS passes through.
 
