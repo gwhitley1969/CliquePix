@@ -179,24 +179,35 @@ Entra External ID (CIAM) tenants have a **hardcoded 12-hour inactivity timeout**
 
 Error signature: `AADSTS700082: The refresh token has expired due to inactivity... inactive for 12:00:00`
 
-### Required Mitigation: 5-Layer Token Refresh Defense
+### Required Mitigation: 5-Layer Token Refresh Defense (silent-push edition, 2026-04-19)
 
-This pattern is proven in production on My AI Bartender. All five layers must be implemented.
+Microsoft's documented mitigation for this scenario (Azure Communication Services chat tutorial, "Implement registration renewal → Solution 2: Remote Notification") is **silent push + background refresh**. Layer 2 implements that. The previous notification-based Layer 2 design (`flutter_local_notifications.zonedSchedule`) was deleted because that primitive only *displays* a notification — it does not execute code — so silent `Importance.min` notifications the user never tapped never refreshed anything.
 
-| Layer | Mechanism | Trigger | Reliability | Purpose |
-|-------|-----------|---------|-------------|---------|
-| 1 | Battery Optimization Exemption | First login (Android) | Critical | Allows background tasks on Samsung/Xiaomi/Huawei |
-| 2 | AlarmManager Token Refresh | Every 6 hours | Very High | Fires even in Doze mode via `exactAllowWhileIdle` |
-| 3 | Foreground Refresh on App Resume | Every app open | Very High | Safety net — catches all background failures |
-| 4 | WorkManager Background Task | Every 8 hours | Medium | Backup mechanism |
-| 5 | Graceful Re-Login UX | When all else fails | N/A | "Welcome back" one-tap re-auth with stored user hint |
+| Layer | Mechanism | Trigger | Platforms | Purpose |
+|-------|-----------|---------|-----------|---------|
+| 1 | Battery-optimization exemption | First home-screen frame after login | Android | Allows OS FCM delivery + WorkManager on Samsung/Xiaomi/Huawei |
+| 2 | **Server-triggered silent FCM push** | Backend timer every 15 min, users inactive 9-11h | both | Wakes the app in the background; handler runs `acquireTokenSilent` in an isolate. Falls back to a `pending_refresh_on_next_resume` flag if iOS isolate can't run MSAL |
+| 3 | Foreground refresh on app resume | `AppLifecycleState.resumed` if token ≥ 6h stale or pending flag set | both | Primary, most-reliable defense |
+| 4 | WorkManager periodic task | Every ~8h, network connected | Android | Best-effort backup |
+| 5 | Graceful re-login via Welcome Back | Silent refresh fails (AADSTS700082 / AADSTS500210 / no cached account) | both | One-tap re-auth with `loginHint` pre-fill |
 
 Key timing:
 - Microsoft inactivity timeout: **12 hours** (hardcoded)
-- AlarmManager / foreground refresh threshold: **6 hours** (half the timeout = safe margin)
-- WorkManager interval: **8 hours** (backup)
+- Foreground refresh threshold (Layer 3): **6 hours** (`AppConstants.tokenStaleThresholdHours`)
+- WorkManager interval (Layer 4): **8 hours**
+- Silent-push window (Layer 2): user inactive **9-11 hours** (2h window before the 12h cliff)
+- Silent-push dedup: **6 hours** per user (`users.last_refresh_push_sent_at`)
 
-Full implementation details, code samples, and debug log tags are in `ENTRA_REFRESH_TOKEN_WORKAROUND.md`.
+Backend additions (see migration `009_user_activity_tracking.sql`):
+- `users.last_activity_at` — updated fire-and-forget by `authMiddleware` on every authenticated call, capped 1/min/user, feeds the Layer-2 timer
+- `users.last_refresh_push_sent_at` — written by `refreshTokenPushTimer`, enforces 6h dedup
+
+Honest limitations:
+- Apple throttles background pushes — silent-push deliverability on iOS will be < 100%
+- Force-killed iOS apps do not receive silent pushes (iOS policy). Layer 5 is the only recourse
+- iOS Background App Refresh disabled → Layer 2 is dead for that user; Layer 5 still works
+
+Full implementation details, Kusto queries, and per-layer event names are in `ENTRA_REFRESH_TOKEN_WORKAROUND.md`.
 
 ### Token Storage
 
@@ -1029,7 +1040,12 @@ Track these custom telemetry events:
 - `notification_sent`, `notification_send_failed`
 - `expired_photos_deleted` (include count)
 - `orphaned_uploads_cleaned` (include count)
-- `token_refresh_success`, `token_refresh_failed` (include layer that triggered it)
+- Entra refresh-token defense telemetry — per layer:
+  - L1: `battery_exempt_prompted`, `battery_exempt_granted`
+  - L2 (silent push): `refresh_push_timer_ran`, `silent_push_received`, `silent_push_refresh_success`, `silent_push_refresh_failed`, `silent_push_fallback_flag_set`
+  - L3: `foreground_stale_check`, `foreground_refresh_success`, `foreground_refresh_failed`
+  - L4: `wm_task_fired`, `wm_refresh_success`, `wm_refresh_failed`
+  - L5: `welcome_back_shown`, `welcome_back_continue`, `welcome_back_switch_account`, `cold_start_relogin_required`
 - `dm_thread_created`, `dm_message_sent`, `dm_message_send_failed`
 - `dm_push_sent`, `dm_thread_marked_read_only`
 

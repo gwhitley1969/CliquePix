@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_gradients.dart';
@@ -9,7 +10,9 @@ import '../../../models/event_model.dart';
 import '../../../models/clique_model.dart';
 import '../../../widgets/error_widget.dart';
 import '../../auth/domain/auth_state.dart';
+import '../../auth/domain/battery_optimization_service.dart';
 import '../../auth/presentation/auth_providers.dart';
+import '../../../services/telemetry_service.dart';
 import '../../events/presentation/events_providers.dart';
 import '../../cliques/presentation/cliques_providers.dart';
 import 'widgets/how_it_works_card.dart';
@@ -36,6 +39,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     _loadPrefs();
     _countdownTimer = Timer.periodic(const Duration(minutes: 1), (_) {
       if (mounted) setState(() {});
+    });
+
+    // Layer 1: Battery Optimization Exemption (Android only, first time only).
+    // Service self-gates on `battery_dialog_shown` SharedPreferences key.
+    // Also drain any telemetry events queued by isolates while the app was
+    // backgrounded (WorkManager Layer 4 / FCM Layer 2 background handler).
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      final telemetry = ref.read(telemetryServiceProvider);
+      await telemetry.drainPendingIsolateEvents();
+      if (!mounted) return;
+      final prefs = await SharedPreferences.getInstance();
+      final already = prefs.getBool('battery_dialog_shown') ?? false;
+      if (already) return;
+      telemetry.record('battery_exempt_prompted');
+      if (!mounted) return;
+      await BatteryOptimizationService().requestExemptionIfNeeded(context);
+      // Check post-dialog status; fire telemetry if the user actually granted
+      // the exemption. The service updates its internal SharedPreferences flag
+      // regardless of outcome.
+      final status = await Permission.ignoreBatteryOptimizations.status;
+      if (status.isGranted) telemetry.record('battery_exempt_granted');
     });
   }
 

@@ -139,7 +139,7 @@ Operational procedures for the Clique Pix open beta. Covers incident response, c
 **Diagnosis:**
 1. Check if it's the 12-hour inactivity timeout:
    - User hasn't opened the app in >12 hours
-   - Layer 5 (graceful re-login) should handle this
+   - Layer 5 (graceful re-login) should handle this with a one-tap "Welcome back"
 
 2. Check if Entra External ID tenant is healthy:
    ```bash
@@ -149,7 +149,8 @@ Operational procedures for the Clique Pix open beta. Covers incident response, c
 3. Check App Insights for auth errors:
    ```kql
    customEvents
-   | where name == "token_refresh_failed"
+   | where name in ("foreground_refresh_failed", "silent_push_refresh_failed",
+                    "wm_refresh_failed", "cold_start_relogin_required")
    | where timestamp > ago(24h)
    ```
 
@@ -157,6 +158,68 @@ Operational procedures for the Clique Pix open beta. Covers incident response, c
 - Entra 12-hour inactivity timeout (expected — Layer 5 handles it)
 - JWKS endpoint unreachable (rare, usually Azure outage)
 - Client ID or tenant ID misconfigured
+
+### User reports unexpected re-login (5-layer defense troubleshooting)
+
+**Symptoms:** "I haven't opened the app all day and now I have to sign in again." This is what the 5-layer defense exists to prevent.
+
+**Quickest signal — App Insights health:**
+```kql
+// If welcome_back_shown is the dominant event, a background layer is broken.
+customEvents
+| where timestamp > ago(24h)
+| where name in ("foreground_refresh_success", "silent_push_refresh_success",
+                 "wm_refresh_success", "welcome_back_shown")
+| summarize count() by name
+| order by count_ desc
+```
+
+**Silent-push deliverability (Layer 2) — the most failure-prone layer:**
+```kql
+// sent = timer tried to deliver; received = device woke and ran handler
+customEvents
+| where timestamp > ago(7d)
+| where name in ("refresh_push_timer_ran", "silent_push_received")
+| extend sentCount = iff(name == "refresh_push_timer_ran",
+                         toint(customDimensions.sent), 1)
+| summarize sent = sumif(sentCount, name == "refresh_push_timer_ran"),
+            received = countif(name == "silent_push_received")
+| extend delivery_pct = 100.0 * received / sent
+```
+
+iOS deliverability below ~60% is expected (Apple throttles background pushes). If Android deliverability is below 80%, check the Layer 1 battery-exempt grant rate:
+```kql
+customEvents
+| where timestamp > ago(7d)
+| where name in ("battery_exempt_prompted", "battery_exempt_granted")
+| summarize count() by name
+```
+
+**Per-user debugging:** have the user tap the version number 7 times on the Profile screen — this unlocks the Token Diagnostics screen. Have them screenshot the event ring buffer. Interpret by layer:
+- Layer 3 firing (`foreground_refresh_success`) = healthy daily user
+- Layer 2 firing (`silent_push_received` → `silent_push_refresh_success`) = healthy backgrounded user
+- Layer 2 fallback fired (`silent_push_fallback_flag_set` + `foreground_refresh_success`) = iOS isolate couldn't run MSAL but recovered on next foreground — acceptable
+- Layer 4 firing (`wm_refresh_success`) = Android WorkManager backup working
+- Layer 5 fired (`welcome_back_shown`) = all background layers failed; user was caught gracefully
+- `cold_start_relogin_required` = user was > 12h inactive AND app was force-killed before the silent push arrived
+
+**Known expected Layer 5 cases (not bugs):**
+- User force-killed the app + waited 12+ hours (iOS policy prevents background pushes to force-killed apps)
+- User disabled Background App Refresh (iOS)
+- User's device was off / in airplane mode during the 9-11h push window
+- Samsung/Xiaomi aggressive battery optimization that never got the Layer 1 exemption
+
+**Fix for "Layer 5 shows up too often on one device":**
+1. Confirm `last_activity_at` is being updated for the user:
+   ```sql
+   SELECT id, last_activity_at, last_refresh_push_sent_at FROM users WHERE id = '<user-id>';
+   ```
+   `last_activity_at` should advance roughly every time the user opens the app. If it's stale, the auth middleware's fire-and-forget write is broken.
+2. Confirm the push-token row exists and is fresh:
+   ```sql
+   SELECT platform, LEFT(token, 20), created_at, updated_at FROM push_tokens WHERE user_id = '<user-id>';
+   ```
+3. For Android users: confirm battery-optimization exemption was granted (`battery_exempt_granted` event for that user). If not, ask the user to grant it in system Settings → Apps → Clique Pix → Battery → Unrestricted.
 
 ### Photos/videos not loading — SAS errors
 

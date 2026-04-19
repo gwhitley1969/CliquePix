@@ -1,14 +1,29 @@
 import 'package:flutter/widgets.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../services/token_storage_service.dart';
 
-/// Layer 3: Foreground Refresh on App Resume (most reliable on both platforms)
-/// Checks token age on every app resume. If > 6 hours, proactively refreshes.
-/// This is the primary iOS defense since iOS lacks reliable background tasks.
+/// Pending-refresh flag written by the FCM background isolate (Layer 2)
+/// when an in-isolate MSAL silent refresh fails or isn't viable (e.g., iOS
+/// background isolate plugin-channel limits). Consumed here so that the
+/// refresh happens immediately on next foreground regardless of token age.
+const pendingRefreshFlagKey = 'pending_refresh_on_next_resume';
+
+/// Telemetry hook — a callback the wiring layer installs so this service
+/// can log layer activity without importing Riverpod / Dio directly.
+typedef AuthLayerTelemetry = void Function(String event,
+    {String? errorCode, Map<String, String>? extra});
+
+/// Layer 3: Foreground Refresh on App Resume (most reliable on both platforms).
+///
+/// Checks token age on every app resume. If > 6h stale, proactively refreshes.
+/// Also handles the "silent push arrived but background isolate couldn't run
+/// MSAL" fallback from Layer 2 by honoring the pendingRefreshFlagKey flag.
 class AppLifecycleService with WidgetsBindingObserver {
   final TokenStorageService _tokenStorage;
   final Future<bool> Function() _refreshCallback;
   final Future<void> Function() _reloginCallback;
-  final Future<void> Function() _rescheduleAlarm;
+  final Future<void> Function()? _onRefreshSuccess;
+  final AuthLayerTelemetry? _telemetry;
 
   bool _isRefreshing = false;
 
@@ -16,14 +31,17 @@ class AppLifecycleService with WidgetsBindingObserver {
     required TokenStorageService tokenStorage,
     required Future<bool> Function() refreshCallback,
     required Future<void> Function() reloginCallback,
-    required Future<void> Function() rescheduleAlarm,
+    Future<void> Function()? onRefreshSuccess,
+    AuthLayerTelemetry? telemetry,
   })  : _tokenStorage = tokenStorage,
         _refreshCallback = refreshCallback,
         _reloginCallback = reloginCallback,
-        _rescheduleAlarm = rescheduleAlarm;
+        _onRefreshSuccess = onRefreshSuccess,
+        _telemetry = telemetry;
 
   void start() {
     WidgetsBinding.instance.addObserver(this);
+    debugPrint('[AUTH-LAYER-3] lifecycle observer started');
   }
 
   void stop() {
@@ -42,18 +60,40 @@ class AppLifecycleService with WidgetsBindingObserver {
     _isRefreshing = true;
 
     try {
+      final prefs = await SharedPreferences.getInstance();
+      final pendingFlag = prefs.getBool(pendingRefreshFlagKey) ?? false;
       final isStale = await _tokenStorage.isTokenStale();
-      if (!isStale) return;
 
+      _telemetry?.call('foreground_stale_check', extra: {
+        'stale': isStale.toString(),
+        'pending_flag': pendingFlag.toString(),
+      });
+
+      if (!pendingFlag && !isStale) return;
+
+      debugPrint(
+          '[AUTH-LAYER-3] triggering refresh (stale=$isStale pendingFlag=$pendingFlag)');
       final success = await _refreshCallback();
+
+      // Clear the pending flag regardless of outcome — this attempt is done.
+      if (pendingFlag) {
+        await prefs.remove(pendingRefreshFlagKey);
+      }
+
       if (success) {
-        await _rescheduleAlarm();
+        _telemetry?.call('foreground_refresh_success');
+        final cb = _onRefreshSuccess;
+        if (cb != null) {
+          await cb();
+        }
       } else {
-        // Layer 5: Trigger graceful re-login
+        _telemetry?.call('foreground_refresh_failed');
+        // Layer 5 — graceful re-login
         await _reloginCallback();
       }
-    } catch (_) {
-      // Silently fail — next resume will try again
+    } catch (e) {
+      debugPrint('[AUTH-LAYER-3] _onAppResumed exception: $e');
+      // Silently fail — next resume will try again.
     } finally {
       _isRefreshing = false;
     }

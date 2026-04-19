@@ -4,9 +4,11 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/routing/app_router.dart';
+import '../features/auth/presentation/auth_providers.dart';
 import '../features/notifications/presentation/notifications_providers.dart';
 import '../features/photos/presentation/photos_providers.dart';
 import '../features/videos/presentation/videos_providers.dart';
+import 'telemetry_service.dart';
 
 final pushNotificationServiceProvider = Provider<PushNotificationService>((ref) {
   return PushNotificationService(ref);
@@ -52,9 +54,16 @@ class PushNotificationService {
       // Listen for token refresh
       messaging.onTokenRefresh.listen(_registerToken);
 
-      // Foreground messages: refresh in-app notification list
-      // (display is handled by main.dart's onMessage listener)
-      FirebaseMessaging.onMessage.listen((_) {
+      // Foreground messages
+      //  - token_refresh silent pushes: run Layer 2 refresh directly, skip
+      //    in-app list refresh (it's not a user-visible notification)
+      //  - everything else: invalidate the notifications list so any new
+      //    in-app notification row appears immediately
+      FirebaseMessaging.onMessage.listen((message) {
+        if (message.data['type'] == 'token_refresh') {
+          _handleSilentRefresh();
+          return;
+        }
         _ref.invalidate(notificationsListProvider);
       });
 
@@ -124,6 +133,23 @@ class PushNotificationService {
       }
     } catch (e) {
       debugPrint('[CliquePix] Notification navigation failed: $e');
+    }
+  }
+
+  /// Layer 2 foreground path: backend sent a silent token_refresh push while
+  /// the app was foregrounded. Trigger MSAL silent refresh immediately.
+  Future<void> _handleSilentRefresh() async {
+    debugPrint('[AUTH-LAYER-2] foreground silent_push_received');
+    final telemetry = _ref.read(telemetryServiceProvider);
+    telemetry.record('silent_push_received');
+    try {
+      final success =
+          await _ref.read(authRepositoryProvider).refreshToken();
+      telemetry.record(
+        success ? 'silent_push_refresh_success' : 'silent_push_refresh_failed',
+      );
+    } catch (e) {
+      telemetry.record('silent_push_refresh_failed', errorCode: e.toString().split('\n').first);
     }
   }
 
