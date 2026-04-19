@@ -7,8 +7,8 @@ import '../data/auth_api.dart';
 import 'background_token_service.dart';
 
 /// Result of a silent token refresh attempt, including the MSAL error code
-/// (if any) so callers — notably `AppLifecycleService` and the cold-start
-/// path in `AuthNotifier.checkAuthStatus` — can distinguish:
+/// (if any) so callers — notably `AppLifecycleService` and the background
+/// verification path in `AuthNotifier._verifyInBackground` — can distinguish:
 ///   - `AADSTS700082` — refresh token expired due to inactivity (Entra bug)
 ///   - `AADSTS500210` — iOS #2871 federated-user silent refresh failure
 ///   - `no_account_found` / `no_current_account` — nothing in MSAL cache
@@ -53,6 +53,7 @@ class AuthRepository {
   Future<UserModel> signIn({String? loginHint}) async {
     final pca = await _getOrCreatePca();
 
+    // The browser flow is user-paced — do not cap it.
     final result = await pca.acquireToken(
       scopes: MsalConstants.scopes,
       prompt: Prompt.login,
@@ -66,10 +67,17 @@ class AuthRepository {
       refreshToken: '',
     );
 
-    final user = await verifyAndGetUser();
+    // Backend round-trip is bounded: if the API is unreachable after browser
+    // auth succeeded, fail cleanly rather than hanging the spinner.
+    final user = await verifyAndGetUser()
+        .timeout(const Duration(seconds: 10));
 
-    // Layer 4: schedule WorkManager background refresh (best-effort backup)
-    await backgroundTokenService.register();
+    // Layer 4: schedule WorkManager background refresh (best-effort backup).
+    // Never block the happy path on this — it's a background-job registration.
+    await backgroundTokenService
+        .register()
+        .timeout(const Duration(seconds: 5))
+        .catchError((_) {});
 
     return user;
   }
@@ -93,6 +101,8 @@ class AuthRepository {
     final data = await api.verify();
     final user = UserModel.fromJson(data);
     await tokenStorage.saveLastKnownUser(user.emailOrPhone, user.displayName);
+    // Persist the full model for optimistic bootstrap on next cold start.
+    await tokenStorage.saveCachedUserModel(user);
     return user;
   }
 

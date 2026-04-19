@@ -61,6 +61,7 @@ A persistent group of people (e.g., “Girls Night Out” or bachelor party)
 - Powered by Microsoft Entra External ID (CIAM)
 - Minimal friction onboarding
 - **Stay-signed-in experience.** Users who open the app on a normal cadence (daily, or even every few days) never see a login screen again after the initial sign-in. The app refreshes silently in the background using a combination of server-triggered wake-ups and on-resume checks.
+- **Instant cold start.** Returning users with a valid cached session land directly on the Events screen — no splash, no "checking authentication" spinner. Session verification happens in the background and only surfaces a Welcome Back prompt if the cached session has actually expired.
 - **Graceful "Welcome back" recovery.** If background refresh ever fails — for example, an iOS user who force-killed the app and didn't open it for a week — the next launch shows a *"Welcome back, [Name]!"* dialog with their email pre-recognized. One tap re-authenticates and returns them to the app. No cold login screen, no retyping an email address.
 - **Implementation note (not user-facing):** a 5-layer defense backs this — see `docs/ENTRA_REFRESH_TOKEN_WORKAROUND.md`.
 

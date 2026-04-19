@@ -1,8 +1,42 @@
 # Microsoft Entra External ID Refresh Token Workaround — Clique Pix
 
 **Last updated:** 2026-04-19
-**Status:** 5-layer defense, silent-push edition. Shipping in migration 009 + client/backend changes.
+**Status:** 5-layer defense + optimistic auth bootstrap.
 **Issue type:** Known Microsoft bug — no portal-based fix.
+
+---
+
+## Optimistic authentication — the user-facing contract
+
+Clique Pix does not block its UI on a network round-trip at launch. Before `runApp`, `main.dart` reads the access token and a cached `UserModel` from `FlutterSecureStorage`. If both are present, `AuthNotifier` is seeded with `AuthAuthenticated(cachedUser)` so the router resolves straight to `/events` on the first frame — no splash, no spinner, no LoginScreen touch. If storage is empty, `AuthNotifier` is seeded with `AuthUnauthenticated`, so LoginScreen renders with an enabled "Get Started" button on the first frame.
+
+Background verification fires after mount: `AuthNotifier._verifyInBackground` wraps `silentSignIn` with an 8-second `Future.timeout`. On success it replaces the provisional cached user with the authoritative server record. On session-expired signatures (`AADSTS700082`, `AADSTS500210`, `no_account_found`, or the synthetic `silent_signin_timeout`) it emits `AuthReloginRequired` — the GoRouter redirect bounces the user from `/events` back to `/login`, and LoginScreen pops the `WelcomeBackDialog` for one-tap re-auth.
+
+Non-session transient failures (network hiccup during verification, backend 5xx) keep the optimistic `AuthAuthenticated` in place. The app continues; the next app resume (Layer 3) or 401 (AuthInterceptor) retries the refresh.
+
+User-visible outcomes:
+
+| Scenario | Behavior |
+|----------|----------|
+| Returning user with valid session | Instant — first frame is Events |
+| First-time user / signed out | Instant — LoginScreen with enabled Get Started |
+| Returning user whose session expired (12h+) | ~2s Events flash → WelcomeBackDialog |
+| MSAL wedged or corrupt cache | ~8s Events → WelcomeBackDialog (bounded by Future.timeout) |
+| Backend unreachable at launch | Events shell renders; events list shows its normal error state; user retries |
+| User taps Get Started and MSAL hangs | Button spinner + "Having trouble? Sign in with a different account" link appears at 15s |
+
+Hard caps layered across the auth stack so nothing can hang indefinitely:
+
+| Call site | Timeout |
+|-----------|---------|
+| `AuthNotifier._verifyInBackground` → `silentSignIn` | 8s |
+| `AuthRepository.signIn` → `verifyAndGetUser` (post-browser) | 10s |
+| `AuthRepository.signIn` → `backgroundTokenService.register` | 5s (catchError) |
+| `AppLifecycleService._onAppResumed` → `_refreshCallback` | 8s |
+| `AuthInterceptor.onError` (401) → `tokenStorage.refreshToken` | 8s |
+| `AuthRepository.signIn` → `pca.acquireToken` (browser) | *untimed* — user types password |
+
+One flag-ordering bug fixed in the same branch: `AppLifecycleService` now clears `pendingRefreshFlagKey` **before** awaiting the refresh. Previously a hung refresh left the flag set forever, and every subsequent app resume re-triggered the same hang — the "force-quit doesn't fix it" feedback loop users reported.
 
 ---
 

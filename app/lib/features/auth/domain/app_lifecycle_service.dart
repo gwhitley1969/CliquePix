@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../services/token_storage_service.dart';
@@ -71,14 +73,18 @@ class AppLifecycleService with WidgetsBindingObserver {
 
       if (!pendingFlag && !isStale) return;
 
-      debugPrint(
-          '[AUTH-LAYER-3] triggering refresh (stale=$isStale pendingFlag=$pendingFlag)');
-      final success = await _refreshCallback();
-
-      // Clear the pending flag regardless of outcome — this attempt is done.
+      // Clear the pending flag BEFORE the refresh await. If the refresh
+      // hangs, the flag is already gone — a subsequent resume will not
+      // re-trigger the same hang, which was the "force-quit doesn't fix it"
+      // feedback loop users reported.
       if (pendingFlag) {
         await prefs.remove(pendingRefreshFlagKey);
       }
+
+      debugPrint(
+          '[AUTH-LAYER-3] triggering refresh (stale=$isStale pendingFlag=$pendingFlag)');
+      final success = await _refreshCallback()
+          .timeout(const Duration(seconds: 8), onTimeout: () => false);
 
       if (success) {
         _telemetry?.call('foreground_refresh_success');

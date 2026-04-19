@@ -530,6 +530,22 @@ History note: two prior attempts were reverted. (1) A client-side login-screen D
 
 ## Entra External ID — Known Bug & Required Workaround
 
+### Optimistic authentication on cold start (user-facing contract)
+
+Clique Pix does not block its UI on a network call at launch. Ever. `main.dart` reads the access token + cached `UserModel` from secure storage before `runApp` and seeds `AuthNotifier`'s state. Returning users with a valid cached session see Events as the first frame. First-time users see LoginScreen with a fully enabled "Get Started" button as the first frame. Background verification runs concurrently via `_verifyInBackground` (8s timeout) — on session-expired failures it emits `AuthReloginRequired`, which the router surfaces as the `WelcomeBackDialog`.
+
+**Hard rule:** no splash screen, no "checking auth" state blocking the UI, no path through the auth code that can leave the user staring at a loading indicator for more than 15 seconds. The escape-hatch UI on LoginScreen ("Having trouble? Sign in with a different account") appears after 15 seconds of sign-in spinner and calls `AuthNotifier.resetAndSignIn()` which clears the MSAL cache and restarts interactive auth.
+
+Timeouts across the auth stack:
+- `silentSignIn` during background verification — 8s
+- Post-browser `verifyAndGetUser` during interactive sign-in — 10s
+- `backgroundTokenService.register()` best-effort — 5s + catchError
+- `AppLifecycleService._refreshCallback` on resume — 8s
+- `AuthInterceptor` 401 refresh — 8s
+- Interactive browser auth (`pca.acquireToken`) — untimed (user types password)
+
+The `pendingRefreshFlagKey` in `AppLifecycleService` is cleared **before** awaiting the refresh (not after), so a hung refresh cannot poison every future resume.
+
 ### The Problem
 
 Entra External ID (CIAM) tenants have a **hardcoded 12-hour inactivity timeout** on refresh tokens. This is a confirmed Microsoft bug — standard Entra ID tenants get 90-day lifetimes. No portal-based configuration options exist.

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'token_storage_service.dart';
@@ -23,15 +25,21 @@ class AuthInterceptor extends Interceptor {
     if (err.response?.statusCode == 401) {
       try {
         final tokenStorage = ref.read(tokenStorageServiceProvider);
-        final refreshed = await tokenStorage.refreshToken();
+        // Bound the refresh so a hung MSAL call cannot freeze every
+        // subsequent API request behind this interceptor.
+        final refreshed = await tokenStorage
+            .refreshToken()
+            .timeout(const Duration(seconds: 8));
         if (refreshed) {
           final accessToken = await tokenStorage.getAccessToken();
           err.requestOptions.headers['Authorization'] = 'Bearer $accessToken';
           final response = await dio.fetch(err.requestOptions);
           return handler.resolve(response);
         }
+      } on TimeoutException {
+        // Refresh hung — propagate original 401 so the caller handles it.
       } catch (_) {
-        // Refresh failed, propagate original error
+        // Refresh failed, propagate original error.
       }
     }
     handler.next(err);
