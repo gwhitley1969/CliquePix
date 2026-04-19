@@ -1,0 +1,44 @@
+{
+  "navigationFallback": {
+    "rewrite": "/index.html",
+    "exclude": [
+      "/docs/*",
+      "/assets/*",
+      "/.well-known/*",
+      "/*.{png,jpg,jpeg,gif,svg,ico,webp}",
+      "/*.{css,js,map,woff,woff2,ttf}"
+    ]
+  },
+  "routes": [
+    { "route": "/privacy.html", "redirect": "/docs/privacy", "statusCode": 301 },
+    { "route": "/terms.html", "redirect": "/docs/terms", "statusCode": 301 },
+    { "route": "/privacy", "redirect": "/docs/privacy", "statusCode": 301 },
+    { "route": "/terms", "redirect": "/docs/terms", "statusCode": 301 },
+    { "route": "/docs/privacy", "rewrite": "/docs/privacy.html" },
+    { "route": "/docs/terms", "rewrite": "/docs/terms.html" },
+    {
+      "route": "/.well-known/apple-app-site-association",
+      "headers": {
+        "Content-Type": "application/json",
+        "Cache-Control": "public, max-age=86400"
+      }
+    },
+    {
+      "route": "/.well-known/assetlinks.json",
+      "headers": {
+        "Content-Type": "application/json",
+        "Cache-Control": "public, max-age=86400"
+      }
+    }
+  ],
+  "globalHeaders": {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.blob.core.windows.net; media-src 'self' blob: https://*.blob.core.windows.net; connect-src 'self' https://api.clique-pix.com https://*.blob.core.windows.net wss://*.webpubsub.azure.com https://cliquepix.ciamlogin.com https://*.azurestaticapps.net https://*.applicationinsights.azure.com https://*.in.applicationinsights.azure.com; frame-src https://cliquepix.ciamlogin.com; worker-src 'self' blob:; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self' https://cliquepix.ciamlogin.com"
+  },
+  "mimeTypes": {
+    ".json": "application/json"
+  },
+  "trailingSlash": "never"
+}
