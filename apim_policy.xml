@@ -1,35 +1,62 @@
-﻿<policies>
-	<inbound>
-		<base />
-		<cors allow-credentials="false">
-			<allowed-origins>
-				<origin>https://clique-pix.com</origin>
-				<origin>http://localhost:5173</origin>
-			</allowed-origins>
-			<allowed-methods preflight-result-max-age="3600">
-				<method>GET</method>
-				<method>POST</method>
-				<method>PUT</method>
-				<method>PATCH</method>
-				<method>DELETE</method>
-				<method>OPTIONS</method>
-			</allowed-methods>
-			<allowed-headers>
-				<header>*</header>
-			</allowed-headers>
-			<expose-headers>
-				<header>x-request-id</header>
-			</expose-headers>
-		</cors>
-		<rate-limit-by-key calls="60" renewal-period="60" counter-key="@(context.Request.IpAddress)" />
-	</inbound>
-	<backend>
-		<base />
-	</backend>
-	<outbound>
-		<base />
-	</outbound>
-	<on-error>
-		<base />
-	</on-error>
+<!--
+  APIM policy for the "CliquePix API v1" — applies at the "All operations" scope
+  on that API (NOT the global / "All APIs" scope).
+
+  Order matters:
+    1. <base /> inherits any higher-scope policies (none today).
+    2. <cors> runs next so browser preflight OPTIONS requests are answered
+       before rate-limit-by-key counts them against the per-IP quota.
+    3. <rate-limit-by-key> rate-limits authenticated users by JWT subject
+       (so different users behind the same NAT/corporate IP each get their
+       own quota) and falls back to IP for unauthenticated requests.
+       The `var auth = ...` line declares the Authorization header value
+       explicitly inside the expression block — don't drop it.
+
+  Source of truth: this file. If APIM drifts, update this file first, then
+  redeploy via Azure portal (APIs → CliquePix API v1 → Design → All operations
+  → Inbound processing → </> icon) or `az apim api policy create`.
+-->
+<policies>
+    <inbound>
+        <base />
+        <cors allow-credentials="false">
+            <allowed-origins>
+                <origin>https://clique-pix.com</origin>
+                <origin>http://localhost:5173</origin>
+            </allowed-origins>
+            <allowed-methods preflight-result-max-age="3600">
+                <method>GET</method>
+                <method>POST</method>
+                <method>PUT</method>
+                <method>PATCH</method>
+                <method>DELETE</method>
+                <method>OPTIONS</method>
+            </allowed-methods>
+            <allowed-headers>
+                <header>*</header>
+            </allowed-headers>
+            <expose-headers>
+                <header>x-request-id</header>
+            </expose-headers>
+        </cors>
+        <rate-limit-by-key calls="120" renewal-period="60" counter-key="@{
+            var auth = context.Request.Headers.GetValueOrDefault("Authorization", "");
+            if (auth.StartsWith("Bearer ")) {
+                var jwt = auth.Substring(7).AsJwt();
+                if (jwt != null && jwt.Subject != null) {
+                    return jwt.Subject;
+                }
+            }
+            return context.Request.IpAddress;
+        }" retry-after-header-name="Retry-After" />
+    </inbound>
+    <backend>
+        <base />
+    </backend>
+    <outbound>
+        <base />
+    </outbound>
+    <on-error>
+        <base />
+    </on-error>
 </policies>
