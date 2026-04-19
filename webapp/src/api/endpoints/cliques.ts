@@ -16,17 +16,26 @@ export async function createClique(name: string): Promise<Clique> {
   return res.data.data;
 }
 
+// Backend returns { invite_code, invite_url } — the global camelize
+// interceptor in api/client.ts converts those keys to camelCase, so the
+// TS return type reflects the post-transform shape. If the interceptor
+// ever changes, update both.
 export async function getInvite(
   cliqueId: string,
-): Promise<{ invite_code: string; invite_url: string }> {
-  const res = await api.post<{ data: { invite_code: string; invite_url: string } }>(
+): Promise<{ inviteCode: string; inviteUrl: string }> {
+  const res = await api.post<{ data: { inviteCode: string; inviteUrl: string } }>(
     `/api/cliques/${cliqueId}/invite`,
   );
   return res.data.data;
 }
 
 export async function joinCliqueByCode(inviteCode: string): Promise<Clique> {
-  const res = await api.post<{ data: Clique }>(`/api/cliques/join`, {
+  // Backend route is `cliques/{cliqueId}/join` but the handler ignores the
+  // path param and resolves the clique via `invite_code` in the body. The
+  // mobile Flutter client passes `_` as a placeholder for the same reason
+  // (app/lib/features/cliques/data/cliques_api.dart). Omitting the segment
+  // returns 404 because the route pattern requires it.
+  const res = await api.post<{ data: Clique }>(`/api/cliques/_/join`, {
     invite_code: inviteCode,
   });
   return res.data.data;

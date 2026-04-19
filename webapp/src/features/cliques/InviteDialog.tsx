@@ -25,8 +25,8 @@ export function InviteDialog({
     enabled: open,
   });
 
-  const url = invite.data?.invite_url ?? '';
-  const code = invite.data?.invite_code ?? '';
+  const url = invite.data?.inviteUrl ?? '';
+  const code = invite.data?.inviteCode ?? '';
 
   const onCopy = async () => {
     if (!url) return;
