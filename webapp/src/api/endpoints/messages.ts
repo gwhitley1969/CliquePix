@@ -22,8 +22,11 @@ export async function getThread(threadId: string): Promise<DmThread> {
 }
 
 export async function listThreadMessages(threadId: string): Promise<DmMessage[]> {
-  const res = await api.get<{ data: DmMessage[] }>(`/api/dm-threads/${threadId}/messages`);
-  return res.data.data;
+  // Backend envelope: { data: { messages: [...], nextCursor: string|null } }
+  const res = await api.get<{
+    data: { messages: DmMessage[]; nextCursor?: string | null };
+  }>(`/api/dm-threads/${threadId}/messages`);
+  return res.data.data.messages ?? [];
 }
 
 export async function sendMessage(threadId: string, body: string): Promise<DmMessage> {

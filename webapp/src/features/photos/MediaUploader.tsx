@@ -90,13 +90,13 @@ export function MediaUploader({ eventId }: { eventId: string }) {
 
 async function uploadPhoto(eventId: string, file: File) {
   const { blob, width, height } = await compressPhoto(file);
-  const { photo_id, upload_url } = await getPhotoUploadUrl(eventId, {
+  const { photoId, uploadUrl } = await getPhotoUploadUrl(eventId, {
     mime_type: 'image/jpeg',
     file_size_bytes: blob.size,
     width,
     height,
   });
-  const put = await fetch(upload_url, {
+  const put = await fetch(uploadUrl, {
     method: 'PUT',
     headers: {
       'x-ms-blob-type': 'BlockBlob',
@@ -105,7 +105,7 @@ async function uploadPhoto(eventId: string, file: File) {
     body: blob,
   });
   if (!put.ok) throw new Error(`Upload failed (${put.status})`);
-  await confirmPhotoUpload(eventId, photo_id, {
+  await confirmPhotoUpload(eventId, photoId, {
     mime_type: 'image/jpeg',
     width,
     height,

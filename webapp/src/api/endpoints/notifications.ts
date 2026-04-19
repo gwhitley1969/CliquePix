@@ -2,8 +2,12 @@ import { api } from '../client';
 import type { AppNotification } from '../../models';
 
 export async function listNotifications(): Promise<AppNotification[]> {
-  const res = await api.get<{ data: AppNotification[] }>('/api/notifications');
-  return res.data.data;
+  // Backend envelope: { data: { notifications: [...], nextCursor: string|null } }
+  // (nextCursor is post-camelize from next_cursor)
+  const res = await api.get<{ data: { notifications: AppNotification[]; nextCursor?: string | null } }>(
+    '/api/notifications',
+  );
+  return res.data.data.notifications ?? [];
 }
 
 export async function markNotificationRead(id: string): Promise<void> {

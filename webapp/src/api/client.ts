@@ -3,6 +3,7 @@ import { PublicClientApplication, InteractionRequiredAuthError } from '@azure/ms
 import { loginRequest } from '../auth/msalConfig';
 import { toast } from 'sonner';
 import { trackError, trackEvent } from '../lib/ai';
+import { camelize } from './camelize';
 
 /**
  * Singleton reference to the MSAL PublicClientApplication constructed and
@@ -59,6 +60,18 @@ api.interceptors.request.use(async (config) => {
     // forces React Query to surface the error instead of rendering empty state.
     throw err;
   }
+});
+
+// Normalize response bodies from the backend's snake_case keys
+// (created_at, thumbnail_url, is_read, etc.) to camelCase so they line up
+// with the TypeScript types in webapp/src/models. Safe for primitive values,
+// arrays, and plain objects; skips non-JSON responses (blob SAS PUTs etc.
+// don't hit this interceptor since they go directly to Blob Storage).
+api.interceptors.response.use((response) => {
+  if (response.data && typeof response.data === 'object') {
+    response.data = camelize(response.data);
+  }
+  return response;
 });
 
 api.interceptors.response.use(

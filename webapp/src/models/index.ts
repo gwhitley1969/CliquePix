@@ -119,7 +119,9 @@ export interface AppNotification {
   type: NotificationType;
   title: string;
   subtitle?: string;
-  payload: Record<string, unknown>;
+  // Backend column is `payload_json`; camelized to `payloadJson` at the
+  // response boundary. Contents are arbitrary per notification type.
+  payloadJson: Record<string, unknown>;
   isRead: boolean;
   createdAt: string;
 }

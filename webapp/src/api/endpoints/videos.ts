@@ -2,8 +2,11 @@ import { api } from '../client';
 import type { ReactionSummary, ReactionType, Video } from '../../models';
 
 export async function listEventVideos(eventId: string): Promise<Video[]> {
-  const res = await api.get<{ data: Video[] }>(`/api/events/${eventId}/videos`);
-  return res.data.data;
+  // Backend envelope: { data: { videos: [...] } }
+  const res = await api.get<{ data: { videos: Video[] } }>(
+    `/api/events/${eventId}/videos`,
+  );
+  return res.data.data.videos ?? [];
 }
 
 export async function getVideo(videoId: string): Promise<Video> {
@@ -11,10 +14,11 @@ export async function getVideo(videoId: string): Promise<Video> {
   return res.data.data;
 }
 
+// Response fields arrive camelCased courtesy of the global interceptor.
 export interface VideoUploadUrl {
-  video_id: string;
-  block_urls: string[];
-  commit_url: string;
+  videoId: string;
+  blockUrls: string[];
+  commitUrl: string;
 }
 
 export async function getVideoUploadUrl(
@@ -32,8 +36,8 @@ export async function commitVideoUpload(
   eventId: string,
   videoId: string,
   blockIds: string[],
-): Promise<Video & { preview_url?: string }> {
-  const res = await api.post<{ data: Video & { preview_url?: string } }>(
+): Promise<Video & { previewUrl?: string }> {
+  const res = await api.post<{ data: Video & { previewUrl?: string } }>(
     `/api/events/${eventId}/videos`,
     { video_id: videoId, block_ids: blockIds },
   );
@@ -41,9 +45,9 @@ export async function commitVideoUpload(
 }
 
 export interface VideoPlayback {
-  hls_manifest_url: string;
-  mp4_fallback_url: string;
-  poster_url: string;
+  hlsManifestUrl: string;
+  mp4FallbackUrl: string;
+  posterUrl: string;
 }
 
 export async function getVideoPlayback(videoId: string): Promise<VideoPlayback> {
