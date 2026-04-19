@@ -18,7 +18,13 @@ export function CliqueDetailScreen() {
   const { id } = useParams<{ id: string }>();
   const qc = useQueryClient();
   const navigate = useNavigate();
-  const [inviteOpen, setInviteOpen] = useState(false);
+  // Open the invite dialog automatically when navigated with ?invite=1
+  // (e.g. directly after creating a Clique via CliquesListScreen). Reading
+  // the query string in a lazy initializer runs only on first render, so a
+  // user who closes the dialog doesn't see it re-open on subsequent renders.
+  const [inviteOpen, setInviteOpen] = useState(
+    () => new URLSearchParams(window.location.search).get('invite') === '1',
+  );
   const [leaveConfirm, setLeaveConfirm] = useState(false);
   const [removeTarget, setRemoveTarget] = useState<{ userId: string; name: string } | null>(
     null,

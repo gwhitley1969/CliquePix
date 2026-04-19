@@ -42,10 +42,10 @@ export function InvitePrintScreen() {
         <h1 className="text-2xl font-bold mb-2">{clique.data.name}</h1>
         <p className="text-sm text-gray-600 mb-8">Scan to join on Clique Pix</p>
         <div className="inline-block p-6 border border-gray-300 rounded-lg">
-          <QRCodeSVG value={invite.data.invite_url} size={280} level="M" />
+          <QRCodeSVG value={invite.data.inviteUrl} size={280} level="M" />
         </div>
         <p className="mt-6 text-sm text-gray-600">Or enter this code at clique-pix.com/invite</p>
-        <p className="mt-2 font-mono text-2xl tracking-widest">{invite.data.invite_code}</p>
+        <p className="mt-2 font-mono text-2xl tracking-widest">{invite.data.inviteCode}</p>
         <p className="mt-8 text-xs text-gray-400">
           Clique Pix — private, event-based photo sharing
         </p>

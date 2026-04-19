@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import { Plus, Users } from 'lucide-react';
 import { toast } from 'sonner';
@@ -12,6 +12,7 @@ import { Modal } from '../../components/Modal';
 
 export function CliquesListScreen() {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const [createOpen, setCreateOpen] = useState(false);
   const [name, setName] = useState('');
   const { data, isLoading, isError, refetch } = useQuery({
@@ -21,11 +22,14 @@ export function CliquesListScreen() {
 
   const mutation = useMutation({
     mutationFn: () => createClique(name.trim()),
-    onSuccess: () => {
+    onSuccess: (created) => {
       qc.invalidateQueries({ queryKey: ['cliques'] });
-      toast.success('Clique created');
       setName('');
       setCreateOpen(false);
+      // Sharing is the primary CTA right after creating a Clique. Jump
+      // straight to the detail page with ?invite=1 so the InviteDialog
+      // auto-opens with the QR + code. Mirror of the mobile post-create flow.
+      navigate(`/cliques/${created.id}?invite=1`);
     },
     onError: () => toast.error('Failed to create clique'),
   });
