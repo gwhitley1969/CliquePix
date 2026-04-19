@@ -7,13 +7,17 @@ import { createClique, listCliques } from '../../api/endpoints/cliques';
 import { Button } from '../../components/Button';
 import { LoadingSpinner } from '../../components/LoadingSpinner';
 import { EmptyState } from '../../components/EmptyState';
+import { ErrorState } from '../../components/ErrorState';
 import { Modal } from '../../components/Modal';
 
 export function CliquesListScreen() {
   const qc = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
   const [name, setName] = useState('');
-  const { data, isLoading } = useQuery({ queryKey: ['cliques'], queryFn: listCliques });
+  const { data, isLoading, isError, refetch } = useQuery({
+    queryKey: ['cliques'],
+    queryFn: listCliques,
+  });
 
   const mutation = useMutation({
     mutationFn: () => createClique(name.trim()),
@@ -37,6 +41,12 @@ export function CliquesListScreen() {
 
       {isLoading ? (
         <LoadingSpinner />
+      ) : isError ? (
+        <ErrorState
+          title="Couldn't load Cliques"
+          subtitle="We couldn't reach the server. Check your connection and try again."
+          onRetry={() => refetch()}
+        />
       ) : !data || data.length === 0 ? (
         <EmptyState
           icon={Users}

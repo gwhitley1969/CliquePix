@@ -9,6 +9,7 @@ import {
 } from '../../api/endpoints/notifications';
 import { LoadingSpinner } from '../../components/LoadingSpinner';
 import { EmptyState } from '../../components/EmptyState';
+import { ErrorState } from '../../components/ErrorState';
 import { Button } from '../../components/Button';
 import { formatRelative } from '../../lib/formatDate';
 import type { AppNotification, NotificationType } from '../../models';
@@ -27,7 +28,7 @@ const iconFor: Record<NotificationType, LucideIcon> = {
 export function NotificationsScreen() {
   const qc = useQueryClient();
   const navigate = useNavigate();
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['notifications'],
     queryFn: listNotifications,
     refetchInterval: 60_000,
@@ -71,6 +72,12 @@ export function NotificationsScreen() {
       </div>
       {isLoading ? (
         <LoadingSpinner />
+      ) : isError ? (
+        <ErrorState
+          title="Couldn't load notifications"
+          subtitle="We couldn't reach the server. Check your connection and try again."
+          onRetry={() => refetch()}
+        />
       ) : !data || data.length === 0 ? (
         <EmptyState
           icon={Bell}

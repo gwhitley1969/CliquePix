@@ -8,12 +8,18 @@ import { Toaster } from 'sonner';
 import { msalConfig } from './auth/msalConfig';
 import { router } from './app/router';
 import { initAppInsights } from './lib/ai';
+import { setApiMsalInstance } from './api/client';
 import './styles/globals.css';
 
 const msalInstance = new PublicClientApplication(msalConfig);
 
 // MSAL v3 requires initialize() before any other API call.
 await msalInstance.initialize();
+
+// Wire the initialized instance into the axios interceptor singleton BEFORE
+// rendering anything that could trigger an API call. If we skip this, the
+// interceptor has no way to acquire a token and requests go out unauthenticated.
+setApiMsalInstance(msalInstance);
 
 // Attach the handler for redirect responses. Must be called before rendering
 // so handleRedirectPromise picks up the `?code=...` on /auth/callback.

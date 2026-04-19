@@ -6,12 +6,13 @@ import { listAllEvents } from '../../api/endpoints/events';
 import { Button } from '../../components/Button';
 import { LoadingSpinner } from '../../components/LoadingSpinner';
 import { EmptyState } from '../../components/EmptyState';
+import { ErrorState } from '../../components/ErrorState';
 import { formatCountdown } from '../../lib/formatDate';
 import { CreateEventModal } from './CreateEventModal';
 
 export function EventsListScreen() {
   const [createOpen, setCreateOpen] = useState(false);
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['events'],
     queryFn: listAllEvents,
   });
@@ -27,6 +28,12 @@ export function EventsListScreen() {
 
       {isLoading ? (
         <LoadingSpinner />
+      ) : isError ? (
+        <ErrorState
+          title="Couldn't load events"
+          subtitle="We couldn't reach the server. Check your connection and try again."
+          onRetry={() => refetch()}
+        />
       ) : !data || data.length === 0 ? (
         <EmptyState
           icon={Calendar}
