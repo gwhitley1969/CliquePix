@@ -8,6 +8,7 @@ import { listEventPhotos } from '../../api/endpoints/photos';
 import { listEventVideos } from '../../api/endpoints/videos';
 import { LoadingSpinner } from '../../components/LoadingSpinner';
 import { ConfirmDestructive } from '../../components/ConfirmDestructive';
+import { ErrorState } from '../../components/ErrorState';
 import { formatCountdown } from '../../lib/formatDate';
 import { MediaFeed } from '../photos/MediaFeed';
 import { MediaUploader } from '../photos/MediaUploader';
@@ -48,6 +49,15 @@ export function EventDetailScreen() {
   });
 
   if (eventQuery.isLoading) return <LoadingSpinner />;
+  if (eventQuery.isError) {
+    return (
+      <ErrorState
+        title="Couldn't load this event"
+        subtitle="We couldn't reach the server. Check your connection and try again."
+        onRetry={() => eventQuery.refetch()}
+      />
+    );
+  }
   if (!eventQuery.data) return <div className="p-6 text-white/60">Event not found.</div>;
 
   const event = eventQuery.data;

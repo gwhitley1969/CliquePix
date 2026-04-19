@@ -1,13 +1,18 @@
 import axios, { AxiosError, type AxiosInstance } from 'axios';
 import { PublicClientApplication, InteractionRequiredAuthError } from '@azure/msal-browser';
-import { loginRequest, msalConfig } from '../auth/msalConfig';
+import { loginRequest } from '../auth/msalConfig';
 import { toast } from 'sonner';
+import { trackError, trackEvent } from '../lib/ai';
 
 /**
- * We build a singleton PCA instance reference after the React-side instance has
- * been created and initialized in main.tsx. Because MSAL caches the account in
- * sessionStorage, constructing a second instance here that reads from the same
- * cache is safe for token acquisition only (not for interactive flows).
+ * Singleton reference to the MSAL PublicClientApplication constructed and
+ * initialized in main.tsx. The axios interceptors MUST use that exact instance
+ * (not a new one) because MSAL.js v3 requires `.initialize()` before any token
+ * acquisition call, and we only initialize once.
+ *
+ * main.tsx is responsible for calling setApiMsalInstance() after
+ * `await msalInstance.initialize()` and BEFORE ReactDOM renders anything that
+ * can trigger an API request.
  */
 let pcaRef: PublicClientApplication | null = null;
 
@@ -17,9 +22,12 @@ export function setApiMsalInstance(instance: PublicClientApplication) {
 
 function getPca(): PublicClientApplication {
   if (!pcaRef) {
-    // Fallback: build a reader instance. Safe because MSAL state lives in
-    // sessionStorage shared with the React-side instance.
-    pcaRef = new PublicClientApplication(msalConfig);
+    // This is a programming error, not a user-facing condition. Surfacing
+    // loudly here prevents the old silent-401 regression where requests were
+    // shipped anonymously because a fallback PCA was never initialized.
+    throw new Error(
+      'MSAL instance not wired — call setApiMsalInstance() in main.tsx before rendering',
+    );
   }
   return pcaRef;
 }
@@ -41,12 +49,16 @@ api.interceptors.request.use(async (config) => {
       account: accounts[0],
     });
     config.headers.set('Authorization', `Bearer ${result.accessToken}`);
+    return config;
   } catch (err) {
+    trackError(err as Error, { stage: 'acquireTokenSilent' });
     if (err instanceof InteractionRequiredAuthError) {
       await pca.acquireTokenRedirect(loginRequest);
     }
+    // Never ship an unauthenticated request silently — failing loudly here
+    // forces React Query to surface the error instead of rendering empty state.
+    throw err;
   }
-  return config;
 });
 
 api.interceptors.response.use(
@@ -66,11 +78,13 @@ api.interceptors.response.use(
     }
 
     if (status === 401) {
+      trackEvent('web_api_401', { url: error.config?.url });
       const pca = getPca();
       try {
         await pca.acquireTokenRedirect(loginRequest);
       } catch (e) {
         console.error('Token refresh on 401 failed', e);
+        toast.error('Your session expired. Please sign in again.');
       }
     }
 
