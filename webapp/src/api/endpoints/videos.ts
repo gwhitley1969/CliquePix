@@ -14,10 +14,16 @@ export async function getVideo(videoId: string): Promise<Video> {
   return res.data.data;
 }
 
-// Response fields arrive camelCased courtesy of the global interceptor.
+// Response shape per backend videos.ts getUploadUrl handler, camelized by the
+// global response interceptor. Block URLs are COMPLETE — each is a pre-signed
+// Azure Blob PUT with `?comp=block&blockid=<id>` already appended. The client
+// just issues `PUT <url>` with the block bytes as the body.
 export interface VideoUploadUrl {
   videoId: string;
-  blockUrls: string[];
+  blobPath: string;
+  blockSizeBytes: number;
+  blockCount: number;
+  blockUploadUrls: Array<{ blockId: string; url: string }>;
   commitUrl: string;
 }
 
@@ -32,22 +38,40 @@ export async function getVideoUploadUrl(
   return res.data.data;
 }
 
+// Commit response — the backend returns 202 Accepted with the minimal shape
+// below (NOT a full Video record). The feed refetch after commit or the
+// Web PubSub `video_ready` event surfaces the complete row.
+export interface VideoCommitResult {
+  videoId: string;
+  status: 'processing';
+  previewUrl?: string;
+  message?: string;
+}
+
 export async function commitVideoUpload(
   eventId: string,
   videoId: string,
   blockIds: string[],
-): Promise<Video & { previewUrl?: string }> {
-  const res = await api.post<{ data: Video & { previewUrl?: string } }>(
+): Promise<VideoCommitResult> {
+  const res = await api.post<{ data: VideoCommitResult }>(
     `/api/events/${eventId}/videos`,
     { video_id: videoId, block_ids: blockIds },
   );
   return res.data.data;
 }
 
+// Playback: `hlsManifest` is RAW M3U8 TEXT (not a URL) with per-segment SAS
+// URLs already rewritten by the backend. The client wraps it in a Blob URL
+// before passing to hls.js or the native video element. MP4 fallback and
+// poster are normal SAS URLs. All SAS windows are 15 minutes.
 export interface VideoPlayback {
-  hlsManifestUrl: string;
+  videoId: string;
+  hlsManifest: string;
   mp4FallbackUrl: string;
   posterUrl: string;
+  durationSeconds: number;
+  width: number;
+  height: number;
 }
 
 export async function getVideoPlayback(videoId: string): Promise<VideoPlayback> {

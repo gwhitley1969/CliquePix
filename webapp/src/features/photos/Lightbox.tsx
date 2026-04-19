@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, Download, X } from 'lucide-react';
 import type { Media } from '../../models';
 import { downloadBlob } from '../../lib/downloadBlob';
 import { toast } from 'sonner';
+import { VideoPlayer } from '../videos/VideoPlayer';
 
 export function Lightbox({
   media,
@@ -84,9 +85,13 @@ export function Lightbox({
             alt=""
             className="max-w-full max-h-full object-contain"
           />
+        ) : item.status === 'active' ? (
+          <VideoPlayer videoId={item.id} posterHint={item.posterUrl} />
         ) : (
-          <div className="text-center text-white/70 text-sm">
-            Video playback in the lightbox is coming soon. Tap the card preview to open the player.
+          <div className="text-center text-white/70 text-sm max-w-md">
+            {item.status === 'processing'
+              ? 'This video is still transcoding — check back in a minute.'
+              : 'This video isn\u2019t ready to play yet.'}
           </div>
         )}
         {index < media.length - 1 && (
