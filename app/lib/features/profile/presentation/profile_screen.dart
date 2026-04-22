@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../widgets/avatar_widget.dart';
+import '../../../widgets/branded_sliver_app_bar.dart';
 import '../../../widgets/confirm_destructive_dialog.dart';
 import '../../auth/presentation/auth_providers.dart';
 import '../../auth/domain/auth_state.dart';
@@ -22,39 +23,12 @@ class ProfileScreen extends ConsumerWidget {
       backgroundColor: const Color(0xFF0E1525),
       body: CustomScrollView(
         slivers: [
-          SliverAppBar(
-            expandedHeight: 120,
-            floating: false,
-            pinned: true,
-            backgroundColor: const Color(0xFF0E1525),
-            flexibleSpace: FlexibleSpaceBar(
-              title: ShaderMask(
-                shaderCallback: (bounds) => const LinearGradient(
-                  colors: [AppColors.violetAccent, Color(0xFFEC4899)],
-                ).createShader(bounds),
-                child: const Text(
-                  'Profile',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 22,
-                    color: Colors.white,
-                    letterSpacing: -0.3,
-                  ),
-                ),
-              ),
-              centerTitle: true,
-              background: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      const Color(0xFFEC4899).withValues(alpha: 0.1),
-                      const Color(0xFF0E1525),
-                    ],
-                  ),
-                ),
-              ),
+          const BrandedSliverAppBar(
+            screenTitle: 'Profile',
+            accentColor: Color(0xFFEC4899),
+            accentOpacity: 0.10,
+            screenTitleGradient: LinearGradient(
+              colors: [AppColors.violetAccent, Color(0xFFEC4899)],
             ),
           ),
           SliverToBoxAdapter(

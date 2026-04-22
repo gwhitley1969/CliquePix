@@ -40,6 +40,7 @@ This is a manual smoke test checklist to run before each beta release. Every ite
 - [ ] **Age gate — different account on same device** — sign out, register a NEW account with a different email → Entra sign-up form asks for DOB (new account). Independent of prior account's verification.
 - [ ] **Age gate — JWT claim check** — decode a post-login access token at `https://jwt.ms`. Verify `extension_<GUID>_dateOfBirth` is present in claims.
 - [ ] **Age gate — endpoint check** — unauth `curl -X POST https://func-cliquepix-fresh.azurewebsites.net/api/auth/verify` returns 401 with `UNAUTHORIZED`. `validate-age` endpoint returns 404 (deleted — expected).
+- [ ] **App shell — branded header on all 4 tabs** — after sign-in, tap through Home → Cliques → Notifications → Profile. Every tab shows the same branded hero: rounded app-icon logo (with a soft aqua glow) next to the "Clique Pix" wordmark in the aqua → blue → violet gradient, with the per-screen title ("Home" / "My Cliques" / "Notifications" / "Profile") in its own gradient below it. Each tab has a distinct background wash (aqua on Home, deep blue on Cliques, violet on Notifications, pink on Profile). Scroll the Home feed up — the branded hero collapses away, leaving a thin dark toolbar (with any per-screen actions like Refresh on Cliques / Clear All on Notifications). Scroll back to top — header reappears.
 
 ## 2. Cliques
 

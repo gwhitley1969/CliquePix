@@ -8,6 +8,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_gradients.dart';
 import '../../../models/event_model.dart';
 import '../../../models/clique_model.dart';
+import '../../../widgets/branded_sliver_app_bar.dart';
 import '../../../widgets/error_widget.dart';
 import '../../auth/domain/auth_state.dart';
 import '../../auth/domain/battery_optimization_service.dart';
@@ -116,38 +117,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       body: CustomScrollView(
         slivers: [
           // App bar
-          SliverAppBar(
-            expandedHeight: 100,
-            floating: false,
-            pinned: true,
-            backgroundColor: const Color(0xFF0E1525),
-            flexibleSpace: FlexibleSpaceBar(
-              title: ShaderMask(
-                shaderCallback: (bounds) => AppGradients.primary.createShader(bounds),
-                child: const Text(
-                  'Home',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 22,
-                    color: Colors.white,
-                    letterSpacing: -0.3,
-                  ),
-                ),
-              ),
-              centerTitle: true,
-              background: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      AppColors.electricAqua.withValues(alpha: 0.12),
-                      const Color(0xFF0E1525),
-                    ],
-                  ),
-                ),
-              ),
-            ),
+          const BrandedSliverAppBar(
+            screenTitle: 'Home',
           ),
 
           // Content — handle loading/error from both providers

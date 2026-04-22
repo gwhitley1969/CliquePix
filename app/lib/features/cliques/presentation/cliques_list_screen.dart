@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/app_gradients.dart';
+import '../../../widgets/branded_sliver_app_bar.dart';
 import '../../../widgets/empty_state_widget.dart';
 import '../../../widgets/error_widget.dart';
 import '../../../widgets/avatar_widget.dart';
@@ -62,11 +62,10 @@ class _CliquesListScreenState extends ConsumerState<CliquesListScreen>
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
           // Gradient header with brand personality
-          SliverAppBar(
-            expandedHeight: 120,
-            floating: false,
-            pinned: true,
-            backgroundColor: const Color(0xFF0E1525),
+          BrandedSliverAppBar(
+            screenTitle: 'My Cliques',
+            accentColor: AppColors.deepBlue,
+            accentOpacity: 0.15,
             actions: [
               IconButton(
                 icon: const Icon(Icons.refresh_rounded),
@@ -74,33 +73,6 @@ class _CliquesListScreenState extends ConsumerState<CliquesListScreen>
                 onPressed: () => ref.read(cliquesListProvider.notifier).refresh(),
               ),
             ],
-            flexibleSpace: FlexibleSpaceBar(
-              title: ShaderMask(
-                shaderCallback: (bounds) => AppGradients.primary.createShader(bounds),
-                child: const Text(
-                  'My Cliques',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 22,
-                    color: Colors.white,
-                    letterSpacing: -0.3,
-                  ),
-                ),
-              ),
-              centerTitle: true,
-              background: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      AppColors.deepBlue.withValues(alpha: 0.15),
-                      const Color(0xFF0E1525),
-                    ],
-                  ),
-                ),
-              ),
-            ),
           ),
 
           // Content

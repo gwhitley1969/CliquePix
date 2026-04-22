@@ -281,7 +281,19 @@ Used for:
 
 ---
 
-### 8.4 Icon Design
+### 8.4 In-App Branded Header
+
+Every tab root (Home, Cliques, Notifications, Profile) shows a persistent "Clique Pix" brand ribbon above its section title:
+
+- Rounded app-icon logo (56 × 56, 16 px corner radius) with a soft electric-aqua glow — smaller echo of the LoginScreen treatment.
+- "Clique Pix" wordmark (40 px, w700) in the primary brand gradient (`#00C2D1 → #2563EB → #7C3AED`) via `ShaderMask`.
+- The per-screen section title ("Home" / "My Cliques" / "Notifications" / "Profile") sits below the wordmark in its own gradient (primary on Home/Cliques, blue→violet on Notifications, violet→pink on Profile), anchored to the bottom of the expanded header.
+- Each tab keeps its own accent wash behind the hero (aqua / deep blue / violet / pink) so tabs feel distinct while the wordmark unifies them.
+- Implemented as a single reusable widget (`app/lib/widgets/branded_sliver_app_bar.dart`) so the brand bar is changed in one place.
+
+The wordmark is the hero element of the expanded header — it scrolls away with the header on content scroll, leaving only a thin toolbar with any per-screen actions. This keeps feeds, lists, and chats maximally tall on scroll while preserving strong brand presence at rest.
+
+### 8.5 Icon Design
 
 Concept:
 - Rounded square background with aqua → blue gradient

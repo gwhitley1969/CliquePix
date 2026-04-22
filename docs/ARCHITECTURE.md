@@ -941,6 +941,8 @@ Feature-based organization with clean separation of data, domain, and presentati
 
 **Post-creation invite prompt:** When creating an event with a NEW clique, `GoRouter.extra` passes `{cliqueId, cliqueName}` to Event Detail. On `initState`, a modal bottom sheet prompts the user to invite friends. `extra` is ephemeral (not in URL, not restorable from deep links) — the prompt fires once per creation.
 
+**Branded app bar on tab roots:** All four tab roots (Home, Cliques, Notifications, Profile) share `BrandedSliverAppBar` (`app/lib/widgets/branded_sliver_app_bar.dart`) — a pinned `SliverAppBar` with `expandedHeight: 260`, a rounded 56 px logo + "Clique Pix" gradient wordmark positioned in the `flexibleSpace` hero area, and the per-screen title anchored to the bottom. The widget takes `screenTitle`, `screenTitleGradient`, `accentColor`, `accentOpacity`, and `actions` so the four tabs keep their distinct accent washes (aqua / deep blue / violet / pink) while sharing a single source of truth for the brand mark. The wordmark scrolls away with the header hero on content scroll; the collapsed state is a thin 56 px toolbar carrying only the per-screen actions (refresh on Cliques, clear-all on Notifications). No other screens use this widget — full-screen children like Event Detail, camera capture, photo detail, video player, and DM threads keep their context-specific AppBars.
+
 ## Networking
 
 **Dio** as the HTTP client. Configure with:

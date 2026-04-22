@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/date_utils.dart';
+import '../../../widgets/branded_sliver_app_bar.dart';
 import '../../../widgets/error_widget.dart';
 import 'notifications_providers.dart';
 
@@ -58,11 +59,12 @@ class NotificationsScreen extends ConsumerWidget {
       backgroundColor: const Color(0xFF0E1525),
       body: CustomScrollView(
         slivers: [
-          SliverAppBar(
-            expandedHeight: 120,
-            floating: false,
-            pinned: true,
-            backgroundColor: const Color(0xFF0E1525),
+          BrandedSliverAppBar(
+            screenTitle: 'Notifications',
+            accentColor: AppColors.violetAccent,
+            screenTitleGradient: const LinearGradient(
+              colors: [AppColors.deepBlue, AppColors.violetAccent],
+            ),
             actions: [
               if (notificationsAsync.valueOrNull?.isNotEmpty ?? false)
                 IconButton(
@@ -71,35 +73,6 @@ class NotificationsScreen extends ConsumerWidget {
                   onPressed: () => _showClearAllDialog(context, ref),
                 ),
             ],
-            flexibleSpace: FlexibleSpaceBar(
-              title: ShaderMask(
-                shaderCallback: (bounds) => const LinearGradient(
-                  colors: [AppColors.deepBlue, AppColors.violetAccent],
-                ).createShader(bounds),
-                child: const Text(
-                  'Notifications',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 22,
-                    color: Colors.white,
-                    letterSpacing: -0.3,
-                  ),
-                ),
-              ),
-              centerTitle: true,
-              background: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      AppColors.violetAccent.withValues(alpha: 0.12),
-                      const Color(0xFF0E1525),
-                    ],
-                  ),
-                ),
-              ),
-            ),
           ),
           notificationsAsync.when(
             loading: () => const SliverFillRemaining(
