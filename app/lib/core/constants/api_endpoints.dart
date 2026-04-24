@@ -5,6 +5,13 @@ class ApiEndpoints {
   static const authVerify = '/api/auth/verify';
   static const usersMe = '/api/users/me';
 
+  // Avatar (profile picture)
+  static const avatarUploadUrl = '/api/users/me/avatar/upload-url';
+  static const avatarConfirm = '/api/users/me/avatar';
+  static const avatarDelete = '/api/users/me/avatar';
+  static const avatarFrame = '/api/users/me/avatar/frame';
+  static const avatarPrompt = '/api/users/me/avatar-prompt';
+
   // Cliques
   static const cliques = '/api/cliques';
   static String clique(String id) => '/api/cliques/$id';

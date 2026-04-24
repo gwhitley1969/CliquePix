@@ -2,34 +2,52 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../core/theme/app_colors.dart';
 
+/// User avatar — renders a CachedNetworkImage inside a gradient-ring circle
+/// when `imageUrl` (or `thumbUrl`) is present, otherwise falls back to
+/// initials. The gradient is auto-hashed from the user's display name
+/// unless `framePreset` (1..4) overrides it.
+///
+/// Size-aware URL selection: when `size < 64`, the 128px `thumbUrl` is
+/// preferred because it renders sharp on cards without pulling the full
+/// 512px original. For the profile hero (88pt) and anything larger, the
+/// full `imageUrl` is used.
 class AvatarWidget extends StatelessWidget {
   final String? imageUrl;
+  final String? thumbUrl;
   final String name;
   final double size;
   final bool showGradientRing;
+  final int? framePreset;
+  final String? cacheKey;
 
   const AvatarWidget({
     super.key,
     this.imageUrl,
+    this.thumbUrl,
     required this.name,
     this.size = 40,
     this.showGradientRing = true,
+    this.framePreset,
+    this.cacheKey,
   });
 
-  List<Color> _gradientForName(String name) {
-    final hash = name.hashCode.abs() % 5;
-    switch (hash) {
-      case 0:
-        return [AppColors.electricAqua, AppColors.deepBlue];
-      case 1:
-        return [AppColors.deepBlue, AppColors.violetAccent];
-      case 2:
-        return [AppColors.violetAccent, const Color(0xFFEC4899)];
-      case 3:
-        return [AppColors.electricAqua, AppColors.violetAccent];
-      default:
-        return [const Color(0xFFEC4899), AppColors.electricAqua];
+  static const List<List<Color>> _palette = [
+    [AppColors.electricAqua, AppColors.deepBlue],
+    [AppColors.deepBlue, AppColors.violetAccent],
+    [AppColors.violetAccent, Color(0xFFEC4899)],
+    [AppColors.electricAqua, AppColors.violetAccent],
+    [Color(0xFFEC4899), AppColors.electricAqua],
+  ];
+
+  /// Resolve a gradient pair from either an explicit preset (1..4 → palette
+  /// indices 0..3) or the display-name hash. Preset 0 falls back to the
+  /// hash-based gradient — treated as "auto-choose the default color".
+  List<Color> _resolveGradient() {
+    if (framePreset != null && framePreset! >= 1 && framePreset! <= 4) {
+      return _palette[framePreset! - 1];
     }
+    final hash = name.hashCode.abs() % _palette.length;
+    return _palette[hash];
   }
 
   @override
@@ -37,14 +55,26 @@ class AvatarWidget extends StatelessWidget {
     final initials = name.isNotEmpty
         ? name.split(' ').take(2).map((w) => w.isNotEmpty ? w[0].toUpperCase() : '').join()
         : '?';
-    final colors = _gradientForName(name);
+    final colors = _resolveGradient();
     final ringWidth = size * 0.06;
 
+    // Prefer thumb for card-size avatars. 64px is the break — below this
+    // the 128px thumb is 2x oversampled (fine for retina); above this we
+    // want the full-res original.
+    final preferThumb = size < 64 && thumbUrl != null && thumbUrl!.isNotEmpty;
+    final effectiveUrl = preferThumb ? thumbUrl : imageUrl;
+    final effectiveCacheKey = preferThumb && cacheKey != null
+        ? '${cacheKey}_thumb'
+        : cacheKey;
+
     Widget avatar;
-    if (imageUrl != null && imageUrl!.isNotEmpty) {
+    if (effectiveUrl != null && effectiveUrl.isNotEmpty) {
       avatar = CircleAvatar(
         radius: size / 2 - ringWidth - 1,
-        backgroundImage: CachedNetworkImageProvider(imageUrl!),
+        backgroundImage: CachedNetworkImageProvider(
+          effectiveUrl,
+          cacheKey: effectiveCacheKey,
+        ),
         backgroundColor: AppColors.softAquaBackground,
       );
     } else {

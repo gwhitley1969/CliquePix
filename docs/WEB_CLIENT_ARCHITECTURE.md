@@ -211,6 +211,28 @@ Mirrors `app/lib/features/videos/data/video_block_upload_service.dart`:
 - `features/photos/MediaUploader.tsx` routes video files through `uploadVideo()` with a progress bar (filename + percent + MB counter)
 - `features/photos/Lightbox.tsx` mounts `<VideoPlayer videoId=... />` when the item is an `active` video, shows a "transcoding" message for `processing`, and avoids hitting `/playback` on non-active videos (it returns 404 on those)
 
+## 8.5 Avatar upload + welcome prompt (shipped 2026-04-24)
+
+Matches mobile 1:1 in user flow and final image output. Code under `features/profile/`:
+
+- `useAvatarUpload.ts` — hook orchestrating the pipeline: filter bake (canvas + color matrix) → `browser-image-compression` to 512 px JPEG q85 → `getAvatarUploadUrl()` → direct `PUT` with `x-ms-blob-type: BlockBlob` → `confirmAvatar()` → `queryClient.setQueryData(['users', 'me'], user)`. Also exposes `remove`, `setFrame`, `setPrompt` mutations
+- `AvatarEditor.tsx` — Radix Dialog with `react-easy-crop` (1:1 aspect, round crop shape, pan + zoom slider). Filter row (Original / B&W / Warm / Cool) + frame preset row (5 gradient swatches). Save calls the hook
+- `AvatarWelcomePromptModal.tsx` — branded first-sign-in modal. Non-dismissible via overlay click (`onPointerDownOutside={e => e.preventDefault()}`). Three buttons: Add a Photo / Maybe Later / No Thanks. Escape or dismiss resolves to `later` (safer default than permanent dismiss)
+- `AvatarWelcomePromptGate.tsx` — invisible component mounted in `AppLayout`. Self-gates on the backend-computed `shouldPromptForAvatar` flag plus a session-local "already shown" React state. Wires the `yes` path through to a hidden `<input type="file">` + `AvatarEditor`
+- `ProfileScreen.tsx` — tappable avatar (hover shows a camera overlay), inline file picker, confetti via `canvas-confetti` on first-ever upload (gated on `localStorage['first_avatar_celebrated']`), Change/Remove text buttons
+
+**Filter matrices** in `useAvatarUpload.ts` are byte-identical to the mobile matrices in `app/lib/features/profile/data/avatar_repository.dart:_matrixFor` — the same user's Warm filter produces visually identical output on iOS, Android, and web.
+
+**`Avatar.tsx`** (in `components/`) now accepts `imageUrl`, `thumbUrl`, `framePreset`, `cacheBuster`. Prefers `thumbUrl` at `size < 64`, full `imageUrl` at 64+. Cache key is appended as `?_v=<cacheBuster>` so the 1-hour SAS rotation doesn't invalidate the HTTP cache (the key only changes when `avatar_updated_at` changes server-side).
+
+**New dependencies** (in `package.json`):
+- `react-easy-crop` — browser square-crop widget (parity with mobile `image_cropper`)
+- `canvas-confetti` + `@types/canvas-confetti` — first-upload celebration
+
+**CORS prerequisite** (verified 2026-04-24): Azure Blob Storage CORS on `stcliquepixprod` allows `GET` + `PUT` + `HEAD` + `OPTIONS` from `https://clique-pix.com` + `http://localhost:5173`, 3600 s preflight cache. Applies to all `blob` service operations, so avatar reads (`<img src>`) AND direct-PUT uploads (`PUT` with SAS) both work without additional configuration.
+
+**Not deployed yet**: the code shipped in the avatar branch, but web auto-deploys via the SWA GH Actions workflow on merge to `main`. Once merged, zero additional config needed — CORS is pre-set, backend endpoints are live, the component `Avatar.tsx` has defaults that keep the initials-fallback working while users haven't uploaded yet.
+
 ## 9. Landing page (public marketing surface at `/`)
 
 Lives under `features/landing/`. Public — no auth required. Composed of section components in `features/landing/sections/` plus shared primitives in `features/landing/components/`.
@@ -351,3 +373,4 @@ Vite runs on `http://localhost:5173` with HMR. The dev server hits the **product
 | #9 | Browser video upload + HLS playback — full mobile parity |
 | #10 | Public landing page at `/` — vibrant marketing surface |
 | #11 | HowItWorks: split Clique into its own step 2 |
+| (pending merge) | Avatar upload + first-sign-in welcome prompt — tappable Profile avatar, `react-easy-crop` square crop, filter presets (Original / B&W / Warm / Cool), frame presets (5 gradients), `canvas-confetti` on first upload, `AvatarWelcomePromptGate` mounted in AppLayout |

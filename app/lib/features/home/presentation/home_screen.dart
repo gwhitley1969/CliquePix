@@ -16,9 +16,14 @@ import '../../auth/presentation/auth_providers.dart';
 import '../../../services/telemetry_service.dart';
 import '../../events/presentation/events_providers.dart';
 import '../../cliques/presentation/cliques_providers.dart';
+import '../../profile/presentation/avatar_editor_screen.dart';
+import '../../profile/presentation/avatar_picker_sheet.dart';
+import '../../profile/presentation/avatar_providers.dart';
+import '../../profile/presentation/widgets/avatar_welcome_prompt.dart';
 import 'widgets/how_it_works_card.dart';
 import 'widgets/active_event_card.dart';
 import 'widgets/clique_quick_start_chips.dart';
+import 'dart:io';
 
 enum _HomeState { brandNew, hasCliquesNoActive, hasActiveEvents, onlyExpired }
 
@@ -33,6 +38,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Timer? _countdownTimer;
   bool _howItWorksDismissed = false;
   bool _prefsLoaded = false;
+  // Session-local guard — backend's `should_prompt_for_avatar` is the
+  // persistent gate; this prevents re-showing the prompt if the user
+  // navigates away from Home and back during the same session.
+  bool _avatarPromptShown = false;
 
   @override
   void initState() {
@@ -63,6 +72,62 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       final status = await Permission.ignoreBatteryOptimizations.status;
       if (status.isGranted) telemetry.record('battery_exempt_granted');
     });
+
+    // First-sign-in avatar welcome prompt. Gated on the backend flag
+    // (persistent across reinstall/devices) AND a session-local flag
+    // (so navigating Home → Cliques → Home doesn't re-prompt).
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted || _avatarPromptShown) return;
+      final auth = ref.read(authStateProvider);
+      if (auth is! AuthAuthenticated) return;
+      if (!auth.user.shouldPromptForAvatar) return;
+      _avatarPromptShown = true;
+      await _showAvatarWelcomePrompt();
+    });
+  }
+
+  Future<void> _showAvatarWelcomePrompt() async {
+    final telemetry = ref.read(telemetryServiceProvider);
+    telemetry.record('avatar_prompt_shown');
+    final choice = await AvatarWelcomePrompt.show(context);
+    if (!mounted) return;
+    final repo = ref.read(avatarRepositoryProvider);
+    switch (choice) {
+      case AvatarWelcomeChoice.yes:
+        // Launch the same picker/editor pipeline used from Profile.
+        final pickerChoice = await AvatarPickerSheet.show(context, canRemove: false);
+        if (!mounted || pickerChoice == null) return;
+        final picked = pickerChoice == AvatarPickerResult.takePhoto
+            ? await repo.pickFromCamera()
+            : await repo.pickFromGallery();
+        if (!mounted || picked == null) return;
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => AvatarEditorScreen(sourceFile: File(picked.path)),
+          ),
+        );
+        break;
+      case AvatarWelcomeChoice.later:
+        try {
+          final updated = await repo.snoozePrompt();
+          if (!mounted) return;
+          ref.read(authStateProvider.notifier).updateUserAvatar(updated);
+          telemetry.record('avatar_prompt_snoozed');
+        } catch (_) {
+          // Non-fatal — user will just see the prompt again next launch.
+        }
+        break;
+      case AvatarWelcomeChoice.no:
+        try {
+          final updated = await repo.dismissPrompt();
+          if (!mounted) return;
+          ref.read(authStateProvider.notifier).updateUserAvatar(updated);
+          telemetry.record('avatar_prompt_dismissed');
+        } catch (_) {
+          // Non-fatal — will be re-prompted next launch, minor UX nit.
+        }
+        break;
+    }
   }
 
   @override

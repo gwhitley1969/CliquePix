@@ -92,6 +92,12 @@
             android:name="flutterEmbedding"
             android:value="2" />
 
+        <!-- image_cropper's uCrop backend (avatar square-crop UI) -->
+        <activity
+            android:name="com.yalantis.ucrop.UCropActivity"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
+
     </application>
 
     <!-- Required for file provider (image_picker) and url_launcher scheme resolution -->

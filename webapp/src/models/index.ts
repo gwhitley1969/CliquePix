@@ -1,10 +1,29 @@
-export interface User {
+/**
+ * Avatar denormalization shape shared by every user-bearing model. Comes
+ * back from the backend (post-camelize) as a cluster of four fields. Kept
+ * together here so adding a fifth field (e.g., a future badge) is a
+ * single-point update.
+ */
+export interface AvatarFields {
+  avatarUrl?: string | null;
+  avatarThumbUrl?: string | null;
+  avatarUpdatedAt?: string | null;
+  avatarFramePreset?: number;
+}
+
+export interface User extends AvatarFields {
   id: string;
   emailOrPhone: string;
   displayName: string;
-  avatarUrl?: string | null;
   createdAt?: string;
   ageVerified?: boolean;
+  /**
+   * Computed by backend: true when avatar_blob_path is null AND the user
+   * has not yet dismissed/snoozed the first-sign-in welcome prompt. Used
+   * by the web app shell to show the `AvatarWelcomePromptModal` exactly
+   * once per onboarding.
+   */
+  shouldPromptForAvatar?: boolean;
 }
 
 export interface Clique {
@@ -17,10 +36,9 @@ export interface Clique {
   createdAt?: string;
 }
 
-export interface CliqueMember {
+export interface CliqueMember extends AvatarFields {
   userId: string;
   displayName: string;
-  avatarUrl?: string | null;
   role: 'owner' | 'member';
   joinedAt: string;
 }
@@ -32,6 +50,11 @@ export interface CliqueEvent {
   name: string;
   description?: string | null;
   createdByUserId: string;
+  createdByName?: string;
+  createdByAvatarUrl?: string | null;
+  createdByAvatarThumbUrl?: string | null;
+  createdByAvatarUpdatedAt?: string | null;
+  createdByAvatarFramePreset?: number;
   retentionHours: 24 | 72 | 168;
   status: 'active' | 'expired';
   createdAt: string;
@@ -46,6 +69,12 @@ export interface MediaBase {
   uploadedByUserId: string;
   // Joined from users.display_name at read time; matches backend enriched shape.
   uploadedByName?: string;
+  // Avatar denormalization for the uploader. Matches the prefix used
+  // server-side (uploaded_by_avatar_*) after camelize conversion.
+  uploadedByAvatarUrl?: string | null;
+  uploadedByAvatarThumbUrl?: string | null;
+  uploadedByAvatarUpdatedAt?: string | null;
+  uploadedByAvatarFramePreset?: number;
   createdAt: string;
   status: 'pending' | 'active' | 'processing' | 'rejected' | 'deleted';
   // Backend enriched shape: reactionCounts is a { type -> count } map, and
@@ -98,7 +127,19 @@ export interface DmThread {
     id: string;
     displayName: string;
     avatarUrl?: string | null;
+    avatarThumbUrl?: string | null;
+    avatarUpdatedAt?: string | null;
+    avatarFramePreset?: number;
   };
+  // Backend also flattens these at the top level (other_user_* prefix) so
+  // either shape works. Pre-camelize fields kept as optional aliases so
+  // consumers tolerate either response shape during rollouts.
+  otherUserId?: string;
+  otherUserName?: string;
+  otherUserAvatarUrl?: string | null;
+  otherUserAvatarThumbUrl?: string | null;
+  otherUserAvatarUpdatedAt?: string | null;
+  otherUserAvatarFramePreset?: number;
   lastMessage?: {
     body: string;
     createdAt: string;
@@ -112,6 +153,11 @@ export interface DmMessage {
   id: string;
   threadId: string;
   senderUserId: string;
+  senderName?: string;
+  senderAvatarUrl?: string | null;
+  senderAvatarThumbUrl?: string | null;
+  senderAvatarUpdatedAt?: string | null;
+  senderAvatarFramePreset?: number;
   body: string;
   createdAt: string;
 }

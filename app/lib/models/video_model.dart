@@ -6,6 +6,10 @@ class VideoModel {
   final String eventId;
   final String uploadedByUserId;
   final String? uploadedByName;
+  final String? uploadedByAvatarUrl;
+  final String? uploadedByAvatarThumbUrl;
+  final DateTime? uploadedByAvatarUpdatedAt;
+  final int uploadedByAvatarFramePreset;
   final String? posterUrl;
   final String? mp4FallbackUrl;
   /// Instant-preview SAS URL for the ORIGINAL blob. Populated by the backend
@@ -32,6 +36,10 @@ class VideoModel {
     required this.eventId,
     required this.uploadedByUserId,
     this.uploadedByName,
+    this.uploadedByAvatarUrl,
+    this.uploadedByAvatarThumbUrl,
+    this.uploadedByAvatarUpdatedAt,
+    this.uploadedByAvatarFramePreset = 0,
     this.posterUrl,
     this.mp4FallbackUrl,
     this.previewUrl,
@@ -49,6 +57,12 @@ class VideoModel {
     required this.expiresAt,
   });
 
+  /// Stable cache key for the uploader's avatar.
+  String? get uploadedByAvatarCacheKey {
+    if (uploadedByAvatarUrl == null) return null;
+    return 'avatar_${uploadedByUserId}_v${uploadedByAvatarUpdatedAt?.millisecondsSinceEpoch ?? 0}';
+  }
+
   static int? _toInt(dynamic v) {
     if (v == null) return null;
     if (v is num) return v.toInt();
@@ -62,6 +76,13 @@ class VideoModel {
       eventId: json['event_id'] as String,
       uploadedByUserId: json['uploaded_by_user_id'] as String,
       uploadedByName: json['uploaded_by_name'] as String?,
+      uploadedByAvatarUrl: json['uploaded_by_avatar_url'] as String?,
+      uploadedByAvatarThumbUrl: json['uploaded_by_avatar_thumb_url'] as String?,
+      uploadedByAvatarUpdatedAt: json['uploaded_by_avatar_updated_at'] == null
+          ? null
+          : DateTime.parse(json['uploaded_by_avatar_updated_at'] as String),
+      uploadedByAvatarFramePreset:
+          (json['uploaded_by_avatar_frame_preset'] as num?)?.toInt() ?? 0,
       posterUrl: json['poster_url'] as String?,
       mp4FallbackUrl: json['mp4_fallback_url'] as String?,
       previewUrl: json['preview_url'] as String?,

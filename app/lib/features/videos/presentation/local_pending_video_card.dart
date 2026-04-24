@@ -1,15 +1,18 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/date_utils.dart';
 import '../../../widgets/avatar_widget.dart';
+import '../../auth/domain/auth_state.dart';
+import '../../auth/presentation/auth_providers.dart';
 import '../domain/local_pending_video.dart';
 
 /// Feed card for a local pending video — the uploader's in-progress upload
 /// that exists only on their device. Always tappable for local file playback.
-class LocalPendingVideoCard extends StatelessWidget {
+class LocalPendingVideoCard extends ConsumerWidget {
   final LocalPendingVideo localVideo;
   final String eventId;
 
@@ -20,7 +23,9 @@ class LocalPendingVideoCard extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final auth = ref.watch(authStateProvider);
+    final currentUser = auth is AuthAuthenticated ? auth.user : null;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppTheme.standardPadding, vertical: 8),
       child: Card(
@@ -36,7 +41,14 @@ class LocalPendingVideoCard extends StatelessWidget {
               padding: const EdgeInsets.all(12),
               child: Row(
                 children: [
-                  const AvatarWidget(name: 'You', size: 36),
+                  AvatarWidget(
+                    name: currentUser?.displayName ?? 'You',
+                    imageUrl: currentUser?.avatarUrl,
+                    thumbUrl: currentUser?.avatarThumbUrl,
+                    cacheKey: currentUser?.avatarCacheKey,
+                    framePreset: currentUser?.avatarFramePreset,
+                    size: 36,
+                  ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(

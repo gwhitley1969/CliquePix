@@ -62,7 +62,14 @@ class VideoCardWidget extends ConsumerWidget {
                 padding: const EdgeInsets.all(12),
                 child: Row(
                   children: [
-                    AvatarWidget(name: video.uploadedByName ?? 'User', size: 36),
+                    AvatarWidget(
+                      name: video.uploadedByName ?? 'User',
+                      imageUrl: video.uploadedByAvatarUrl,
+                      thumbUrl: video.uploadedByAvatarThumbUrl,
+                      cacheKey: video.uploadedByAvatarCacheKey,
+                      framePreset: video.uploadedByAvatarFramePreset,
+                      size: 36,
+                    ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Column(

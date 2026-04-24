@@ -179,7 +179,25 @@ A persistent group of people (e.g., “Girls Night Out” or bachelor party)
 
 ---
 
-### 5.13 Notifications
+### 5.13 Profile Pictures (Avatars)
+
+Users can upload a headshot that replaces their initials everywhere in the app. The photo shows on the Profile screen, on every photo and video card they've ever uploaded, in clique member lists, and in DM thread headers + message bubbles.
+
+- **First-sign-in welcome prompt** on the Home (Events) screen after a new user passes the age gate: "Make yourself known — Add a photo so friends recognize who's sharing." Three choices: **Yes** (opens the editor immediately), **Maybe Later** (re-prompts in 7 days), **No Thanks** (never prompts again). State persisted server-side so the choice survives reinstall and works across mobile + web
+- **Tappable profile avatar** on the Profile screen — tap the gradient ring to open a bottom sheet (Take Photo / Choose from Library / Remove)
+- **Premium polish**:
+  - Animated pulse on the empty-state gradient ring to signal "tap me"
+  - First-visit dismissible pill "Tap to add your photo ✨"
+  - Native square-crop UI (iOS TOCropViewController, Android uCrop, web react-easy-crop)
+  - Four filter presets: Original / B&W / Warm / Cool
+  - Five selectable gradient frame colors (auto-hash from name by default)
+  - Live "feed-card mockup" preview during crop
+  - Haptic feedback + confetti burst on the user's first-ever upload
+- Images compressed to 512×512 JPEG quality 85. Backend generates a 128×128 thumbnail used on card-size avatars; the 512px original serves the 88pt profile hero
+- Photo and video cards show the uploader's current headshot; DM threads and chat headers show the other user's current headshot
+- Removing an avatar reverts to the initials-fallback everywhere; existing photos and videos re-show the initials after the next 30-second feed poll
+
+### 5.14 Notifications
 - Push notifications via FCM (Firebase Cloud Messaging)
 - Notification types:
   - New photo added to event ("New Photo!")
@@ -194,7 +212,7 @@ A persistent group of people (e.g., “Girls Night Out” or bachelor party)
 
 ---
 
-### 5.14 Privacy & Controls
+### 5.15 Privacy & Controls
 - Private by default
 - No public feed
 - **Privacy Policy** — accessible from the profile screen, opens `https://clique-pix.com/privacy.html` in an in-app browser. Covers photos, videos, DMs, data retention, security, and user rights. 14 sections.

@@ -93,7 +93,14 @@ class DmThreadListScreen extends ConsumerWidget {
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
                       child: Row(
                         children: [
-                          AvatarWidget(name: thread.otherUserName, size: 44),
+                          AvatarWidget(
+                            name: thread.otherUserName,
+                            imageUrl: thread.otherUserAvatarUrl,
+                            thumbUrl: thread.otherUserAvatarThumbUrl,
+                            cacheKey: thread.otherUserAvatarCacheKey,
+                            framePreset: thread.otherUserAvatarFramePreset,
+                            size: 44,
+                          ),
                           const SizedBox(width: 14),
                           Expanded(
                             child: Column(

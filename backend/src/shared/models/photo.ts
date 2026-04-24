@@ -80,7 +80,14 @@ export interface PhotoWithUrls extends Photo {
   thumbnail_url: string | null;
   reaction_counts: Record<string, number>;
   user_reactions: string[];
-  uploaded_by_name?: string;
+  // Uploader denormalization. null when the uploader has been deleted
+  // (photos.uploaded_by_user_id FK is ON DELETE SET NULL) — callers
+  // must handle nulls rather than undefineds.
+  uploaded_by_name: string | null;
+  uploaded_by_avatar_url: string | null;
+  uploaded_by_avatar_thumb_url: string | null;
+  uploaded_by_avatar_updated_at: string | null;
+  uploaded_by_avatar_frame_preset: number;
 }
 
 /**
@@ -96,7 +103,13 @@ export interface VideoWithUrls extends Photo {
   hls_manifest?: string;
   reaction_counts: Record<string, number>;
   user_reactions: string[];
-  uploaded_by_name?: string;
+  // Uploader denormalization. null when the uploader has been deleted
+  // (photos.uploaded_by_user_id FK is ON DELETE SET NULL).
+  uploaded_by_name: string | null;
+  uploaded_by_avatar_url: string | null;
+  uploaded_by_avatar_thumb_url: string | null;
+  uploaded_by_avatar_updated_at: string | null;
+  uploaded_by_avatar_frame_preset: number;
   // Instant preview: a read-only SAS URL for the ORIGINAL blob, returned only
   // when the caller is the uploader AND the video is still processing/pending.
   // The uploader's client uses this to play the video immediately without

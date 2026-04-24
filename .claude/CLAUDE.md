@@ -92,6 +92,17 @@ If a feature does not directly support one of these loops, it does not belong in
 - **Per-user video cap:** `PER_USER_VIDEO_LIMIT = 10` (originally 5; bumped 2026-04-08 — see Decision Q7 in `docs/VIDEO_ARCHITECTURE_DECISIONS.md`). Counts videos in `pending`/`processing`/`active`. Backend enforces at the upload-url endpoint with `VIDEO_LIMIT_REACHED` error code.
 - **Backend error code propagation to client:** the Flutter `_friendlyError` in `video_upload_screen.dart` reads `e.response?.data['error']['code']` from a `DioException` and switches on the structured backend error code — NOT on `e.toString()` (which only contains the message field). Pattern: switch on the canonical code, fall through to `errorMap['message']` for unknown codes, then to network/socket checks, then to a generic fallback. Mirror this pattern wherever client UX maps backend error codes.
 
+**Avatars (v1, migration 010 — shipped 2026-04-24)**
+- Profile picture upload replacing initials-in-a-gradient-ring fallback on Profile hero, photo/video feed cards, clique member lists, DM thread + chat headers
+- First-sign-in welcome prompt on Home screen — three choices (Yes / Maybe Later / No Thanks) with backend-persisted state (`avatar_prompt_dismissed`, `avatar_prompt_snoozed_until`) so the decision survives reinstall + honors across mobile/web devices
+- Square crop via `image_cropper` (mobile) / `react-easy-crop` (web) — native UIs on both platforms
+- 4 filter presets (Original / B&W / Warm / Cool) + 5 gradient frame presets (0 = auto-hash from name, 1..4 = explicit palette). Identical filter matrices and gradients across mobile + web
+- Compression: 512×512 JPEG q85 (original), 128×128 JPEG q75 (sharp thumb generated synchronously at confirm time)
+- Avatar view SAS: 1-hour expiry (longer than photos/videos because avatars render on every screen). Client-side cache key: `avatar_${userId}_v${avatar_updated_at.ms}` — URL churns hourly, cache key only churns on actual avatar change
+- Confetti burst on first-ever upload (one-shot via `canvas-confetti` on web / `confetti` package on Flutter, gated on SharedPreferences/localStorage flag)
+- `AuthNotifier.updateUserAvatar` is pure in-memory state swap — MUST NOT trigger token refresh (spurious calls would disturb the 5-layer Entra defense counters)
+- Full pipeline details: Media Handling Pipeline → Avatar Pipeline below. Schema: `docs/ARCHITECTURE.md` §7 users table
+
 ### Do Not Build
 
 - ~~Chat, comments, or threads~~ (event-centric 1:1 DMs implemented — no group chat, no global inbox, no attachments)
@@ -365,6 +376,12 @@ GET    /api/dm-threads/{threadId}/messages
 POST   /api/dm-threads/{threadId}/messages
 PATCH  /api/dm-threads/{threadId}/read
 POST   /api/realtime/dm/negotiate
+
+POST   /api/users/me/avatar/upload-url
+POST   /api/users/me/avatar               # confirm upload; runs sharp thumb gen
+DELETE /api/users/me/avatar               # removes both blobs + nulls DB columns
+PATCH  /api/users/me/avatar/frame         # body: { frame_preset: 0..4 }
+POST   /api/users/me/avatar-prompt        # body: { action: 'dismiss' | 'snooze' }
 ```
 
 ### Photo Upload Flow
@@ -682,7 +699,7 @@ Full implementation details, architecture diagrams, and Kusto queries: `docs/ENT
 
 ## Media Handling Pipeline
 
-Media uploads are the most performance-critical path in Clique Pix. Photos and videos have radically different shapes — photos can be compressed cheaply client-side to 500KB–1.5MB, while videos are 50–150MB even after sensible encoding and must be transcoded server-side.
+Media uploads are the most performance-critical path in Clique Pix. Photos and videos have radically different shapes — photos can be compressed cheaply client-side to 500KB–1.5MB, while videos are 50–150MB even after sensible encoding and must be transcoded server-side. Avatars are a third shape — small, square, per-user fixed paths, and the only media type where the backend runs synchronous thumbnail generation at confirm time.
 
 ### Photo Pipeline — Client Side (Before Upload)
 1. User selects or captures photo
@@ -781,6 +798,50 @@ The full ffmpeg invocations and parameter rationale live in `docs/VIDEO_ARCHITEC
 - Tap opens the in-app player (`video_player` + `chewie`)
 - While processing, card shows a placeholder with a spinner and "Processing…" label; transitions to the poster state when `video_ready` arrives (via Web PubSub or feed refresh)
 - Player prefers HLS; falls back to MP4 on HLS failure
+
+### Avatar Pipeline (added 2026-04-24, migration 010)
+
+User headshots that replace the initials-in-a-gradient-ring fallback everywhere a user is surfaced (Profile hero, photo/video feed cards, clique member lists, DM threads + chat headers). Single blob container (`photos`, name historical) with per-user fixed paths under the `avatars/` virtual prefix — each new upload supersedes the prior one, no accumulation, no orphan tracking.
+
+**Blob paths (fixed per user):**
+```
+avatars/{userId}/original.jpg     # 512×512 JPEG q85
+avatars/{userId}/thumb.jpg        # 128×128 JPEG q75 (sharp, generated at confirm time)
+```
+
+**Client pipeline (both Flutter and web):**
+1. Pick source (camera or gallery / file input)
+2. Square crop via native cropper (`image_cropper` TOCropViewController/uCrop on mobile; `react-easy-crop` on web)
+3. Optional filter — Original / B&W / Warm / Cool. Baked via `Canvas` + `ColorFilter.matrix` (Flutter) or `getImageData` + matrix loop (web). Identical matrices across platforms
+4. Compress to 512px JPEG quality 85 (`flutter_image_compress` / `browser-image-compression`)
+5. `POST /api/users/me/avatar/upload-url` → 5-min User Delegation SAS (write+create) → direct PUT to blob
+6. `POST /api/users/me/avatar` → backend verifies blob, size ≤ 3MB, content-type JPEG/PNG; runs `sharp` inline to produce 128px thumb; stamps `avatar_updated_at = NOW()`; returns enriched `User`
+
+**Backend propagation rules:**
+- 1-hour view SAS via `generateViewSas(path, 3600)` (longer than photos' 5-min / videos' 15-min — avatars render on every screen; shorter expiry would thrash `cached_network_image`)
+- **Cache key stability:** clients must set `cacheKey: 'avatar_${userId}_v${avatar_updated_at.ms}'` on `CachedNetworkImageProvider` (Flutter) / append as `?_v=` query param (web). URL churns every hour; cache key only churns when the user actually changes their avatar
+- Every response that carries user denormalization (14 handlers: auth, photos, videos, events, cliques, dm) runs `enrichUserAvatar` from `backend/src/shared/services/avatarEnricher.ts` — single source of truth for SAS signing
+- `buildAuthUserResponse` in the same helper is the canonical shape emitted by `authVerify` / `getMe` / all avatar-mutation endpoints. Single shape → one Flutter `UserModel.fromJson` deserializer
+
+**First-sign-in welcome prompt (migration 010 added the state):**
+Backend computes `should_prompt_for_avatar` on every auth response as `avatar_blob_path IS NULL AND NOT avatar_prompt_dismissed AND (avatar_prompt_snoozed_until IS NULL OR avatar_prompt_snoozed_until < NOW())`. Flutter triggers `AvatarWelcomePrompt` on `HomeScreen.initState` once per session when true; web mounts `AvatarWelcomePromptGate` in `AppLayout`. Three actions:
+- **Yes** — opens the same picker/editor pipeline used from Profile. Upload success implicitly clears the flag via `avatar_blob_path IS NOT NULL`
+- **Maybe Later** — `POST /api/users/me/avatar-prompt {action: 'snooze'}` → sets `avatar_prompt_snoozed_until = NOW() + 7 days`
+- **No Thanks** — `POST /api/users/me/avatar-prompt {action: 'dismiss'}` → sets `avatar_prompt_dismissed = TRUE`, never re-prompts
+- Back-button / tap-outside behaves like "Maybe Later" (safer default than permanent dismiss from accidental fat-finger)
+
+**Frame presets (0..4):**
+- `0` = auto-gradient from `displayName.hashCode` — the historical default that still ships for users who never touch the preset picker
+- `1..4` = explicit palette indices. Palette matches mobile `AvatarWidget._palette` and web `Avatar.palettes` 1:1 so the same user renders the same gradient on every platform
+- Updated via `PATCH /api/users/me/avatar/frame` — takes effect on the initials-fallback ring too, not just the uploaded-photo ring
+
+**AuthNotifier rule:** client-side `AuthNotifier.updateUserAvatar(UserModel)` is a pure in-memory state swap. It MUST NOT trigger a token refresh — spurious refresh calls would disturb the 5-layer Entra defense's counters. The backend's confirm response already returns a fresh enriched user; just drop it into `AuthAuthenticated(user)`.
+
+**Rate limiting:** APIM policy includes a per-user 10/min cap on `/api/users/me/avatar*` sub-paths (keyed on JWT subject with IP fallback), in addition to the global 120/min. Avatar uploads aren't high-frequency; the stricter sub-limit is abuse protection.
+
+**Account deletion:** `deleteMe` in `auth.ts` deletes both avatar blobs before the cascade row delete. Idempotent (`deleteIfExists`), so missing blobs don't block the flow.
+
+**Out of scope (for v1):** animated/video avatars, Gravatar/social imports, multiple avatars per user, per-clique avatar overrides, reactions on avatars, AI-generated avatars.
 
 ---
 
@@ -1258,8 +1319,10 @@ A user can:
 14. Receive push notifications when new photos are added and when videos finish processing (uploader gets the Web PubSub signal but NOT the FCM push for their own video)
 15. See backend error codes mapped to friendly messages on the upload screen (`VIDEO_LIMIT_REACHED`, `DURATION_EXCEEDED`, etc. — read from `e.response.data.error.code` on a `DioException`)
 16. See photos and videos automatically disappear from the cloud when the event expires
+17. **Upload a profile picture** (headshot) that replaces their initials everywhere — Profile hero, their own photo/video feed cards, DM threads. Tap the gradient ring → bottom sheet → crop → filter → frame → Save. Other clique members see the uploader's headshot on their cards on the next feed poll
+18. **Get a branded welcome prompt on first sign-in** asking if they want to add a photo now, with Yes / Maybe Later (7-day snooze) / No Thanks (never re-prompt) options. Choice persists server-side so it's honored across reinstall + cross-device
 
-If all sixteen of these work cleanly on both iOS and Android, v1 is done. (Local-first uploader playback replaces the preview_url-based instant preview as the primary uploader UX — see `docs/VIDEO_LOCAL_FIRST_UPLOADER_ARCHITECTURE.md`.)
+If all eighteen of these work cleanly on both iOS and Android, v1 is done. (Local-first uploader playback replaces the preview_url-based instant preview as the primary uploader UX — see `docs/VIDEO_LOCAL_FIRST_UPLOADER_ARCHITECTURE.md`.)
 
 ---
 
@@ -1277,5 +1340,5 @@ If all sixteen of these work cleanly on both iOS and Android, v1 is done. (Local
 | `docs/NOTIFICATION_SYSTEM.md` | Push notification architecture: all 7 notification types, FCM payloads, Web PubSub events, token lifecycle, tap routing |
 | `docs/VIDEO_LOCAL_FIRST_UPLOADER_ARCHITECTURE.md` | Local-first uploader playback handoff doc — architecture and implementation status |
 | `docs/BETA_TEST_PLAN.md` | Manual smoke test checklist (60+ items) for beta releases — dual-device testing |
-| `docs/BETA_OPERATIONS_RUNBOOK.md` | Incident response, troubleshooting, DB backup/restore, key rotation, cost monitoring |
-| `docs/WEB_CLIENT_ARCHITECTURE.md` | Web client architecture, deployment, CORS/CSP config, MSAL.js setup, deferred video upload parity |
+| `docs/BETA_OPERATIONS_RUNBOOK.md` | Incident response, troubleshooting, DB backup/restore, key rotation, cost monitoring. §7 includes avatar telemetry + welcome-prompt funnel KQL queries; §2 adds avatar-specific incident playbooks |
+| `docs/WEB_CLIENT_ARCHITECTURE.md` | Web client architecture, deployment, CORS/CSP config, MSAL.js setup, video upload parity, §8.5 avatar upload + welcome prompt |

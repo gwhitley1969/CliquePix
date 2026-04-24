@@ -1,7 +1,10 @@
+import 'dart:io';
+import 'package:confetti/confetti.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../widgets/avatar_widget.dart';
@@ -9,6 +12,12 @@ import '../../../widgets/branded_sliver_app_bar.dart';
 import '../../../widgets/confirm_destructive_dialog.dart';
 import '../../auth/presentation/auth_providers.dart';
 import '../../auth/domain/auth_state.dart';
+import '../../../models/user_model.dart';
+import 'avatar_editor_screen.dart';
+import 'avatar_picker_sheet.dart';
+import 'avatar_providers.dart';
+import 'widgets/animated_empty_avatar.dart';
+import 'widgets/first_visit_hint.dart';
 
 const _supportEmail = 'support@xtend-ai.com';
 
@@ -59,11 +68,7 @@ class ProfileScreen extends ConsumerWidget {
                       ),
                       child: Column(
                         children: [
-                          AvatarWidget(
-                            name: authState.user.displayName,
-                            imageUrl: authState.user.avatarUrl,
-                            size: 88,
-                          ),
+                          _TappableAvatarSection(user: authState.user),
                           const SizedBox(height: 16),
                           Text(
                             authState.user.displayName,
@@ -378,6 +383,152 @@ class _VersionTapCounterState extends ConsumerState<_VersionTapCounter> {
             ),
           ),
         ],
+      ],
+    );
+  }
+}
+
+/// Tappable profile avatar with first-visit hint, animated empty-state
+/// pulse, picker sheet wiring, and a confetti burst on the user's first
+/// successful upload. Lives inline in this file because it's only used
+/// on the Profile screen — extracting it to a separate file would make
+/// the session-local "has confetti already fired" state harder to reason
+/// about.
+class _TappableAvatarSection extends ConsumerStatefulWidget {
+  final UserModel user;
+  const _TappableAvatarSection({required this.user});
+
+  @override
+  ConsumerState<_TappableAvatarSection> createState() => _TappableAvatarSectionState();
+}
+
+class _TappableAvatarSectionState extends ConsumerState<_TappableAvatarSection> {
+  static const _confettiPrefsKey = 'first_avatar_celebrated';
+  final _confetti = ConfettiController(duration: const Duration(milliseconds: 1500));
+
+  @override
+  void dispose() {
+    _confetti.dispose();
+    super.dispose();
+  }
+
+  Future<void> _onTap() async {
+    final user = widget.user;
+    HapticFeedback.selectionClick();
+    final choice = await AvatarPickerSheet.show(
+      context,
+      canRemove: user.avatarUrl != null,
+    );
+    if (!mounted || choice == null) return;
+    switch (choice) {
+      case AvatarPickerResult.takePhoto:
+      case AvatarPickerResult.chooseFromLibrary:
+        await _launchEditor(fromCamera: choice == AvatarPickerResult.takePhoto);
+        break;
+      case AvatarPickerResult.remove:
+        await _removeAvatar();
+        break;
+    }
+  }
+
+  Future<void> _launchEditor({required bool fromCamera}) async {
+    final repo = ref.read(avatarRepositoryProvider);
+    final pick = fromCamera ? await repo.pickFromCamera() : await repo.pickFromGallery();
+    if (!mounted || pick == null) return;
+    final result = await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => AvatarEditorScreen(sourceFile: File(pick.path)),
+      ),
+    );
+    if (!mounted || result == null) return;
+    // Fire confetti on the user's first-ever successful upload.
+    final prefs = await SharedPreferences.getInstance();
+    if (!(prefs.getBool(_confettiPrefsKey) ?? false)) {
+      await prefs.setBool(_confettiPrefsKey, true);
+      HapticFeedback.mediumImpact();
+      _confetti.play();
+    } else {
+      HapticFeedback.lightImpact();
+    }
+  }
+
+  Future<void> _removeAvatar() async {
+    final confirm = await confirmDestructive(
+      context,
+      title: 'Remove avatar?',
+      body: 'Your initials will be shown on photos, videos, and messages instead.',
+      confirmLabel: 'Remove',
+    );
+    if (!confirm || !mounted) return;
+    try {
+      final updated = await ref.read(avatarRepositoryProvider).deleteAvatar();
+      ref.read(authStateProvider.notifier).updateUserAvatar(updated);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Avatar removed')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to remove avatar: $e')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final user = widget.user;
+    final hasAvatar = user.avatarUrl != null;
+    return Stack(
+      alignment: Alignment.center,
+      clipBehavior: Clip.none,
+      children: [
+        Column(
+          children: [
+            if (!hasAvatar) const FirstVisitHint(),
+            if (hasAvatar)
+              GestureDetector(
+                onTap: _onTap,
+                behavior: HitTestBehavior.opaque,
+                child: AvatarWidget(
+                  name: user.displayName,
+                  imageUrl: user.avatarUrl,
+                  thumbUrl: user.avatarThumbUrl,
+                  cacheKey: user.avatarCacheKey,
+                  framePreset: user.avatarFramePreset,
+                  size: 88,
+                ),
+              )
+            else
+              AnimatedEmptyAvatar(
+                name: user.displayName,
+                framePreset: user.avatarFramePreset,
+                size: 88,
+                onTap: _onTap,
+              ),
+          ],
+        ),
+        // Confetti fires from behind the avatar and blasts outward in a
+        // downward arc so particles land on the user card below.
+        Positioned(
+          top: 44,
+          child: ConfettiWidget(
+            confettiController: _confetti,
+            blastDirectionality: BlastDirectionality.explosive,
+            shouldLoop: false,
+            numberOfParticles: 24,
+            gravity: 0.3,
+            maxBlastForce: 14,
+            minBlastForce: 6,
+            colors: const [
+              AppColors.electricAqua,
+              AppColors.deepBlue,
+              AppColors.violetAccent,
+              Color(0xFFEC4899),
+              Color(0xFFFBBF24),
+            ],
+          ),
+        ),
       ],
     );
   }

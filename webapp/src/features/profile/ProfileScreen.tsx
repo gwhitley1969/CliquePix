@@ -1,17 +1,28 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useMsal } from '@azure/msal-react';
-import { LogOut, Trash2 } from 'lucide-react';
+import { Camera, LogOut, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
+import confetti from 'canvas-confetti';
 import { deleteAccount, getMe } from '../../api/endpoints/auth';
+import { Avatar } from '../../components/Avatar';
 import { Button } from '../../components/Button';
 import { ConfirmDestructive } from '../../components/ConfirmDestructive';
 import { LoadingSpinner } from '../../components/LoadingSpinner';
+import { AvatarEditor } from './AvatarEditor';
+import { useAvatarUpload } from './useAvatarUpload';
+
+const FIRST_CELEBRATED_KEY = 'first_avatar_celebrated';
 
 export function ProfileScreen() {
   const { instance } = useMsal();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmRemoveAvatar, setConfirmRemoveAvatar] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [pickedFile, setPickedFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const user = useQuery({ queryKey: ['users', 'me'], queryFn: getMe });
+  const { remove: removeMut } = useAvatarUpload();
 
   const deleteMut = useMutation({
     mutationFn: deleteAccount,
@@ -22,7 +33,37 @@ export function ProfileScreen() {
     onError: () => toast.error('Failed to delete account'),
   });
 
+  function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setPickedFile(f);
+    setEditorOpen(true);
+    // Reset the input so picking the same file twice still triggers onChange
+    e.target.value = '';
+  }
+
+  function onEditorComplete() {
+    const already = localStorage.getItem(FIRST_CELEBRATED_KEY) === '1';
+    if (!already) {
+      localStorage.setItem(FIRST_CELEBRATED_KEY, '1');
+      confetti({
+        particleCount: 80,
+        spread: 70,
+        startVelocity: 42,
+        origin: { y: 0.35 },
+        colors: ['#00C2D1', '#2563EB', '#7C3AED', '#EC4899', '#FBBF24'],
+      });
+    }
+    toast.success('Avatar updated');
+  }
+
   if (user.isLoading) return <LoadingSpinner />;
+
+  const u = user.data;
+  const hasAvatar = Boolean(u?.avatarUrl);
+  const cacheKey = u && u.avatarUpdatedAt
+    ? `${u.id}_${new Date(u.avatarUpdatedAt).getTime()}`
+    : u?.id;
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6">
@@ -30,23 +71,57 @@ export function ProfileScreen() {
 
       <div className="p-4 rounded-lg bg-dark-card border border-white/10 mb-6">
         <div className="flex items-center gap-4">
-          {user.data?.avatarUrl ? (
-            <img
-              src={user.data.avatarUrl}
-              alt=""
-              className="w-16 h-16 rounded-full object-cover"
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="relative group"
+            aria-label="Change avatar"
+          >
+            <Avatar
+              name={u?.displayName}
+              imageUrl={u?.avatarUrl}
+              thumbUrl={u?.avatarThumbUrl}
+              framePreset={u?.avatarFramePreset}
+              cacheBuster={cacheKey}
+              size={72}
             />
-          ) : (
-            <div className="w-16 h-16 rounded-full bg-gradient-primary flex items-center justify-center text-xl font-bold text-white">
-              {user.data?.displayName?.[0]?.toUpperCase() ?? '?'}
+            <span
+              className="absolute inset-0 rounded-full bg-black/50 opacity-0 group-hover:opacity-100
+                         flex items-center justify-center transition"
+            >
+              <Camera size={20} className="text-white" />
+            </span>
+          </button>
+          <div className="flex-1">
+            <div className="text-lg font-semibold">{u?.displayName}</div>
+            <div className="text-sm text-white/60">{u?.emailOrPhone}</div>
+            <div className="mt-1 flex gap-3 text-xs">
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="text-electric-aqua hover:underline"
+              >
+                {hasAvatar ? 'Change photo' : 'Add photo'}
+              </button>
+              {hasAvatar && (
+                <button
+                  onClick={() => setConfirmRemoveAvatar(true)}
+                  className="text-white/50 hover:text-white/70"
+                >
+                  Remove
+                </button>
+              )}
             </div>
-          )}
-          <div>
-            <div className="text-lg font-semibold">{user.data?.displayName}</div>
-            <div className="text-sm text-white/60">{user.data?.emailOrPhone}</div>
           </div>
         </div>
       </div>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/heic,image/heif"
+        onChange={onPickFile}
+        className="hidden"
+      />
 
       <div className="space-y-2">
         <Button
@@ -85,6 +160,24 @@ export function ProfileScreen() {
         confirmLabel="Delete account"
         onConfirm={() => deleteMut.mutate()}
         loading={deleteMut.isPending}
+      />
+
+      <ConfirmDestructive
+        open={confirmRemoveAvatar}
+        onOpenChange={setConfirmRemoveAvatar}
+        title="Remove avatar?"
+        message="Your initials will be shown on photos, videos, and messages instead."
+        confirmLabel="Remove"
+        onConfirm={() => removeMut.mutate()}
+        loading={removeMut.isPending}
+      />
+
+      <AvatarEditor
+        file={pickedFile}
+        currentFramePreset={u?.avatarFramePreset ?? 0}
+        open={editorOpen}
+        onOpenChange={setEditorOpen}
+        onComplete={onEditorComplete}
       />
     </div>
   );

@@ -49,6 +49,27 @@
             }
             return context.Request.IpAddress;
         }" retry-after-header-name="Retry-After" />
+        <!--
+          Tighter sub-limit for avatar mutation endpoints. Avatar uploads
+          aren't high-frequency; a user has no legitimate reason to change
+          their headshot more than a few times per minute. 10/min is
+          defense-in-depth against abuse without impairing UX. Keyed on
+          JWT subject (same fallback chain as the global limit).
+        -->
+        <choose>
+            <when condition="@(context.Request.Url.Path.Contains("/users/me/avatar"))">
+                <rate-limit-by-key calls="10" renewal-period="60" counter-key="@{
+                    var auth = context.Request.Headers.GetValueOrDefault("Authorization", "");
+                    if (auth.StartsWith("Bearer ")) {
+                        var jwt = auth.Substring(7).AsJwt();
+                        if (jwt != null && jwt.Subject != null) {
+                            return "avatar:" + jwt.Subject;
+                        }
+                    }
+                    return "avatar:" + context.Request.IpAddress;
+                }" retry-after-header-name="Retry-After" />
+            </when>
+        </choose>
     </inbound>
     <backend>
         <base />

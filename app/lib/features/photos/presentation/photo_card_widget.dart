@@ -58,7 +58,14 @@ class PhotoCardWidget extends ConsumerWidget {
                 padding: const EdgeInsets.all(12),
                 child: Row(
                   children: [
-                    AvatarWidget(name: photo.uploadedByName ?? 'User', size: 36),
+                    AvatarWidget(
+                      name: photo.uploadedByName ?? 'User',
+                      imageUrl: photo.uploadedByAvatarUrl,
+                      thumbUrl: photo.uploadedByAvatarThumbUrl,
+                      cacheKey: photo.uploadedByAvatarCacheKey,
+                      framePreset: photo.uploadedByAvatarFramePreset,
+                      size: 36,
+                    ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Column(

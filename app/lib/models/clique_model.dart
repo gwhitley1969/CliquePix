@@ -31,6 +31,9 @@ class CliqueMemberModel {
   final String userId;
   final String displayName;
   final String? avatarUrl;
+  final String? avatarThumbUrl;
+  final DateTime? avatarUpdatedAt;
+  final int avatarFramePreset;
   final String role;
   final DateTime joinedAt;
 
@@ -38,15 +41,29 @@ class CliqueMemberModel {
     required this.userId,
     required this.displayName,
     this.avatarUrl,
+    this.avatarThumbUrl,
+    this.avatarUpdatedAt,
+    this.avatarFramePreset = 0,
     required this.role,
     required this.joinedAt,
   });
+
+  /// Stable cache key for the member's avatar.
+  String? get avatarCacheKey {
+    if (avatarUrl == null) return null;
+    return 'avatar_${userId}_v${avatarUpdatedAt?.millisecondsSinceEpoch ?? 0}';
+  }
 
   factory CliqueMemberModel.fromJson(Map<String, dynamic> json) {
     return CliqueMemberModel(
       userId: json['user_id'] as String,
       displayName: json['display_name'] as String,
       avatarUrl: json['avatar_url'] as String?,
+      avatarThumbUrl: json['avatar_thumb_url'] as String?,
+      avatarUpdatedAt: json['avatar_updated_at'] == null
+          ? null
+          : DateTime.parse(json['avatar_updated_at'] as String),
+      avatarFramePreset: (json['avatar_frame_preset'] as num?)?.toInt() ?? 0,
       role: json['role'] as String,
       joinedAt: DateTime.parse(json['joined_at'] as String),
     );

@@ -9,6 +9,7 @@ import { isValidUUID } from '../shared/utils/validators';
 import { NotFoundError, ForbiddenError, ConflictError, ValidationError } from '../shared/utils/errors';
 import { Clique, CliqueMember, CliqueWithMemberCount } from '../shared/models/clique';
 import { sendToMultipleTokens } from '../shared/services/fcmService';
+import { enrichUserAvatar } from '../shared/services/avatarEnricher';
 import * as crypto from 'crypto';
 
 function generateInviteCode(): string {
@@ -241,14 +242,26 @@ async function listMembers(req: HttpRequest, context: InvocationContext): Promis
       throw new NotFoundError('clique');
     }
 
+    // Project raw avatar columns (blob paths), then enrich into signed URLs
+    // below. Note: u.avatar_url is the legacy (always-null) column from
+    // migration 001 — we keep emitting it in the output for one release so
+    // old clients don't NPE on a missing field, but the value is always
+    // null post-migration 010.
     const members = await query<{
       user_id: string;
       display_name: string;
       avatar_url: string | null;
+      avatar_blob_path: string | null;
+      avatar_thumb_blob_path: string | null;
+      avatar_updated_at: Date | null;
+      avatar_frame_preset: number;
       role: string;
       joined_at: Date;
     }>(
-      `SELECT u.id AS user_id, u.display_name, u.avatar_url, cm.role, cm.joined_at
+      `SELECT u.id AS user_id, u.display_name, u.avatar_url,
+              u.avatar_blob_path, u.avatar_thumb_blob_path,
+              u.avatar_updated_at, u.avatar_frame_preset,
+              cm.role, cm.joined_at
       FROM clique_members cm
       INNER JOIN users u ON u.id = cm.user_id
       WHERE cm.clique_id = $1
@@ -256,7 +269,28 @@ async function listMembers(req: HttpRequest, context: InvocationContext): Promis
       [cliqueId],
     );
 
-    return successResponse(members);
+    const enriched = await Promise.all(
+      members.map(async (m) => {
+        const avatar = await enrichUserAvatar({
+          avatar_blob_path: m.avatar_blob_path,
+          avatar_thumb_blob_path: m.avatar_thumb_blob_path,
+          avatar_updated_at: m.avatar_updated_at,
+          avatar_frame_preset: m.avatar_frame_preset,
+        });
+        return {
+          user_id: m.user_id,
+          display_name: m.display_name,
+          avatar_url: avatar.avatar_url,
+          avatar_thumb_url: avatar.avatar_thumb_url,
+          avatar_updated_at: avatar.avatar_updated_at,
+          avatar_frame_preset: avatar.avatar_frame_preset,
+          role: m.role,
+          joined_at: m.joined_at,
+        };
+      }),
+    );
+
+    return successResponse(enriched);
   } catch (error) {
     return handleError(error, context.invocationId);
   }

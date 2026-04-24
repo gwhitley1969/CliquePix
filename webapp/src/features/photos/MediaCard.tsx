@@ -88,7 +88,18 @@ export function MediaCard({ item, onOpen }: { item: Media; onOpen: () => void })
     <article className="bg-dark-card rounded-lg border border-white/10 overflow-hidden">
       {/* Header */}
       <header className="flex items-center gap-3 px-4 py-3">
-        <Avatar name={item.uploadedByName ?? 'User'} size={36} />
+        <Avatar
+          name={item.uploadedByName ?? 'User'}
+          imageUrl={item.uploadedByAvatarUrl}
+          thumbUrl={item.uploadedByAvatarThumbUrl}
+          framePreset={item.uploadedByAvatarFramePreset}
+          cacheBuster={
+            item.uploadedByAvatarUpdatedAt
+              ? `${item.uploadedByUserId}_${new Date(item.uploadedByAvatarUpdatedAt).getTime()}`
+              : undefined
+          }
+          size={36}
+        />
         <div className="flex-1 min-w-0">
           <div className="text-sm font-semibold text-white truncate">
             {item.uploadedByName ?? 'User'}

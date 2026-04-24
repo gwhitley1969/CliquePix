@@ -365,7 +365,16 @@ Relational model fits the cliques/events/memberships domain cleanly. Predictable
 | external_auth_id | VARCHAR | Entra External ID subject |
 | display_name | VARCHAR | |
 | email_or_phone | VARCHAR | |
-| avatar_url | VARCHAR | Nullable |
+| avatar_url | VARCHAR | **Legacy** — unused since migration 010. Kept for backward-compat during one deploy cycle; future migration 011 drops it |
+| avatar_blob_path | TEXT | Nullable. Relative path inside the `photos` container, e.g. `avatars/{userId}/original.jpg`. API boundary signs this into a 1-hour SAS URL |
+| avatar_thumb_blob_path | TEXT | Nullable. 128×128 thumbnail generated at confirm time, e.g. `avatars/{userId}/thumb.jpg` |
+| avatar_updated_at | TIMESTAMPTZ | Nullable. Seeds client-side cache keys so avatars don't show stale bytes after a change |
+| avatar_frame_preset | SMALLINT | 0..4. 0 = auto-gradient from name hash. 1..4 = user-chosen palette index |
+| avatar_prompt_dismissed | BOOLEAN | Set when user taps "No Thanks" on the first-sign-in welcome prompt — never re-prompt |
+| avatar_prompt_snoozed_until | TIMESTAMPTZ | Set when user taps "Maybe Later" (NOW + 7 days). Re-prompt eligible after this timestamp |
+| age_verified_at | TIMESTAMPTZ | Nullable. Stamped on first successful auth via age-gate claim check |
+| last_activity_at | TIMESTAMPTZ | Nullable. Fire-and-forget update by authMiddleware, capped 1/min/user |
+| last_refresh_push_sent_at | TIMESTAMPTZ | Nullable. Written by refreshTokenPushTimer; enforces 6h dedup |
 | created_at | TIMESTAMPTZ | |
 | updated_at | TIMESTAMPTZ | |
 
@@ -493,9 +502,13 @@ Name: `photos`
 ### Path Convention
 
 ```
-photos/{cliqueId}/{eventId}/{photoId}/original.jpg
-photos/{cliqueId}/{eventId}/{photoId}/thumb.jpg
+photos/{cliqueId}/{eventId}/{photoId}/original.jpg     # event photo original
+photos/{cliqueId}/{eventId}/{photoId}/thumb.jpg        # event photo thumbnail
+avatars/{userId}/original.jpg                          # user avatar (512x512 q85)
+avatars/{userId}/thumb.jpg                             # user avatar thumb (128x128 q75)
 ```
+
+Note the `photos/` prefix is historical — the container itself is named `photos` and hosts both photos and videos (see migration 007 `media_type`). Avatars live under the `avatars/` virtual folder inside the same container. Fixed per-user paths — each new avatar overwrites the prior one, no accumulation.
 
 ### Access Model — RBAC + User Delegation SAS
 

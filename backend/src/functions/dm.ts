@@ -9,6 +9,7 @@ import { NotFoundError, ForbiddenError, ValidationError } from '../shared/utils/
 import { sendToUser, getClientAccessToken } from '../shared/services/webPubSubService';
 import { sendToMultipleTokens } from '../shared/services/fcmService';
 import { DmThread, DmMessage } from '../shared/models/dmThread';
+import { enrichUserAvatar } from '../shared/services/avatarEnricher';
 
 // Normalize user IDs so user_a < user_b (prevents duplicate threads)
 function normalizeUserPair(id1: string, id2: string): { userA: string; userB: string } {
@@ -82,16 +83,36 @@ async function createOrGetDmThread(req: HttpRequest, context: InvocationContext)
       trackEvent('dm_thread_created', { eventId, threadId: thread!.id, userId: authUser.id });
     }
 
-    // Get other user's display name
-    const otherUser = await queryOne<{ display_name: string }>(
-      'SELECT display_name FROM users WHERE id = $1',
+    // Get other user's display name + avatar fields so the thread row we
+    // return to the client carries the sender's headshot where it's shown
+    // in the chat header and thread list.
+    const otherUser = await queryOne<{
+      display_name: string;
+      avatar_blob_path: string | null;
+      avatar_thumb_blob_path: string | null;
+      avatar_updated_at: Date | null;
+      avatar_frame_preset: number;
+    }>(
+      `SELECT display_name, avatar_blob_path, avatar_thumb_blob_path,
+              avatar_updated_at, avatar_frame_preset
+       FROM users WHERE id = $1`,
       [getOtherUserId(thread!, authUser.id)],
     );
+    const avatar = await enrichUserAvatar({
+      avatar_blob_path: otherUser?.avatar_blob_path ?? null,
+      avatar_thumb_blob_path: otherUser?.avatar_thumb_blob_path ?? null,
+      avatar_updated_at: otherUser?.avatar_updated_at ?? null,
+      avatar_frame_preset: otherUser?.avatar_frame_preset ?? 0,
+    });
 
     return successResponse({
       ...thread,
       other_user_id: getOtherUserId(thread!, authUser.id),
       other_user_name: otherUser?.display_name ?? 'User',
+      other_user_avatar_url: avatar.avatar_url,
+      other_user_avatar_thumb_url: avatar.avatar_thumb_url,
+      other_user_avatar_updated_at: avatar.avatar_updated_at,
+      other_user_avatar_frame_preset: avatar.avatar_frame_preset,
     }, thread ? 200 : 201);
   } catch (error) {
     return handleError(error, context.invocationId);
@@ -109,10 +130,20 @@ async function listDmThreads(req: HttpRequest, context: InvocationContext): Prom
       throw new ValidationError('A valid event ID is required.');
     }
 
-    const threads = await query<any>(
+    const threads = await query<{
+      [key: string]: unknown;
+      other_user_avatar_blob_path: string | null;
+      other_user_avatar_thumb_blob_path: string | null;
+      other_user_avatar_updated_at: Date | null;
+      other_user_avatar_frame_preset: number;
+    }>(
       `SELECT t.*,
               CASE WHEN t.user_a_id = $2 THEN t.user_b_id ELSE t.user_a_id END AS other_user_id,
               CASE WHEN t.user_a_id = $2 THEN ub.display_name ELSE ua.display_name END AS other_user_name,
+              CASE WHEN t.user_a_id = $2 THEN ub.avatar_blob_path ELSE ua.avatar_blob_path END AS other_user_avatar_blob_path,
+              CASE WHEN t.user_a_id = $2 THEN ub.avatar_thumb_blob_path ELSE ua.avatar_thumb_blob_path END AS other_user_avatar_thumb_blob_path,
+              CASE WHEN t.user_a_id = $2 THEN ub.avatar_updated_at ELSE ua.avatar_updated_at END AS other_user_avatar_updated_at,
+              CASE WHEN t.user_a_id = $2 THEN ub.avatar_frame_preset ELSE ua.avatar_frame_preset END AS other_user_avatar_frame_preset,
               (SELECT body FROM event_dm_messages WHERE thread_id = t.id ORDER BY created_at DESC LIMIT 1) AS last_message_preview,
               (SELECT COUNT(*)::int FROM event_dm_messages m
                WHERE m.thread_id = t.id
@@ -132,7 +163,25 @@ async function listDmThreads(req: HttpRequest, context: InvocationContext): Prom
       [eventId, authUser.id],
     );
 
-    return successResponse(threads);
+    const enriched = await Promise.all(
+      threads.map(async (t) => {
+        const avatar = await enrichUserAvatar({
+          avatar_blob_path: t.other_user_avatar_blob_path,
+          avatar_thumb_blob_path: t.other_user_avatar_thumb_blob_path,
+          avatar_updated_at: t.other_user_avatar_updated_at,
+          avatar_frame_preset: t.other_user_avatar_frame_preset,
+        });
+        return {
+          ...t,
+          other_user_avatar_url: avatar.avatar_url,
+          other_user_avatar_thumb_url: avatar.avatar_thumb_url,
+          other_user_avatar_updated_at: avatar.avatar_updated_at,
+          other_user_avatar_frame_preset: avatar.avatar_frame_preset,
+        };
+      }),
+    );
+
+    return successResponse(enriched);
   } catch (error) {
     return handleError(error, context.invocationId);
   }
@@ -156,15 +205,33 @@ async function getDmThread(req: HttpRequest, context: InvocationContext): Promis
     if (!thread) throw new NotFoundError('thread');
     if (!isParticipant(thread, authUser.id)) throw new ForbiddenError();
 
-    const otherUser = await queryOne<{ display_name: string }>(
-      'SELECT display_name FROM users WHERE id = $1',
+    const otherUser = await queryOne<{
+      display_name: string;
+      avatar_blob_path: string | null;
+      avatar_thumb_blob_path: string | null;
+      avatar_updated_at: Date | null;
+      avatar_frame_preset: number;
+    }>(
+      `SELECT display_name, avatar_blob_path, avatar_thumb_blob_path,
+              avatar_updated_at, avatar_frame_preset
+       FROM users WHERE id = $1`,
       [getOtherUserId(thread, authUser.id)],
     );
+    const avatar = await enrichUserAvatar({
+      avatar_blob_path: otherUser?.avatar_blob_path ?? null,
+      avatar_thumb_blob_path: otherUser?.avatar_thumb_blob_path ?? null,
+      avatar_updated_at: otherUser?.avatar_updated_at ?? null,
+      avatar_frame_preset: otherUser?.avatar_frame_preset ?? 0,
+    });
 
     return successResponse({
       ...thread,
       other_user_id: getOtherUserId(thread, authUser.id),
       other_user_name: otherUser?.display_name ?? 'User',
+      other_user_avatar_url: avatar.avatar_url,
+      other_user_avatar_thumb_url: avatar.avatar_thumb_url,
+      other_user_avatar_updated_at: avatar.avatar_updated_at,
+      other_user_avatar_frame_preset: avatar.avatar_frame_preset,
     });
   } catch (error) {
     return handleError(error, context.invocationId);
@@ -192,7 +259,12 @@ async function listDmMessages(req: HttpRequest, context: InvocationContext): Pro
     const limit = Math.min(parseInt(req.query.get('limit') || '50', 10), 100);
     const cursor = req.query.get('cursor');
 
-    let sql = `SELECT m.*, u.display_name AS sender_name
+    let sql = `SELECT m.*,
+                      u.display_name AS sender_name,
+                      u.avatar_blob_path AS sender_avatar_blob_path,
+                      u.avatar_thumb_blob_path AS sender_avatar_thumb_blob_path,
+                      u.avatar_updated_at AS sender_avatar_updated_at,
+                      u.avatar_frame_preset AS sender_avatar_frame_preset
                FROM event_dm_messages m
                LEFT JOIN users u ON u.id = m.sender_user_id
                WHERE m.thread_id = $1`;
@@ -206,9 +278,34 @@ async function listDmMessages(req: HttpRequest, context: InvocationContext): Pro
     sql += ' ORDER BY m.created_at DESC LIMIT $' + (params.length + 1);
     params.push(limit);
 
-    const messages = await query<any>(sql, params);
+    type DmMessageRow = DmMessage & {
+      sender_name: string | null;
+      sender_avatar_blob_path: string | null;
+      sender_avatar_thumb_blob_path: string | null;
+      sender_avatar_updated_at: Date | null;
+      sender_avatar_frame_preset: number | null;
+    };
+    const rows = await query<DmMessageRow>(sql, params);
+    const messages = await Promise.all(
+      rows.map(async (m) => {
+        const avatar = await enrichUserAvatar({
+          avatar_blob_path: m.sender_avatar_blob_path,
+          avatar_thumb_blob_path: m.sender_avatar_thumb_blob_path,
+          avatar_updated_at: m.sender_avatar_updated_at,
+          avatar_frame_preset: m.sender_avatar_frame_preset,
+        });
+        return {
+          ...m,
+          sender_avatar_url: avatar.avatar_url,
+          sender_avatar_thumb_url: avatar.avatar_thumb_url,
+          sender_avatar_updated_at: avatar.avatar_updated_at,
+          sender_avatar_frame_preset: avatar.avatar_frame_preset,
+        };
+      }),
+    );
+
     const nextCursor = messages.length === limit
-      ? messages[messages.length - 1].created_at.toISOString()
+      ? (rows[rows.length - 1].created_at as unknown as Date).toISOString()
       : null;
 
     return successResponse({ messages, next_cursor: nextCursor });
@@ -270,6 +367,16 @@ async function sendDmMessage(req: HttpRequest, context: InvocationContext): Prom
 
     const recipientId = getOtherUserId(thread, authUser.id);
 
+    // Sender avatar enrichment so the client can render sender's headshot
+    // on the new message bubble without a separate fetch. authUser already
+    // carries the blob paths per authMiddleware update (migration 010).
+    const senderAvatar = await enrichUserAvatar({
+      avatar_blob_path: authUser.avatarBlobPath,
+      avatar_thumb_blob_path: authUser.avatarThumbBlobPath,
+      avatar_updated_at: authUser.avatarUpdatedAt,
+      avatar_frame_preset: authUser.avatarFramePreset,
+    });
+
     // Send to recipient via Web PubSub for real-time delivery
     try {
       await sendToUser(recipientId, {
@@ -281,6 +388,10 @@ async function sendDmMessage(req: HttpRequest, context: InvocationContext): Prom
           thread_id: threadId,
           sender_user_id: authUser.id,
           sender_name: authUser.displayName,
+          sender_avatar_url: senderAvatar.avatar_url,
+          sender_avatar_thumb_url: senderAvatar.avatar_thumb_url,
+          sender_avatar_updated_at: senderAvatar.avatar_updated_at,
+          sender_avatar_frame_preset: senderAvatar.avatar_frame_preset,
           body,
           created_at: message!.created_at,
         },
@@ -313,6 +424,10 @@ async function sendDmMessage(req: HttpRequest, context: InvocationContext): Prom
     return successResponse({
       ...message,
       sender_name: authUser.displayName,
+      sender_avatar_url: senderAvatar.avatar_url,
+      sender_avatar_thumb_url: senderAvatar.avatar_thumb_url,
+      sender_avatar_updated_at: senderAvatar.avatar_updated_at,
+      sender_avatar_frame_preset: senderAvatar.avatar_frame_preset,
     }, 201);
   } catch (error) {
     return handleError(error, context.invocationId);

@@ -32,6 +32,10 @@ export interface AuthenticatedUser {
   externalAuthId: string;
   displayName: string;
   emailOrPhone: string;
+  avatarBlobPath: string | null;
+  avatarThumbBlobPath: string | null;
+  avatarUpdatedAt: Date | null;
+  avatarFramePreset: number;
 }
 
 export async function authenticateRequest(req: HttpRequest): Promise<AuthenticatedUser> {
@@ -67,9 +71,15 @@ export async function authenticateRequest(req: HttpRequest): Promise<Authenticat
     throw new UnauthorizedError();
   }
 
-  // Look up user in database
+  // Look up user in database. We include avatar columns so handlers that
+  // need to emit the caller's own avatar on a freshly-created record
+  // (e.g., dm.sendDmMessage inlining sender_avatar_url) can do so without
+  // a second SELECT.
   const user = await queryOne<User>(
-    'SELECT id, external_auth_id, display_name, email_or_phone FROM users WHERE external_auth_id = $1',
+    `SELECT id, external_auth_id, display_name, email_or_phone,
+            avatar_blob_path, avatar_thumb_blob_path, avatar_updated_at,
+            avatar_frame_preset
+     FROM users WHERE external_auth_id = $1`,
     [externalAuthId],
   );
 
@@ -95,6 +105,10 @@ export async function authenticateRequest(req: HttpRequest): Promise<Authenticat
     externalAuthId: user.external_auth_id,
     displayName: user.display_name,
     emailOrPhone: user.email_or_phone,
+    avatarBlobPath: user.avatar_blob_path ?? null,
+    avatarThumbBlobPath: user.avatar_thumb_blob_path ?? null,
+    avatarUpdatedAt: user.avatar_updated_at ?? null,
+    avatarFramePreset: user.avatar_frame_preset ?? 0,
   };
 }
 

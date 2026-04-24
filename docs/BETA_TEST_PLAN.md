@@ -169,7 +169,24 @@ This is a manual smoke test checklist to run before each beta release. Every ite
 - [ ] **Empty states** — new user with no cliques/events → appropriate empty state messages shown
 - [ ] **Account deletion** — Settings → Delete Account → confirm → user removed, can't sign in
 
-## 10. Profile & Legal
+## 10. Profile Pictures (Avatars)
+
+- [ ] **First-sign-in welcome prompt — Yes path** (fresh test account): sign up + pass age gate → lands on Events → welcome modal "Make yourself known" appears. Tap "Add a Photo" → picker sheet → crop + filter + frame → Save. Verify: avatar appears on Profile hero; kill & reopen app → prompt does NOT reappear (`shouldPromptForAvatar` now false because blob path is set).
+- [ ] **First-sign-in welcome prompt — Maybe Later** (fresh account): tap "Maybe Later" → modal closes, no upload. Kill & relaunch → prompt does NOT reappear. SQL: `SELECT avatar_prompt_snoozed_until FROM users WHERE email_or_phone='<test>'` returns ~7 days out.
+- [ ] **First-sign-in welcome prompt — No Thanks** (fresh account): tap "No Thanks" → modal closes. Relaunch → prompt does NOT reappear. SQL: `avatar_prompt_dismissed = TRUE`.
+- [ ] **Cross-device welcome honoring**: sign in on iPhone, tap "Maybe Later". Sign in on Android 5 minutes later → prompt does NOT appear.
+- [ ] **Cross-platform welcome (web)**: same user signs in at clique-pix.com → welcome modal appears if not yet dismissed/snoozed.
+- [ ] **Profile tap to upload**: Profile → tap 'GW' gradient ring → bottom sheet → Take Photo → crop square → pick Warm filter → pick violet→pink frame preset → Save. Verify: confetti fires (first time only), haptic feedback, avatar updates in place.
+- [ ] **Avatar on own photo cards**: navigate to an event feed where the user has uploaded a photo → within ≤30s (poll cycle) headshot appears on the card (not 'GW').
+- [ ] **Avatar on other members' devices**: Device B opens the same event → verify uploader's headshot appears on their cards.
+- [ ] **Avatar in DMs**: Device B opens a DM thread with the uploader → headshot in thread header + message bubbles.
+- [ ] **Remove avatar**: Profile → tap avatar → Remove → confirm → avatar reverts to initials on Profile immediately; on feed cards after next poll.
+- [ ] **Confetti one-shot**: second upload of a new headshot does NOT fire confetti again.
+- [ ] **HEIC from iOS library**: pick a HEIC photo as avatar → JPEG conversion happens (network tab shows `image/jpeg` on the blob PUT).
+- [ ] **PNG drag-drop (web)**: drag-drop a screenshot (.png) onto the web AvatarEditor → uploads as PNG → renders correctly.
+- [ ] **Account delete cleans avatar blobs**: Profile → Delete Account → confirm → subsequent `GET https://stcliquepixprod.blob.core.windows.net/photos/avatars/{userId}/original.jpg` returns 404.
+
+## 11. Profile & Legal
 
 - [ ] **Settings tile order** — first settings group reads top-to-bottom: `About Clique Pix → Terms of Service → Privacy Policy → Contact Us`
 - [ ] **Privacy Policy** — tap "Privacy Policy" on profile screen → in-app browser opens `https://clique-pix.com/docs/privacy` (legacy `/privacy.html` 301-redirects to this)

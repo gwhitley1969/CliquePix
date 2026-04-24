@@ -26,6 +26,7 @@ import {
 } from '../shared/utils/errors';
 import { Photo, VideoWithUrls } from '../shared/models/photo';
 import { Event } from '../shared/models/event';
+import { enrichUserAvatar } from '../shared/services/avatarEnricher';
 
 // ====================================================================================
 // Constants
@@ -187,7 +188,30 @@ async function cleanupVideoBlobs(video: Photo): Promise<void> {
   // (already handled above). Nothing more to delete.
 }
 
-async function enrichVideoWithUrls(video: Photo, userId: string): Promise<VideoWithUrls> {
+/**
+ * Video row shape after JOINing uploader fields. Parallel to
+ * PhotoRowWithUploader in photos.ts — kept separate so future video-only
+ * columns don't bleed.
+ */
+type VideoRowWithUploader = Photo & {
+  uploaded_by_name: string | null;
+  uploaded_by_avatar_blob_path: string | null;
+  uploaded_by_avatar_thumb_blob_path: string | null;
+  uploaded_by_avatar_updated_at: Date | null;
+  uploaded_by_avatar_frame_preset: number | null;
+};
+
+const VIDEO_SELECT_WITH_UPLOADER = `p.*,
+  u.display_name AS uploaded_by_name,
+  u.avatar_blob_path AS uploaded_by_avatar_blob_path,
+  u.avatar_thumb_blob_path AS uploaded_by_avatar_thumb_blob_path,
+  u.avatar_updated_at AS uploaded_by_avatar_updated_at,
+  u.avatar_frame_preset AS uploaded_by_avatar_frame_preset`;
+
+async function enrichVideoWithUrls(
+  video: VideoRowWithUploader,
+  userId: string,
+): Promise<VideoWithUrls> {
   // Instant preview: only the uploader sees a preview_url, and only while the
   // video is still processing/pending. Once status flips to 'active', this
   // returns null and the client falls through to the standard HLS/MP4 path.
@@ -195,7 +219,7 @@ async function enrichVideoWithUrls(video: Photo, userId: string): Promise<VideoW
   const isNotYetActive = video.status === 'processing' || video.status === 'pending';
   const shouldGeneratePreview = isUploader && isNotYetActive && Boolean(video.blob_path);
 
-  const [posterUrl, mp4FallbackUrl, previewUrl, reactionRows, userReactionRows] = await Promise.all([
+  const [posterUrl, mp4FallbackUrl, previewUrl, reactionRows, userReactionRows, uploaderAvatar] = await Promise.all([
     video.poster_blob_path
       ? generateViewSas(video.poster_blob_path, VIDEO_PLAYBACK_SAS_EXPIRY_SECONDS)
       : Promise.resolve(null),
@@ -219,6 +243,12 @@ async function enrichVideoWithUrls(video: Photo, userId: string): Promise<VideoW
       `SELECT reaction_type FROM reactions WHERE media_id = $1 AND user_id = $2`,
       [video.id, userId],
     ),
+    enrichUserAvatar({
+      avatar_blob_path: video.uploaded_by_avatar_blob_path,
+      avatar_thumb_blob_path: video.uploaded_by_avatar_thumb_blob_path,
+      avatar_updated_at: video.uploaded_by_avatar_updated_at,
+      avatar_frame_preset: video.uploaded_by_avatar_frame_preset,
+    }),
   ]);
 
   const reactionCounts: Record<string, number> = {};
@@ -233,6 +263,10 @@ async function enrichVideoWithUrls(video: Photo, userId: string): Promise<VideoW
     preview_url: previewUrl,
     reaction_counts: reactionCounts,
     user_reactions: userReactionRows.map((r) => r.reaction_type),
+    uploaded_by_avatar_url: uploaderAvatar.avatar_url,
+    uploaded_by_avatar_thumb_url: uploaderAvatar.avatar_thumb_url,
+    uploaded_by_avatar_updated_at: uploaderAvatar.avatar_updated_at,
+    uploaded_by_avatar_frame_preset: uploaderAvatar.avatar_frame_preset,
   };
 }
 
@@ -607,8 +641,8 @@ async function listVideos(req: HttpRequest, context: InvocationContext): Promise
 
     await getEventWithMembershipCheck(eventId, authUser.id);
 
-    const videos = await query<Photo & { uploaded_by_name: string | null }>(
-      `SELECT p.*, u.display_name AS uploaded_by_name
+    const videos = await query<VideoRowWithUploader>(
+      `SELECT ${VIDEO_SELECT_WITH_UPLOADER}
        FROM photos p
        LEFT JOIN users u ON u.id = p.uploaded_by_user_id
        WHERE p.event_id = $1 AND p.media_type = 'video'
@@ -641,8 +675,8 @@ async function getVideo(req: HttpRequest, context: InvocationContext): Promise<H
       throw new ValidationError('A valid video ID is required.');
     }
 
-    const video = await queryOne<Photo & { uploaded_by_name: string | null }>(
-      `SELECT p.*, u.display_name AS uploaded_by_name
+    const video = await queryOne<VideoRowWithUploader>(
+      `SELECT ${VIDEO_SELECT_WITH_UPLOADER}
        FROM photos p
        JOIN events e ON e.id = p.event_id
        JOIN clique_members cm ON cm.clique_id = e.clique_id AND cm.user_id = $2

@@ -10,6 +10,7 @@ import { trackEvent } from '../shared/services/telemetryService';
 import { User } from '../shared/models/user';
 import { MIN_AGE, ageBucket, calculateAge, parseDob } from '../shared/utils/ageUtils';
 import { deleteEntraUserByOid } from '../shared/auth/entraGraphClient';
+import { buildAuthUserResponse } from '../shared/services/avatarEnricher';
 
 const TENANT_ID = process.env.ENTRA_TENANT_ID || '';
 const CLIENT_ID = process.env.ENTRA_CLIENT_ID || '';
@@ -158,13 +159,7 @@ async function authVerify(req: HttpRequest, context: InvocationContext): Promise
     }
     trackEvent('auth_verify_success');
 
-    return successResponse({
-      id: user!.id,
-      display_name: user!.display_name,
-      email_or_phone: user!.email_or_phone,
-      avatar_url: user!.avatar_url,
-      created_at: user!.created_at,
-    });
+    return successResponse(await buildAuthUserResponse(user!));
   } catch (error) {
     return handleError(error, context.invocationId);
   }
@@ -183,13 +178,7 @@ async function getMe(req: HttpRequest, context: InvocationContext): Promise<Http
       return errorResponse('USER_NOT_FOUND', 'User not found.', 404);
     }
 
-    return successResponse({
-      id: user.id,
-      display_name: user.display_name,
-      email_or_phone: user.email_or_phone,
-      avatar_url: user.avatar_url,
-      created_at: user.created_at,
-    });
+    return successResponse(await buildAuthUserResponse(user));
   } catch (error) {
     return handleError(error, context.invocationId);
   }
@@ -233,7 +222,12 @@ async function deleteMe(req: HttpRequest, context: InvocationContext): Promise<H
     }
     await execute('DELETE FROM photos WHERE uploaded_by_user_id = $1', [authUser.id]);
 
-    // 4. Delete user record (CASCADE: clique_members, reactions, push_tokens, notifications)
+    // 4. Delete avatar blobs if any. deleteIfExists is idempotent so missing
+    //    blobs are fine. Fixed paths per user (no DB read needed).
+    await deleteBlob(`avatars/${authUser.id}/original.jpg`);
+    await deleteBlob(`avatars/${authUser.id}/thumb.jpg`);
+
+    // 5. Delete user record (CASCADE: clique_members, reactions, push_tokens, notifications)
     // (SET NULL via migration 004: cliques.created_by_user_id, events.created_by_user_id)
     await execute('DELETE FROM users WHERE id = $1', [authUser.id]);
 

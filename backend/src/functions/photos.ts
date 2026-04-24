@@ -12,6 +12,31 @@ import { isValidUUID, validateMimeType } from '../shared/utils/validators';
 import { NotFoundError, ForbiddenError, ValidationError } from '../shared/utils/errors';
 import { Photo, PhotoWithUrls } from '../shared/models/photo';
 import { Event } from '../shared/models/event';
+import { enrichUserAvatar } from '../shared/services/avatarEnricher';
+
+/**
+ * Shape returned by listPhotos / getPhoto SQL: raw photo + uploader
+ * denormalization. The trailing `uploaded_by_*` columns come from the JOIN
+ * to users in every SELECT; null-safe for photos whose uploader has been
+ * deleted (ON DELETE SET NULL via migration 004).
+ */
+type PhotoRowWithUploader = Photo & {
+  uploaded_by_name: string | null;
+  uploaded_by_avatar_blob_path: string | null;
+  uploaded_by_avatar_thumb_blob_path: string | null;
+  uploaded_by_avatar_updated_at: Date | null;
+  uploaded_by_avatar_frame_preset: number | null;
+};
+
+// Column list factored out so listPhotos and getPhoto stay in lockstep.
+// `p.*` first (so photo columns win on name collision), then aliased user
+// columns with the uploaded_by_ prefix used in API responses.
+const PHOTO_SELECT_WITH_UPLOADER = `p.*,
+  u.display_name AS uploaded_by_name,
+  u.avatar_blob_path AS uploaded_by_avatar_blob_path,
+  u.avatar_thumb_blob_path AS uploaded_by_avatar_thumb_blob_path,
+  u.avatar_updated_at AS uploaded_by_avatar_updated_at,
+  u.avatar_frame_preset AS uploaded_by_avatar_frame_preset`;
 
 const MAX_BLOB_SIZE = 15 * 1024 * 1024; // 15MB server-side limit
 const DEFAULT_PAGE_LIMIT = 20;
@@ -32,9 +57,15 @@ async function getEventWithMembershipCheck(eventId: string, userId: string): Pro
   return event;
 }
 
-// Helper: enrich a photo row with SAS URLs, reaction counts, and user reactions
-async function enrichPhotoWithUrls(photo: Photo, userId: string): Promise<PhotoWithUrls> {
-  const [originalUrl, thumbnailUrl, reactionRows, userReactionRows] = await Promise.all([
+// Helper: enrich a photo row with SAS URLs, reaction counts, user reactions,
+// and (since migration 010) the uploader's signed avatar URLs. Accepts a
+// row that already has the uploader denormalization JOINed in — callers
+// are responsible for using PHOTO_SELECT_WITH_UPLOADER in their SELECT.
+async function enrichPhotoWithUrls(
+  photo: PhotoRowWithUploader,
+  userId: string,
+): Promise<PhotoWithUrls> {
+  const [originalUrl, thumbnailUrl, reactionRows, userReactionRows, uploaderAvatar] = await Promise.all([
     generateViewSas(photo.blob_path),
     photo.thumbnail_blob_path ? generateViewSas(photo.thumbnail_blob_path) : Promise.resolve(null),
     query<{ reaction_type: string; count: number }>(
@@ -48,6 +79,12 @@ async function enrichPhotoWithUrls(photo: Photo, userId: string): Promise<PhotoW
       `SELECT reaction_type FROM reactions WHERE media_id = $1 AND user_id = $2`,
       [photo.id, userId],
     ),
+    enrichUserAvatar({
+      avatar_blob_path: photo.uploaded_by_avatar_blob_path,
+      avatar_thumb_blob_path: photo.uploaded_by_avatar_thumb_blob_path,
+      avatar_updated_at: photo.uploaded_by_avatar_updated_at,
+      avatar_frame_preset: photo.uploaded_by_avatar_frame_preset,
+    }),
   ]);
 
   const reactionCounts: Record<string, number> = {};
@@ -61,6 +98,10 @@ async function enrichPhotoWithUrls(photo: Photo, userId: string): Promise<PhotoW
     thumbnail_url: thumbnailUrl,
     reaction_counts: reactionCounts,
     user_reactions: userReactionRows.map(r => r.reaction_type),
+    uploaded_by_avatar_url: uploaderAvatar.avatar_url,
+    uploaded_by_avatar_thumb_url: uploaderAvatar.avatar_thumb_url,
+    uploaded_by_avatar_updated_at: uploaderAvatar.avatar_updated_at,
+    uploaded_by_avatar_frame_preset: uploaderAvatar.avatar_frame_preset,
   };
 }
 
@@ -251,8 +292,17 @@ async function confirmUpload(req: HttpRequest, context: InvocationContext): Prom
 
     trackEvent('photo_upload_completed', { photoId, eventId, userId: authUser.id });
 
-    // Return enriched photo with SAS URLs
-    const enrichedPhoto = await enrichPhotoWithUrls(updatedPhoto!, authUser.id);
+    // Return enriched photo with SAS URLs. Uploader IS the caller, so pull
+    // the denormalized uploader columns from authUser rather than a re-read.
+    const photoWithUploader: PhotoRowWithUploader = {
+      ...updatedPhoto!,
+      uploaded_by_name: authUser.displayName,
+      uploaded_by_avatar_blob_path: authUser.avatarBlobPath,
+      uploaded_by_avatar_thumb_blob_path: authUser.avatarThumbBlobPath,
+      uploaded_by_avatar_updated_at: authUser.avatarUpdatedAt,
+      uploaded_by_avatar_frame_preset: authUser.avatarFramePreset,
+    };
+    const enrichedPhoto = await enrichPhotoWithUrls(photoWithUploader, authUser.id);
     return successResponse(enrichedPhoto, 201);
   } catch (error) {
     return handleError(error, context.invocationId);
@@ -285,10 +335,10 @@ async function listPhotos(req: HttpRequest, context: InvocationContext): Promise
     // Fetch photos with cursor-based pagination.
     // Filter by media_type='photo' so videos don't leak into the photos list
     // (the photos table hosts both now — videos have their own listVideos endpoint).
-    let photos: Photo[];
+    let photos: PhotoRowWithUploader[];
     if (cursorParam) {
-      photos = await query<Photo & { uploaded_by_name: string }>(
-        `SELECT p.*, u.display_name AS uploaded_by_name
+      photos = await query<PhotoRowWithUploader>(
+        `SELECT ${PHOTO_SELECT_WITH_UPLOADER}
          FROM photos p
          JOIN users u ON p.uploaded_by_user_id = u.id
          WHERE p.event_id = $1 AND p.status = 'active' AND p.media_type = 'photo'
@@ -296,17 +346,17 @@ async function listPhotos(req: HttpRequest, context: InvocationContext): Promise
          ORDER BY p.created_at DESC
          LIMIT $3`,
         [eventId, cursorParam, limit],
-      ) as Photo[];
+      );
     } else {
-      photos = await query<Photo & { uploaded_by_name: string }>(
-        `SELECT p.*, u.display_name AS uploaded_by_name
+      photos = await query<PhotoRowWithUploader>(
+        `SELECT ${PHOTO_SELECT_WITH_UPLOADER}
          FROM photos p
          JOIN users u ON p.uploaded_by_user_id = u.id
          WHERE p.event_id = $1 AND p.status = 'active' AND p.media_type = 'photo'
          ORDER BY p.created_at DESC
          LIMIT $2`,
         [eventId, limit],
-      ) as Photo[];
+      );
     }
 
     // Batch-fetch reaction counts and user reactions for all photos
@@ -350,12 +400,20 @@ async function listPhotos(req: HttpRequest, context: InvocationContext): Promise
       userReactionsByPhoto.get(row.media_id)!.push(row.reaction_type);
     }
 
-    // Generate SAS URLs for all photos
-    const enrichedPhotos: PhotoWithUrls[] = await Promise.all(
+    // Generate SAS URLs (photo + thumb + uploader avatar) for all photos.
+    // Reactions were already batched above so each photo here fires 3 SAS
+    // signings (photo original, photo thumb, uploader avatars) in parallel.
+    const enrichedPhotos = await Promise.all(
       photos.map(async (photo) => {
-        const [originalUrl, thumbnailUrl] = await Promise.all([
+        const [originalUrl, thumbnailUrl, uploaderAvatar] = await Promise.all([
           generateViewSas(photo.blob_path),
           photo.thumbnail_blob_path ? generateViewSas(photo.thumbnail_blob_path) : Promise.resolve(null),
+          enrichUserAvatar({
+            avatar_blob_path: photo.uploaded_by_avatar_blob_path,
+            avatar_thumb_blob_path: photo.uploaded_by_avatar_thumb_blob_path,
+            avatar_updated_at: photo.uploaded_by_avatar_updated_at,
+            avatar_frame_preset: photo.uploaded_by_avatar_frame_preset,
+          }),
         ]);
 
         return {
@@ -364,6 +422,10 @@ async function listPhotos(req: HttpRequest, context: InvocationContext): Promise
           thumbnail_url: thumbnailUrl,
           reaction_counts: reactionCountsByPhoto.get(photo.id) ?? {},
           user_reactions: userReactionsByPhoto.get(photo.id) ?? [],
+          uploaded_by_avatar_url: uploaderAvatar.avatar_url,
+          uploaded_by_avatar_thumb_url: uploaderAvatar.avatar_thumb_url,
+          uploaded_by_avatar_updated_at: uploaderAvatar.avatar_updated_at,
+          uploaded_by_avatar_frame_preset: uploaderAvatar.avatar_frame_preset,
         };
       }),
     );
@@ -391,8 +453,11 @@ async function getPhoto(req: HttpRequest, context: InvocationContext): Promise<H
       throw new ValidationError('A valid photo ID is required.');
     }
 
-    const photo = await queryOne<Photo>(
-      "SELECT * FROM photos WHERE id = $1 AND status = 'active' AND media_type = 'photo'",
+    const photo = await queryOne<PhotoRowWithUploader>(
+      `SELECT ${PHOTO_SELECT_WITH_UPLOADER}
+       FROM photos p
+       LEFT JOIN users u ON u.id = p.uploaded_by_user_id
+       WHERE p.id = $1 AND p.status = 'active' AND p.media_type = 'photo'`,
       [photoId],
     );
 

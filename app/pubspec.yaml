@@ -67,6 +67,12 @@ dependencies:
   # UI
   shimmer: ^3.0.0
 
+  # Avatar square-crop UI (native TOCropViewController on iOS, uCrop on Android)
+  image_cropper: ^9.0.0
+
+  # First-upload celebration on the profile avatar
+  confetti: ^0.7.0
+
   # Utilities
   uuid: ^4.4.0
   intl: ^0.19.0

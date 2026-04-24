@@ -122,7 +122,14 @@ class _DmChatScreenState extends ConsumerState<DmChatScreen> {
           data: (thread) => Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              AvatarWidget(name: thread.otherUserName, size: 30),
+              AvatarWidget(
+                name: thread.otherUserName,
+                imageUrl: thread.otherUserAvatarUrl,
+                thumbUrl: thread.otherUserAvatarThumbUrl,
+                cacheKey: thread.otherUserAvatarCacheKey,
+                framePreset: thread.otherUserAvatarFramePreset,
+                size: 30,
+              ),
               const SizedBox(width: 10),
               Text(thread.otherUserName, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
             ],

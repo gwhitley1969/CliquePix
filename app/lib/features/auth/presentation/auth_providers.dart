@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../models/user_model.dart';
 import '../../../services/api_client.dart';
 import '../../../services/telemetry_service.dart';
 import '../../../services/token_storage_service.dart';
@@ -220,6 +221,19 @@ class AuthNotifier extends StateNotifier<AuthState> {
     } finally {
       _stopLifecycle();
       state = const AuthUnauthenticated();
+    }
+  }
+
+  /// Swap in a refreshed [UserModel] after an avatar upload / remove /
+  /// frame change / prompt action. Pure in-memory state mutation — does
+  /// NOT trigger a token refresh (the 5-layer defense must not see
+  /// spurious refresh calls from avatar paths). Callers are every avatar
+  /// endpoint consumer: `AvatarEditorScreen`, the welcome-prompt handler,
+  /// and the delete/frame paths.
+  void updateUserAvatar(UserModel updated) {
+    final current = state;
+    if (current is AuthAuthenticated) {
+      state = AuthAuthenticated(updated);
     }
   }
 

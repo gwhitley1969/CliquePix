@@ -1,10 +1,59 @@
 # DEPLOYMENT_STATUS.md — Clique Pix v1
 
-Last updated: 2026-04-19 (Entra refresh-token defense — silent-push edition, migration 009)
+Last updated: 2026-04-24 (Avatars v1 deployed — migrations 009 + 010 applied, backend shipped, CORS verified)
+
+## Avatars v1 — Profile Pictures (2026-04-24)
+
+**Status:** backend deployed to prod, web + mobile pending ship.
+
+**What's live:**
+- Migration 009 (silent-push activity tracking) + Migration 010 (avatars) applied to `pg-cliquepixdb`
+- Backend deployed to `func-cliquepix-fresh` — health endpoint 200 via Function App URL AND `api.clique-pix.com` (Front Door → APIM path)
+- All 5 avatar endpoints registered: `POST /api/users/me/avatar/upload-url`, `POST /api/users/me/avatar` (confirm), `DELETE /api/users/me/avatar`, `PATCH /api/users/me/avatar/frame`, `POST /api/users/me/avatar-prompt`
+- Azure Blob CORS verified — `https://clique-pix.com` + `http://localhost:5173` allowed on `GET`, `PUT`, `HEAD`, `OPTIONS` with 1h preflight cache
+
+**Verified before cutover:**
+- Backend 149/149 tests green (134 existing + 15 new `avatarEnricher` tests)
+- `npm run build` (tsc) green — 5 pre-deploy type errors caught and fixed (trackEvent number→string, PhotoWithUrls/VideoWithUrls avatar fields, events enricher index signature)
+- Flutter analyze 55 issues (was 61, all remaining pre-existing info-level lints; no errors/warnings introduced by avatar work)
+- Web `vite build` green — 2164 modules transformed, no TypeScript errors, bundle budget intact (initial JS ≤ 400 KB / 137 KB gzip)
+
+**Pending:**
+
+Adds user-uploadable headshots that replace the initials-in-a-gradient-ring fallback everywhere (Profile hero, photo/video feed cards, clique member lists, DM threads + chat headers). Brand-new users see a branded welcome prompt on first sign-in — three choices (Yes / Maybe Later / No Thanks) with server-persisted state so the decision survives reinstall and is honored across mobile + web.
+
+| Phase | Status | Files |
+|---|---|---|
+| Migration 010 (`avatar_blob_path`, `avatar_thumb_blob_path`, `avatar_updated_at`, `avatar_frame_preset`, `avatar_prompt_dismissed`, `avatar_prompt_snoozed_until`) | ✅ Applied 2026-04-24 | `backend/src/shared/db/migrations/010_user_avatars.sql` |
+| Backend: `avatarEnricher.ts` + `buildAuthUserResponse` + `shouldPromptForAvatar` | ✅ Code done + 15 unit tests | `backend/src/shared/services/avatarEnricher.ts`, `backend/src/__tests__/avatarEnricher.test.ts` |
+| Backend: `avatars.ts` — 5 endpoints (upload-url / confirm / delete / frame / avatar-prompt) | ✅ | `backend/src/functions/avatars.ts` |
+| Backend: `authMiddleware` SELECT adds avatar columns; `authVerify` + `getMe` emit enriched shape incl. `should_prompt_for_avatar`; `deleteMe` cleans avatar blobs | ✅ | `backend/src/shared/middleware/authMiddleware.ts`, `backend/src/functions/auth.ts` |
+| Backend: 14 handler propagation (photos, videos, events, cliques, dm) with `enrichUserAvatar` helper | ✅ | `backend/src/functions/{photos,videos,events,cliques,dm}.ts` |
+| Backend: APIM per-IP 10/min sub-limit on avatar sub-paths | ✅ | `apim_policy.xml` |
+| Flutter: `AvatarWidget` extended (thumbUrl / framePreset / cacheKey, size-aware URL selection) | ✅ | `app/lib/widgets/avatar_widget.dart` |
+| Flutter: `UserModel` + 5 response models carry avatar denorm fields | ✅ | `app/lib/models/*.dart` |
+| Flutter: avatar feature (api, repo, picker sheet, editor, welcome prompt, animated empty-state, first-visit hint) | ✅ | `app/lib/features/profile/**` |
+| Flutter: `image_cropper` + `confetti` added to pubspec; UCropActivity declared in AndroidManifest | ✅ | `app/pubspec.yaml`, `app/android/app/src/main/AndroidManifest.xml` |
+| Flutter: `AuthNotifier.updateUserAvatar` (pure state swap, no token refresh) | ✅ | `app/lib/features/auth/presentation/auth_providers.dart` |
+| Flutter: 5 AvatarWidget call sites threaded (photo_card, video_card, dm_thread_list, dm_chat, local_pending_video) | ✅ | as listed |
+| Flutter: Profile screen tappable avatar + welcome prompt on Home initState | ✅ | `app/lib/features/profile/presentation/profile_screen.dart`, `app/lib/features/home/presentation/home_screen.dart` |
+| Web: `Avatar.tsx` extended with imageUrl / thumbUrl / framePreset / cacheBuster | ✅ | `webapp/src/components/Avatar.tsx` |
+| Web: `AvatarEditor` (react-easy-crop + filter/frame) + `AvatarWelcomePromptModal` + `AvatarWelcomePromptGate` + `useAvatarUpload` hook | ✅ | `webapp/src/features/profile/**` |
+| Web: `ProfileScreen` tappable avatar with confetti on first upload | ✅ | `webapp/src/features/profile/ProfileScreen.tsx` |
+| Web: `MediaCard` passes uploader avatar fields to Avatar | ✅ | `webapp/src/features/photos/MediaCard.tsx` |
+| Web: `react-easy-crop` + `canvas-confetti` added to package.json | ✅ | `webapp/package.json` |
+| Docs | ✅ | `docs/PRD.md` §5.13, `docs/ARCHITECTURE.md` users table + blob paths, `docs/CLAUDE.md` avatar pipeline, `docs/BETA_TEST_PLAN.md` §10, `docs/WEB_CLIENT_ARCHITECTURE.md` avatar section, this file |
+| Backend deploy (`func azure functionapp publish func-cliquepix-fresh`) | ✅ Shipped 2026-04-24 | 45 functions deployed (was 40 pre-avatar) |
+| Azure Blob CORS verification (`GET`+`PUT` from `clique-pix.com`) | ✅ Verified 2026-04-24 | Already configured from event-media playback rollout; no change needed |
+| Web client deploy (auto-deploys from `main` via GH Actions → SWA) | ⏳ Pending `main` merge | See `.github/workflows/swa-deploy.yml` |
+| Mobile APK build + on-device verification (Samsung + iPhone) | ⏳ Not started | See BETA_TEST_PLAN.md §10 (13 new avatar test rows) |
+
+Deploy order executed: migration 009 → migration 010 → backend → (CORS verified) → web + mobile pending ship. Legacy mobile clients ignore the new response fields and keep rendering initials — no version lockstep required.
+
 
 ## Entra Refresh-Token Defense — Silent Push Edition (2026-04-19)
 
-**Status:** ready to ship — backend tests green (134/134), flutter analyze at 60 issues (was 61).
+**Status:** backend shipped 2026-04-24 alongside Avatars v1 (Migration 009 + the `avatarEnricher`/avatar endpoints deployed in the same `func publish`). Client-side silent-push plumbing is code-complete on `main` but hasn't been rolled out via a mobile build yet — on-device verification per `ENTRA_REFRESH_TOKEN_WORKAROUND.md` "Verifying in production" is still pending.
 
 Re-architected the 5-layer Entra External ID 12-hour refresh-token defense after an audit revealed every service was dead code — `AuthRepository` took `alarmRefreshService` and `backgroundTokenService` as optional constructor params and `authRepositoryProvider` never supplied them, so every `?.` callsite was a silent no-op. `AppLifecycleService` and `BatteryOptimizationService` were never instantiated; `WelcomeBackDialog.show()` had no caller; `BackgroundTokenService.callbackDispatcher` was a `TODO` that always returned `true` without calling MSAL; `main.dart:85` filtered the `TOKEN_REFRESH_TRIGGER` notification payload but never triggered a refresh. The original Layer 2 (`flutter_local_notifications.zonedSchedule`) was architecturally flawed — it only displays a notification, it does not execute code; silent `Importance.min` notifications the user never tapped refreshed nothing.
 
@@ -20,7 +69,7 @@ Replaced Layer 2 with server-triggered silent FCM data pushes (Microsoft's own d
 
 | Phase | Status | Files |
 |---|---|---|
-| Migration 009 (`last_activity_at` + `last_refresh_push_sent_at`) | ⏳ Pending prod apply | `backend/src/shared/db/migrations/009_user_activity_tracking.sql` |
+| Migration 009 (`last_activity_at` + `last_refresh_push_sent_at`) | ✅ Applied 2026-04-24 | `backend/src/shared/db/migrations/009_user_activity_tracking.sql` |
 | Backend: `authMiddleware` last-activity write + `verifyJwtAllowExpired` | ✅ Code done | `backend/src/shared/middleware/authMiddleware.ts` |
 | Backend: `fcmService` silent-push support (`FcmMessage.silent`, `sendSilentToMultipleTokens`) | ✅ Code done + 7 unit tests | `backend/src/shared/services/fcmService.ts`, `backend/src/__tests__/fcmService.test.ts` |
 | Backend: `refreshTokenPushTimer` (CRON `0 7,22,37,52 * * * *`) | ✅ Code done | `backend/src/functions/timers.ts` |

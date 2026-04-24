@@ -9,16 +9,58 @@ import { NotFoundError, ForbiddenError, ValidationError } from '../shared/utils/
 import { deleteBlob } from '../shared/services/blobService';
 import { sendToMultipleTokens } from '../shared/services/fcmService';
 import { Event } from '../shared/models/event';
+import { enrichUserAvatar } from '../shared/services/avatarEnricher';
 
-interface EventWithPhotoCount extends Event {
+interface EventRowWithCreator extends Event {
   photo_count: number;
   video_count: number;
   created_by_name: string;
+  created_by_avatar_blob_path: string | null;
+  created_by_avatar_thumb_blob_path: string | null;
+  created_by_avatar_updated_at: Date | null;
+  created_by_avatar_frame_preset: number | null;
 }
 
-interface EventWithCliqueName extends EventWithPhotoCount {
+interface EventRowWithCliqueAndCreator extends EventRowWithCreator {
   clique_name: string;
   member_count: number;
+}
+
+// Factored SELECT fragment for the creator denormalization. Keeps the
+// three event list/detail queries in lockstep.
+const EVENT_CREATOR_COLUMNS = `u.display_name AS created_by_name,
+  u.avatar_blob_path AS created_by_avatar_blob_path,
+  u.avatar_thumb_blob_path AS created_by_avatar_thumb_blob_path,
+  u.avatar_updated_at AS created_by_avatar_updated_at,
+  u.avatar_frame_preset AS created_by_avatar_frame_preset`;
+
+/**
+ * Attach signed creator avatar URLs to an event row. Runs in parallel for
+ * lists via Promise.all. Adds 4 fields:
+ *   created_by_avatar_url, created_by_avatar_thumb_url,
+ *   created_by_avatar_updated_at, created_by_avatar_frame_preset
+ */
+async function enrichEventWithCreatorAvatar<T extends EventRowWithCreator>(
+  row: T,
+): Promise<T & {
+  created_by_avatar_url: string | null;
+  created_by_avatar_thumb_url: string | null;
+  created_by_avatar_updated_at: string | null;
+  created_by_avatar_frame_preset: number;
+}> {
+  const avatar = await enrichUserAvatar({
+    avatar_blob_path: row.created_by_avatar_blob_path,
+    avatar_thumb_blob_path: row.created_by_avatar_thumb_blob_path,
+    avatar_updated_at: row.created_by_avatar_updated_at,
+    avatar_frame_preset: row.created_by_avatar_frame_preset,
+  });
+  return {
+    ...row,
+    created_by_avatar_url: avatar.avatar_url,
+    created_by_avatar_thumb_url: avatar.avatar_thumb_url,
+    created_by_avatar_updated_at: avatar.avatar_updated_at,
+    created_by_avatar_frame_preset: avatar.avatar_frame_preset,
+  };
 }
 
 async function checkCliqueMembership(cliqueId: string, userId: string): Promise<void> {
@@ -90,20 +132,22 @@ async function listEvents(req: HttpRequest, context: InvocationContext): Promise
 
     await checkCliqueMembership(cliqueId, authUser.id);
 
-    const events = await query<EventWithPhotoCount>(
-      `SELECT e.*, u.display_name AS created_by_name,
+    const events = await query<EventRowWithCreator>(
+      `SELECT e.*, ${EVENT_CREATOR_COLUMNS},
               COALESCE(COUNT(CASE WHEN p.media_type = 'photo' THEN 1 END), 0)::int AS photo_count,
               COALESCE(COUNT(CASE WHEN p.media_type = 'video' THEN 1 END), 0)::int AS video_count
        FROM events e
        JOIN users u ON u.id = e.created_by_user_id
        LEFT JOIN photos p ON p.event_id = e.id AND p.status = 'active'
        WHERE e.clique_id = $1
-       GROUP BY e.id, u.display_name
+       GROUP BY e.id, u.display_name, u.avatar_blob_path, u.avatar_thumb_blob_path,
+                u.avatar_updated_at, u.avatar_frame_preset
        ORDER BY e.created_at DESC`,
       [cliqueId],
     );
 
-    return successResponse(events);
+    const enriched = await Promise.all(events.map(enrichEventWithCreatorAvatar));
+    return successResponse(enriched);
   } catch (error) {
     return handleError(error, context.invocationId);
   }
@@ -118,15 +162,16 @@ async function getEvent(req: HttpRequest, context: InvocationContext): Promise<H
       throw new ValidationError('A valid event ID is required.');
     }
 
-    const event = await queryOne<EventWithPhotoCount>(
-      `SELECT e.*, u.display_name AS created_by_name,
+    const event = await queryOne<EventRowWithCreator>(
+      `SELECT e.*, ${EVENT_CREATOR_COLUMNS},
               COALESCE(COUNT(CASE WHEN p.media_type = 'photo' THEN 1 END), 0)::int AS photo_count,
               COALESCE(COUNT(CASE WHEN p.media_type = 'video' THEN 1 END), 0)::int AS video_count
        FROM events e
        JOIN users u ON u.id = e.created_by_user_id
        LEFT JOIN photos p ON p.event_id = e.id AND p.status = 'active'
        WHERE e.id = $1
-       GROUP BY e.id, u.display_name`,
+       GROUP BY e.id, u.display_name, u.avatar_blob_path, u.avatar_thumb_blob_path,
+                u.avatar_updated_at, u.avatar_frame_preset`,
       [eventId],
     );
 
@@ -136,7 +181,7 @@ async function getEvent(req: HttpRequest, context: InvocationContext): Promise<H
 
     await checkCliqueMembership(event.clique_id, authUser.id);
 
-    return successResponse(event);
+    return successResponse(await enrichEventWithCreatorAvatar(event));
   } catch (error) {
     return handleError(error, context.invocationId);
   }
@@ -146,10 +191,10 @@ async function listAllEvents(req: HttpRequest, context: InvocationContext): Prom
   try {
     const authUser = await authenticateRequest(req);
 
-    const events = await query<EventWithCliqueName>(
+    const events = await query<EventRowWithCliqueAndCreator>(
       `SELECT e.*,
               c.name AS clique_name,
-              u.display_name AS created_by_name,
+              ${EVENT_CREATOR_COLUMNS},
               COALESCE(COUNT(CASE WHEN p.media_type = 'photo' THEN 1 END), 0)::int AS photo_count,
               COALESCE(COUNT(CASE WHEN p.media_type = 'video' THEN 1 END), 0)::int AS video_count,
               (SELECT COUNT(*)::int FROM clique_members cm2 WHERE cm2.clique_id = e.clique_id) AS member_count
@@ -158,12 +203,14 @@ async function listAllEvents(req: HttpRequest, context: InvocationContext): Prom
        JOIN cliques c ON c.id = e.clique_id
        JOIN users u ON u.id = e.created_by_user_id
        LEFT JOIN photos p ON p.event_id = e.id AND p.status = 'active'
-       GROUP BY e.id, c.name, u.display_name
+       GROUP BY e.id, c.name, u.display_name, u.avatar_blob_path, u.avatar_thumb_blob_path,
+                u.avatar_updated_at, u.avatar_frame_preset
        ORDER BY e.created_at DESC`,
       [authUser.id],
     );
 
-    return successResponse(events);
+    const enriched = await Promise.all(events.map(enrichEventWithCreatorAvatar));
+    return successResponse(enriched);
   } catch (error) {
     return handleError(error, context.invocationId);
   }

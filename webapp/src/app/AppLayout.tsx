@@ -4,6 +4,7 @@ import { Bell, Calendar, LogOut, User, Users } from 'lucide-react';
 import { useEffect } from 'react';
 import { useAuthVerify } from '../features/auth/useAuthVerify';
 import { useUnreadNotificationCount } from '../features/notifications/useUnreadNotificationCount';
+import { AvatarWelcomePromptGate } from '../features/profile/AvatarWelcomePromptGate';
 import { initRealtime, teardownRealtime } from '../features/realtime/realtimeClient';
 import { trackEvent } from '../lib/ai';
 
@@ -94,6 +95,13 @@ export function AppLayout() {
       <main className="flex-1 overflow-auto pb-20 md:pb-0">
         <Outlet />
       </main>
+
+      {/*
+        First-sign-in welcome prompt. Mounts invisibly; gates on the
+        backend `shouldPromptForAvatar` flag + a session-local "already
+        shown" guard.
+      */}
+      <AvatarWelcomePromptGate />
 
       <nav className="md:hidden fixed bottom-0 inset-x-0 bg-dark-surface border-t border-white/10 flex">
         {navItems.map(({ to, label, icon: Icon }) => (

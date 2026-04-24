@@ -285,6 +285,49 @@ Target: `cold_start_optimistic_auth` + `background_verification_success` dominat
 - Managed identity role assignment removed accidentally
 - Storage account network rules changed
 
+### Avatar upload fails with AuthorizationFailure (shipped 2026-04-24)
+
+**Symptoms:** Profile → tap avatar → pick photo → crop → Save → "Upload failed. Please try again." toast. Network tab shows a 403 on the direct `PUT https://stcliquepixprod.blob.core.windows.net/photos/avatars/{userId}/original.jpg?...` call with body `<Code>AuthorizationFailure</Code>`.
+
+**Root-cause history:** the SAS service's upload permission set was regressed once before (commit `8d8decf`, 2026-03-24) — it shipped only `write` when Put Blob against a brand-new path requires both `write` AND `create`. Photos hit the regression because photo paths were always unique per photo ID; avatars would hit it the same way for every user's first upload. Reverted in the same round of fixes that shipped the client error mapper.
+
+**Verify the fix is in place:**
+```bash
+grep -A 3 "permissions.write = true" backend/src/shared/services/sasService.ts
+# Should show BOTH permissions.write = true AND permissions.create = true
+```
+
+If `create = true` is missing, the regression is back — re-add it, run `npm run build && npm test`, redeploy. If it's there, the 403 is coming from elsewhere (storage network rules, managed identity RBAC, clock skew on the client's SAS `se=` parameter).
+
+### Avatar doesn't update on other users' feed cards
+
+**Symptom:** User A uploads a new avatar. User B sees A's old avatar on A's photo/video cards for longer than expected.
+
+**Expected behavior:** A's own Profile screen updates instantly (via `authStateProvider` push). A's feed cards still show the OLD avatar until the next 30-second feed poll (or pull-to-refresh). B's feed cards update on their next poll cycle. This is by design — invalidating every event's photo/video provider globally would be expensive for no real UX benefit.
+
+**Not a bug unless:** B still sees the old avatar after multiple pull-to-refresh cycles. That would indicate the cache key isn't churning — check that `avatar_updated_at` is being emitted in the response (`customDimensions` on a recent `avatar_uploaded` telemetry event) and that the client's `cacheKey` computation references `avatar_updated_at.millisecondsSinceEpoch`.
+
+### User reports avatar doesn't appear at all (stuck on initials)
+
+**Symptoms:** User tapped "Add a photo" → picked an image → hit Save with no error toast → back on Profile → still sees initials.
+
+**Diagnosis order:**
+
+1. **DB check** — is the blob path actually stored?
+   ```sql
+   SELECT id, display_name, avatar_blob_path, avatar_thumb_blob_path, avatar_updated_at
+   FROM users WHERE email_or_phone = '<user-email>';
+   ```
+   - All NULL → confirm endpoint never ran or failed silently. Check App Insights for `POST /api/users/me/avatar` around the upload time; look for exceptions
+   - `avatar_blob_path` set but `avatar_thumb_blob_path` NULL → sharp thumb gen failed. Feed cards will fall through to the full 512px original (acceptable) but the feed was sized for thumbs. Re-run: client can re-upload or call confirm again
+
+2. **Blob check** — does the blob actually exist?
+   ```bash
+   az storage blob exists --account-name stcliquepixprod --container-name photos --name "avatars/{userId}/original.jpg"
+   ```
+
+3. **Client cache check** — if DB and blob both look right but user STILL sees initials, `CachedNetworkImageProvider` may be serving a stale negative cache (404 was cached). Have the user kill + reopen the app; Flutter's cache entries with missing bytes are short-lived. Web users: hard refresh.
+
 ---
 
 ## 3. Database Operations
@@ -476,6 +519,34 @@ customEvents
 | where name in ("photo_upload_failed", "video_upload_failed")
 | where timestamp > ago(24h)
 | project timestamp, name, customDimensions
+```
+
+**Avatar upload health (added 2026-04-24):**
+```kql
+customEvents
+| where name in ("avatar_uploaded", "avatar_removed", "avatar_frame_changed")
+| where timestamp > ago(24h)
+| summarize count() by name
+```
+
+**Avatar upload P95 latency** (expect < 2 s — includes sharp thumb gen):
+```kql
+requests
+| where timestamp > ago(24h) and name == "POST /api/users/me/avatar"
+| summarize p50 = percentile(duration, 50), p95 = percentile(duration, 95), count()
+```
+
+**Welcome-prompt funnel** (healthy onboarding: Yes + Later ≥ 70%, Dismissed ≤ 30%):
+```kql
+let shown = customEvents | where name == "avatar_prompt_shown" | where timestamp > ago(7d) | count;
+let yes = customEvents
+  | where name == "avatar_uploaded" and timestamp > ago(7d)
+  | join kind=inner (customEvents | where name == "avatar_prompt_shown" | project userId = tostring(customDimensions.userId), promptTs = timestamp) on $left.customDimensions.userId == $right.userId
+  | where datetime_diff('second', timestamp, promptTs) between (0 .. 60)
+  | count;
+let later = customEvents | where name == "avatar_prompt_snoozed" | where timestamp > ago(7d) | count;
+let dismiss = customEvents | where name == "avatar_prompt_dismissed" | where timestamp > ago(7d) | count;
+print shown = toscalar(shown), yes = toscalar(yes), later = toscalar(later), dismiss = toscalar(dismiss)
 ```
 
 ---
