@@ -1,12 +1,12 @@
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
 import { authenticateRequest } from '../shared/middleware/authMiddleware';
 import { handleError } from '../shared/middleware/errorHandler';
-import { successResponse, errorResponse } from '../shared/utils/response';
+import { successResponse } from '../shared/utils/response';
 import { query, queryOne, execute } from '../shared/services/dbService';
 import { trackEvent } from '../shared/services/telemetryService';
 import { validateRequiredString } from '../shared/utils/validators';
 import { isValidUUID } from '../shared/utils/validators';
-import { NotFoundError, ForbiddenError, ConflictError, ValidationError } from '../shared/utils/errors';
+import { NotFoundError, ForbiddenError, ValidationError } from '../shared/utils/errors';
 import { Clique, CliqueMember, CliqueWithMemberCount } from '../shared/models/clique';
 import { sendToMultipleTokens } from '../shared/services/fcmService';
 import { enrichUserAvatar } from '../shared/services/avatarEnricher';

@@ -6,7 +6,6 @@ import { successResponse } from '../shared/utils/response';
 import { query, queryOne, execute } from '../shared/services/dbService';
 import { trackEvent } from '../shared/services/telemetryService';
 import {
-  blobExists,
   getBlobProperties,
   deleteBlob,
   deleteBlobsByPrefix,

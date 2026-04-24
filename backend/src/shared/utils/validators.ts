@@ -1,6 +1,10 @@
 import { ValidationError } from './errors';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// Intentionally matches control chars for input sanitization. Strip them
+// from user-supplied strings before persisting to prevent terminal-escape
+// attacks in logs/CLI output.
+// eslint-disable-next-line no-control-regex
 const CONTROL_CHAR_REGEX = /[\x00-\x1F\x7F]/g;
 
 export function isValidUUID(value: string): boolean {

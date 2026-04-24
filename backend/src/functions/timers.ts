@@ -1,5 +1,5 @@
 import { app, InvocationContext, Timer } from '@azure/functions';
-import { query, queryOne, execute } from '../shared/services/dbService';
+import { query, execute } from '../shared/services/dbService';
 import { deleteBlob, deleteBlobsByPrefix } from '../shared/services/blobService';
 import { sendToMultipleTokens, sendSilentToMultipleTokens } from '../shared/services/fcmService';
 import { trackEvent } from '../shared/services/telemetryService';
@@ -91,7 +91,7 @@ async function cleanupExpired(myTimer: Timer, context: InvocationContext): Promi
   }
 
   // (Original photo-only counter retained for backwards compatibility with downstream queries)
-  let deletedCount = deletedPhotoCount + deletedVideoCount;
+  const deletedCount = deletedPhotoCount + deletedVideoCount;
 
   // Check for events that should be marked expired
   const expiredEventRows = await query<{ id: string }>(
