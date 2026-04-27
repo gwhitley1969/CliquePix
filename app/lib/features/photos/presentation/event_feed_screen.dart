@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/utils/lifecycle_aware_poller_mixin.dart';
 import '../../../core/theme/app_gradients.dart';
 import '../../../models/photo_model.dart';
 import '../../../models/video_model.dart';
@@ -57,23 +58,26 @@ class EventFeedScreen extends ConsumerStatefulWidget {
   ConsumerState<EventFeedScreen> createState() => _EventFeedScreenState();
 }
 
-class _EventFeedScreenState extends ConsumerState<EventFeedScreen> {
-  Timer? _pollTimer;
+class _EventFeedScreenState extends ConsumerState<EventFeedScreen>
+    with LifecycleAwarePollerMixin {
   StreamSubscription<VideoReadyEvent>? _videoReadySub;
   bool _isDownloading = false;
   int _downloadProgress = 0;
   int _downloadTotal = 0;
 
   @override
+  Duration get pollInterval =>
+      Duration(seconds: AppConstants.feedPollIntervalSeconds);
+
+  @override
+  void onPoll() {
+    ref.invalidate(eventPhotosProvider(widget.eventId));
+    ref.invalidate(eventVideosProvider(widget.eventId));
+  }
+
+  @override
   void initState() {
     super.initState();
-    _pollTimer = Timer.periodic(
-      Duration(seconds: AppConstants.feedPollIntervalSeconds),
-      (_) {
-        ref.invalidate(eventPhotosProvider(widget.eventId));
-        ref.invalidate(eventVideosProvider(widget.eventId));
-      },
-    );
     _setupVideoReadyListener();
   }
 
@@ -107,7 +111,6 @@ class _EventFeedScreenState extends ConsumerState<EventFeedScreen> {
   @override
   void dispose() {
     _videoReadySub?.cancel();
-    _pollTimer?.cancel();
     super.dispose();
   }
 

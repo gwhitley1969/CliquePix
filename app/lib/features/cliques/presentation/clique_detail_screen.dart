@@ -1,10 +1,10 @@
-import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_gradients.dart';
+import '../../../core/utils/lifecycle_aware_poller_mixin.dart';
 import '../../../widgets/avatar_widget.dart';
 import '../../../widgets/confirm_destructive_dialog.dart';
 import '../../../widgets/error_widget.dart';
@@ -21,33 +21,18 @@ class CliqueDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _CliqueDetailScreenState extends ConsumerState<CliqueDetailScreen>
-    with WidgetsBindingObserver {
+    with LifecycleAwarePollerMixin {
   String get cliqueId => widget.cliqueId;
-  Timer? _pollTimer;
   bool _navigatingAway = false;
 
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    _pollTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (mounted) _refresh();
-    });
-  }
+  Duration get pollInterval => const Duration(seconds: 30);
 
   @override
-  void dispose() {
-    _pollTimer?.cancel();
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      ref.invalidate(cliqueDetailProvider(cliqueId));
-      ref.invalidate(cliqueMembersProvider(cliqueId));
-    }
+  void onPoll() {
+    if (!mounted) return;
+    ref.invalidate(cliqueDetailProvider(cliqueId));
+    ref.invalidate(cliqueMembersProvider(cliqueId));
   }
 
   Future<void> _refresh() async {

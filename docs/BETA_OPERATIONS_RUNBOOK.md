@@ -328,6 +328,28 @@ If `create = true` is missing, the regression is back — re-add it, run `npm ru
 
 3. **Client cache check** — if DB and blob both look right but user STILL sees initials, `CachedNetworkImageProvider` may be serving a stale negative cache (404 was cached). Have the user kill + reopen the app; Flutter's cache entries with missing bytes are short-lived. Web users: hard refresh.
 
+### Photo / video upload returns "Too many requests" (HTTP 429)
+
+**Should not happen in beta** — APIM `rate-limit-by-key` was removed on 2026-04-27 (see `apim_policy.xml` in-file comment for the four-incident history). If a 429 surfaces, the source is no longer APIM. Triage:
+
+1. **Check APIM `Requests` metric filtered by `GatewayResponseCode=429`** — should be flat zero. If non-zero, someone re-added a rate-limit policy; revert via the deploy command in `apim_policy.xml`'s comment.
+2. **Check Azure Storage `Throttling Errors`** on `stcliquepixprod` — extremely unlikely for beta volumes, but possible if a single blob path is hammered. Storage 429 → `BlobUploadFailure` on the client, surfaced with the Azure error code in the user-visible message.
+3. **Check the user's APK version.** If they're on a pre-2026-04-27 APK, the `_friendlyError` for 429 may differ. Updated APKs show a live "Wait Ns" countdown with `Retry-After` parsing and a "Show details" panel covering Dio type / HTTP status / response body. Have them install the latest `app-release.apk`.
+4. **Check Front Door** metrics for `PercentageOfClientErrors` → 429 — Standard tier has no built-in rate limit, but a misconfigured WAF rule could in principle return 429. Currently no WAF.
+
+### WorkManager (Layer 4) firing too often
+
+Symptom: `customEvents | where name == "wm_refresh_success"` shows the event >1× per minute when it should fire ~3× per day.
+
+Root cause (fixed 2026-04-27 in `app/lib/features/auth/domain/background_token_service.dart`):
+- `Workmanager().registerPeriodicTask(... existingWorkPolicy: ExistingPeriodicWorkPolicy.replace)` re-creates the schedule on every app launch and queues immediate catch-up executions on Android.
+
+Fix shipped in 2026-04-27 APK:
+- `existingWorkPolicy: ExistingPeriodicWorkPolicy.keep` preserves the schedule across launches.
+- `callbackDispatcher` reads `wm_last_run_at_ms` from SharedPreferences and short-circuits with a `wm_task_skipped_too_soon` telemetry event if last run was < 4 hours ago.
+
+If the symptom recurs on a current APK, check whether `wm_last_run_at_ms` is being written successfully (SharedPreferences encryption issue?) and whether the Workmanager dispatcher is actually being invoked — `[AUTH-LAYER-4]` debug logs should fire on each invocation.
+
 ---
 
 ## 3. Database Operations
@@ -441,7 +463,8 @@ The Container Apps Job uses a function key to call `POST /api/internal/video-pro
 1. Check App Insights for unusual traffic patterns
 2. Check storage account metrics for unexpected blob growth
 3. Check Container Apps Job execution count — runaway transcoding jobs?
-4. Check APIM for rate-limit violations (potential abuse)
+4. Check APIM `Requests` metric for unusual call volume per JWT subject (rate-limit-by-key was removed 2026-04-27; APIM no longer auto-throttles, so abuse appears as raw request volume not 429s)
+5. If a single user is making excessive API calls, options are: (a) revoke their CIAM token, (b) add a temporary `is_blocked` column / check at the Function-App layer, (c) re-enable rate-limit-by-key on APIM Standard v2 tier (NOT Developer — see `apim_policy.xml` incident history)
 
 ---
 

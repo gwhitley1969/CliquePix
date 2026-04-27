@@ -80,7 +80,8 @@ This is a manual smoke test checklist to run before each beta release. Every ite
 - [ ] **Share externally** — share sheet opens, can send via Messages/WhatsApp/etc.
 - [ ] **React** — tap heart/laugh/fire/wow, reaction appears, other device sees it
 - [ ] **Delete own photo** — uploader deletes, photo disappears from both feeds
-- [ ] **Upload error — friendly message, not raw exception** — if the upload fails, the Share Photo screen shows a user-facing message (e.g., "Upload permission expired. Tap retry." / "Network timed out. Check your connection and retry."), NOT a raw `DioException`/stack-trace dump. The retry button re-runs the full flow from a fresh SAS.
+- [ ] **Upload error — friendly message + diagnostic panel** — if the upload fails, the Share Photo screen shows a user-facing message that includes the failed stage (e.g., "Upload failed at 'Getting upload URL...'", "Network timed out at 'Confirming...'") with a **Show details** link. Tapping it expands a `SelectableText` panel with stage / Dio type / HTTP status / response body for copy-paste diagnosis. NOT a raw stack-trace dump. The retry button re-runs the full flow from a fresh SAS.
+- [ ] **Upload 429 cooldown UX (regression — should not normally fire post-2026-04-27)** — if APIM ever returns 429, the error message reads "Too many requests. Please wait Ns and retry." with seconds parsed from `Retry-After`. Both the inline "Tap to Retry" link AND the big "Upload to Event" button become disabled with a live `Wait Ns` countdown that ticks down each second. Re-enables automatically when the window expires. Per DEPLOYMENT_STATUS.md / `apim_policy.xml` this should never fire from APIM; if it does, root-cause via BETA_OPERATIONS_RUNBOOK §2.
 - [ ] **Delete own photo from feed 3-dot** — your own photo card shows a 3-dot icon in the header; tap → "Delete" (red) → dark "Delete Photo?" dialog → Confirm → card disappears immediately (no 30s flicker). SnackBar "Photo deleted".
 - [ ] **Non-uploader sees no 3-dot on others' photos** — another user's photo card in the same feed has no 3-dot icon. Tapping into detail → PopupMenu shows Save + Share but no Delete.
 - [ ] **Photo detail delete — feed invalidation** — delete a photo from the AppBar PopupMenu in detail view → pop back → feed is already missing the photo (no 30s wait).
@@ -140,7 +141,7 @@ This is a manual smoke test checklist to run before each beta release. Every ite
 - [ ] **Real-time delivery** — Device B receives message in real-time (Web PubSub)
 - [ ] **Push notification** — if Device B is backgrounded, receives "Message from..." push
 - [ ] **Tap notification** — tapping DM push opens the correct thread
-- [ ] **Rate limiting** — send >10 messages in 1 minute → 429 error shown
+- [ ] ~~**Rate limiting** — send >10 messages in 1 minute → 429 error shown~~ — **N/A as of 2026-04-27**: APIM rate-limit-by-key was removed (see DEPLOYMENT_STATUS.md). DM endpoints no longer return 429 from the gateway. If abuse becomes a real concern post-beta, add per-user / per-thread caps at the Functions layer
 - [ ] **Read-only after expiry** — after event expires, DM thread is read-only
 
 ## 7. Notifications
@@ -205,6 +206,8 @@ This is a manual smoke test checklist to run before each beta release. Every ite
 - [ ] **Feed scroll** — 60fps, no jank with 20+ items
 - [ ] **App cold start** — splash to usable: < 3 seconds
 - [ ] **Thumbnail load** — feed thumbnails load within 500ms on 4G
+- [ ] **Background polling pauses** — open event feed (30 s polling active) → background the app → wait 2 minutes → check App Insights `customEvents` for `event_id=<eventId>` listings during the 2 min. **Should be zero** (polling pauses on `AppLifecycleState.paused`). Foreground the app → one immediate refresh fires + polling resumes.
+- [ ] **WorkManager fires at most once per 4 hours** — `customEvents | where name == "wm_refresh_success" | summarize count() by bin(timestamp, 1h)` should show ≤ 1 per hour (designed cadence ~3 / day). If it exceeds, the 4 h `wm_last_run_at_ms` SharedPreferences floor in `background_token_service.dart:callbackDispatcher` is broken.
 
 ---
 

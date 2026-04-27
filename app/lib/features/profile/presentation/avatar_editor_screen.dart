@@ -2,12 +2,15 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../models/user_model.dart';
 import '../../auth/domain/auth_state.dart';
 import '../../auth/presentation/auth_providers.dart';
 import '../data/avatar_repository.dart';
 import 'avatar_providers.dart';
+
+const String _kCropHintShownKey = 'avatar_crop_hint_shown';
 
 /// Full-screen square-crop editor with filter + frame selection + save.
 /// Receives a raw picked file (post-picker-sheet), runs `image_cropper`
@@ -37,8 +40,81 @@ class _AvatarEditorScreenState extends ConsumerState<AvatarEditorScreen> {
     if (auth is AuthAuthenticated) {
       _framePreset = auth.user.avatarFramePreset;
     }
-    // Fire the crop immediately on mount — no extra tap needed.
-    WidgetsBinding.instance.addPostFrameCallback((_) => _runCrop());
+    // Show the gesture hint once per device, then fire the crop. Subsequent
+    // uploads skip the hint and go straight to the cropper.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final prefs = await SharedPreferences.getInstance();
+      final hintShown = prefs.getBool(_kCropHintShownKey) ?? false;
+      if (!hintShown) {
+        if (!mounted) return;
+        final proceed = await _showCropHint();
+        if (!mounted) return;
+        if (proceed != true) {
+          // User bailed from the hint dialog. Pop back to the picker sheet.
+          Navigator.of(context).pop();
+          return;
+        }
+        await prefs.setBool(_kCropHintShownKey, true);
+      }
+      if (!mounted) return;
+      _runCrop();
+    });
+  }
+
+  Future<bool?> _showCropHint() {
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A2035),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.crop_rounded, color: AppColors.electricAqua, size: 22),
+            SizedBox(width: 10),
+            Text(
+              'Crop your photo',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'On the next screen:',
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 14),
+            ),
+            const SizedBox(height: 12),
+            const _HintRow(icon: Icons.pan_tool_alt_rounded, text: 'Drag the photo to position your face'),
+            const SizedBox(height: 8),
+            const _HintRow(icon: Icons.zoom_in_rounded, text: 'Pinch to zoom in or out'),
+            const SizedBox(height: 8),
+            const _HintRow(icon: Icons.check_rounded, text: "Tap ✓ when you're happy with it"),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.6)),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text(
+              'Got it',
+              style: TextStyle(
+                color: AppColors.electricAqua,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _runCrop() async {
@@ -264,6 +340,29 @@ class _SectionLabel extends StatelessWidget {
         fontWeight: FontWeight.w600,
         letterSpacing: 0.4,
       ),
+    );
+  }
+}
+
+class _HintRow extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  const _HintRow({required this.icon, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, color: AppColors.electricAqua, size: 18),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(color: Colors.white, fontSize: 13.5, height: 1.35),
+          ),
+        ),
+      ],
     );
   }
 }

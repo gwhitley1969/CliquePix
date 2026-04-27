@@ -22,6 +22,12 @@ const backgroundTokenRefreshTask = 'com.cliquepix.tokenRefresh';
 /// MSAL's underlying cache is process-wide (Android EncryptedSharedPreferences,
 /// iOS Keychain) so a fresh `SingleAccountPca` in this isolate picks up the
 /// signed-in account from the main-isolate's previous login.
+/// SharedPreferences key recording the last-successful WorkManager run timestamp
+/// (epoch ms). Used by `callbackDispatcher` to short-circuit when the task fires
+/// more frequently than designed — see Phase B1 of the foolproof rate-limit fix.
+const _wmLastRunKey = 'wm_last_run_at_ms';
+const _wmMinIntervalMs = 4 * 60 * 60 * 1000; // 4 hours
+
 @pragma('vm:entry-point')
 void callbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
@@ -29,6 +35,21 @@ void callbackDispatcher() {
 
     try {
       WidgetsFlutterBinding.ensureInitialized();
+
+      // Guard against task re-registration / OS-driven over-firing. The
+      // `frequency: 8h` is best-effort on Android — Doze, app launches, and
+      // network-constraint state can cause WorkManager to queue catch-up
+      // executions. Telemetry confirmed this fires multiple times per minute
+      // in some scenarios. Half the designed interval is a safe floor.
+      final prefs = await SharedPreferences.getInstance();
+      final lastRunMs = prefs.getInt(_wmLastRunKey) ?? 0;
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      if (lastRunMs > 0 && (nowMs - lastRunMs) < _wmMinIntervalMs) {
+        debugPrint('[AUTH-LAYER-4] WorkManager task skipped (ran ${(nowMs - lastRunMs) ~/ 60000}m ago)');
+        await _recordIsolateEvent('wm_task_skipped_too_soon');
+        return true;
+      }
+
       debugPrint('[AUTH-LAYER-4] WorkManager task fired');
 
       final pca = await SingleAccountPca.create(
@@ -49,6 +70,8 @@ void callbackDispatcher() {
         accessToken: result.accessToken,
         refreshToken: '',
       );
+      // Stamp the last-run timestamp so future over-firings short-circuit.
+      await prefs.setInt(_wmLastRunKey, DateTime.now().millisecondsSinceEpoch);
       debugPrint('[AUTH-LAYER-4] WorkManager refresh success');
       // Telemetry is recorded from the main isolate on next foreground; the
       // isolate's Dio + Riverpod aren't available here.
@@ -99,7 +122,13 @@ class BackgroundTokenService {
       constraints: Constraints(
         networkType: NetworkType.connected,
       ),
-      existingWorkPolicy: ExistingPeriodicWorkPolicy.replace,
+      // KEEP, not REPLACE: REPLACE re-creates the periodic schedule on every
+      // app launch, which on Android queues immediate catch-up executions if
+      // the previous schedule was missed. KEEP preserves the existing schedule
+      // across launches so the 8h cadence is honored. See Phase B1 of the
+      // rate-limit fix — telemetry showed wm_refresh_success firing multiple
+      // times per minute when this was set to REPLACE.
+      existingWorkPolicy: ExistingPeriodicWorkPolicy.keep,
     );
     debugPrint(
         '[AUTH-LAYER-4] WorkManager periodic task registered (${AppConstants.workManagerIntervalHours}h)');

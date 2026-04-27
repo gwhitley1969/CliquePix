@@ -4,9 +4,11 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/rendering.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
+import 'package:flutter/material.dart' show Color, Colors;
 import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
+import '../../../core/theme/app_colors.dart';
 import '../../../models/user_model.dart';
 import '../../photos/domain/blob_upload_service.dart';
 import 'avatar_api.dart';
@@ -57,12 +59,25 @@ class AvatarRepository {
       compressQuality: 100, // keep lossless here; final compression happens after filtering
       uiSettings: [
         AndroidUiSettings(
-          toolbarTitle: 'Crop avatar',
+          toolbarTitle: 'Crop Photo',
+          toolbarColor: const Color(0xFF0E1525),
+          // Status-bar color is set by UCropTheme's colorPrimaryDark; the
+          // image_cropper `statusBarColor` field is deprecated.
+          toolbarWidgetColor: Colors.white,
+          backgroundColor: Colors.black,
+          activeControlsWidgetColor: AppColors.electricAqua,
+          cropFrameColor: AppColors.electricAqua,
+          cropGridColor: const Color(0x44FFFFFF),
+          cropFrameStrokeWidth: 3,
+          cropGridStrokeWidth: 1,
+          showCropGrid: true,
           lockAspectRatio: true,
-          hideBottomControls: false,
+          hideBottomControls: true,
         ),
         IOSUiSettings(
-          title: 'Crop avatar',
+          title: 'Crop Photo',
+          doneButtonTitle: 'Use Photo',
+          cancelButtonTitle: 'Cancel',
           aspectRatioLockEnabled: true,
           aspectRatioPickerButtonHidden: true,
           resetAspectRatioEnabled: false,

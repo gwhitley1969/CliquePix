@@ -84,13 +84,13 @@ The current architecture deletes the notification-based Layer 2 entirely and rep
 | 1 | Battery-optimization exemption | First home-screen frame after login (Android only) | Android | Allows Layer 4 (WorkManager) + OS processes that deliver FCM to run reliably on Samsung/Xiaomi/Huawei |
 | 2 | **Server-triggered silent FCM push** | Backend timer every 15 min, targeting users inactive 9–11h | both | Wakes the app in the background; app runs `acquireTokenSilent` in an isolate. If in-isolate MSAL fails (iOS plugin-channel limits), a fallback flag triggers a Layer-3 refresh on next resume |
 | 3 | Foreground refresh on app resume | Every `AppLifecycleState.resumed` if token age ≥ 6h or pending flag set | both | Primary, most-reliable defense. Catches anyone who opens the app |
-| 4 | WorkManager periodic task | Every ~8h with network constraint | Android | Best-effort backup. Less reliable than Layer 2 (silent push) and Layer 3 (foreground) but adds another wake opportunity |
+| 4 | WorkManager periodic task | Every ~8h with network constraint, plus a 4h SharedPreferences `wm_last_run_at_ms` floor | Android | Best-effort backup. Less reliable than Layer 2 (silent push) and Layer 3 (foreground) but adds another wake opportunity |
 | 5 | Graceful re-login via Welcome Back | When silent refresh fails with AADSTS700082 / AADSTS500210 / no cached account | both | One-tap re-auth with `loginHint` pre-fill. Shown by `LoginScreen` when `AuthState` is `AuthReloginRequired` |
 
 Key timing:
 - Microsoft inactivity timeout: **12 hours** (hardcoded)
 - Token "stale" threshold (Layer 3): **6 hours** — `AppConstants.tokenStaleThresholdHours`
-- WorkManager interval (Layer 4): **8 hours** — `AppConstants.workManagerIntervalHours`
+- WorkManager interval (Layer 4): **8 hours** nominal — `AppConstants.workManagerIntervalHours`. Backed by a 4-hour `wm_last_run_at_ms` SharedPreferences floor inside `callbackDispatcher` so WorkManager catch-up executions cannot fire a successful refresh more than once per 4 h. Telemetry on 2026-04-27 showed `wm_refresh_success` firing 6× per minute with the previous `existingWorkPolicy: replace` setting; switching to `keep` + the 4 h floor restored the designed cadence (~3× per day)
 - Silent push window (Layer 2): user inactive between **9 and 11 hours** (2h window before the 12h cliff)
 - Silent push dedup: max 1 push per user per **6 hours** (`users.last_refresh_push_sent_at`)
 

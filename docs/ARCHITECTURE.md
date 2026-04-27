@@ -75,7 +75,7 @@ Why Flutter for Clique Pix:
 | Layer | Service | Purpose |
 |-------|---------|---------|
 | Entry point | **Azure Front Door** (Standard) | Global load balancing, SSL termination |
-| API gateway | **Azure API Management** | Rate limiting, API versioning, policy enforcement, single published API surface |
+| API gateway | **Azure API Management** | API versioning, CORS, single published API surface (rate-limit-by-key removed 2026-04-27 — abuse protection moved to application layer; see `apim_policy.xml` in-file comment for incident history) |
 | Compute | **Azure Functions** (TypeScript, Node.js) | REST API endpoints, timer-triggered cleanup, thumbnail generation |
 | Database | **PostgreSQL Flexible Server** | Relational data (users, cliques, events, photos, reactions) |
 | Object storage | **Azure Blob Storage** | Photo originals and thumbnails |
@@ -759,7 +759,7 @@ Do not overbuild live infrastructure. The following is sufficient to feel respon
 - Push notification on new photo / clique join → user taps to open relevant screen
 - Refresh on app resume via `WidgetsBindingObserver` (`didChangeAppLifecycleState`)
 - Pull-to-refresh via `RefreshIndicator` on list and detail screens
-- 30-second polling via `Timer.periodic` while clique list/detail screens are active
+- 30-second polling via `Timer.periodic` while clique list/detail screens are active. **Polling is lifecycle-aware** (since 2026-04-27): the shared `LifecycleAwarePollerMixin` at `app/lib/core/utils/lifecycle_aware_poller_mixin.dart` cancels the timer when the app is paused / inactive / hidden / detached, and restarts it (with a one-shot refresh) on resume. Adopted by `event_feed_screen`, `cliques_list_screen`, `clique_detail_screen`. Eliminates background traffic from polling timers that were continuing to fire on backgrounded apps.
 
 This three-layer approach (push + app-resume + polling) covers all cases: push for immediate alerting, app-resume for returning users, polling for actively-open screens. Most photo sharing happens in bursts (everyone at the same event, actively using the app).
 

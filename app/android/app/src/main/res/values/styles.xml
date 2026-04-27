@@ -15,4 +15,20 @@
     <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
         <item name="android:windowBackground">?android:colorBackground</item>
     </style>
+
+    <!-- Always-dark theme for image_cropper's UCropActivity (avatar square-crop UI).
+         Inherits from non-Light AppCompat so toolbar action items render reliably
+         across OEM skins; fitsSystemWindows pushes content below status bar and
+         above gesture nav so the ✓/✕ icons aren't clipped. -->
+    <style name="UCropTheme" parent="Theme.AppCompat.NoActionBar">
+        <item name="colorPrimary">#0E1525</item>
+        <item name="colorPrimaryDark">#0E1525</item>
+        <item name="colorAccent">#00C2D1</item>
+        <item name="android:textColorPrimary">#FFFFFF</item>
+        <item name="android:windowBackground">#FF000000</item>
+        <item name="android:navigationBarColor">#FF000000</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:fitsSystemWindows">true</item>
+    </style>
 </resources>

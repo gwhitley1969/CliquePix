@@ -1,6 +1,28 @@
 # DEPLOYMENT_STATUS.md — Clique Pix v1
 
-Last updated: 2026-04-24 (Avatars v1 deployed — migrations 009 + 010 applied, backend shipped, CORS verified)
+Last updated: 2026-04-27 (APIM rate-limit removed, WorkManager fired-too-often fix shipped, lifecycle-aware polling adopted on three feed screens)
+
+## APIM rate-limit removal + client traffic reduction (2026-04-27)
+
+**Status:** APIM policy deployed (no rate-limit-by-key on any path); client APK built with WorkManager + polling + retry-interceptor fixes.
+
+**What changed and why.** Four consecutive user-blocking 429 incidents from APIM `rate-limit-by-key` on the Developer-tier (single in-memory cache, no SLA) made the gateway-side rate limit a net negative for beta. Each fix attempt — bumping 120 → 300 → 600/min, adding bypass paths, versioning the counter cache key with `v2:` prefix — produced a *new* 429 within minutes. Removing the policy entirely is the only foolproof guarantee that uploads will never 429. Abuse protection now lives at the application layer (JWT auth, event-membership checks, User Delegation SAS expiry, orphan cleanup timer).
+
+| Change | Status | Files |
+|---|---|---|
+| APIM policy: removed `<rate-limit-by-key>` (both global 600/min + avatar sub-limit). Kept `<base />` + `<cors>`. | ✅ Deployed 2026-04-27 via `az rest PUT` | `apim_policy.xml` (with full incident-history comment) |
+| Flutter: `RetryInterceptor` never retries 429s; honors `Retry-After` header (capped 30s); `maxRetries: 3 → 1` to reduce amplification on connection errors | ✅ | `app/lib/services/retry_interceptor.dart` |
+| Flutter: WorkManager `existingWorkPolicy: replace → keep` + 4-hour `wm_last_run_at_ms` SharedPreferences guard inside `callbackDispatcher` (telemetry confirmed it was firing 6×/min instead of 1×/8h) | ✅ | `app/lib/features/auth/domain/background_token_service.dart` |
+| Flutter: new `LifecycleAwarePollerMixin` — pauses 30 s polling timers when app is paused/inactive/hidden, restarts (with one-shot refresh) on resume | ✅ | `app/lib/core/utils/lifecycle_aware_poller_mixin.dart` |
+| Flutter: adopted by `event_feed_screen`, `cliques_list_screen`, `clique_detail_screen` | ✅ | as listed |
+| Flutter: `camera_capture_screen` enriched 429 handler — parses `Retry-After`, shows live "Wait Ns" countdown on retry button + Upload button (disabled during cooldown), expandable "Show details" diagnostic panel covering Dio type / status / body / runtime type | ✅ | `app/lib/features/photos/presentation/camera_capture_screen.dart` |
+| Avatar crop UX fix — dark `UCropTheme` + `hideBottomControls: true` + first-time `_showCropHint` AlertDialog (gated on `avatar_crop_hint_shown` SharedPreferences key) | ✅ | `app/android/app/src/main/res/values/styles.xml`, `AndroidManifest.xml`, `avatar_repository.dart`, `avatar_editor_screen.dart` |
+
+**Deploy artifacts:** `app/build/app/outputs/flutter-apk/app-release.apk` (62.5 MB, debug-signed). Backend not redeployed — APIM is gateway-only.
+
+**Operational note for future maintainers:** do **not** re-add `rate-limit-by-key` to `apim_policy.xml` until APIM is migrated off the Developer tier. The policy file's in-line comment lists the four-incident history reproducibly. Standard v2 has a distributed rate-limit cache and an SLA — the right place to revisit gateway-side rate limiting.
+
+---
 
 ## Avatars v1 — Profile Pictures (2026-04-24)
 
@@ -29,7 +51,7 @@ Adds user-uploadable headshots that replace the initials-in-a-gradient-ring fall
 | Backend: `avatars.ts` — 5 endpoints (upload-url / confirm / delete / frame / avatar-prompt) | ✅ | `backend/src/functions/avatars.ts` |
 | Backend: `authMiddleware` SELECT adds avatar columns; `authVerify` + `getMe` emit enriched shape incl. `should_prompt_for_avatar`; `deleteMe` cleans avatar blobs | ✅ | `backend/src/shared/middleware/authMiddleware.ts`, `backend/src/functions/auth.ts` |
 | Backend: 14 handler propagation (photos, videos, events, cliques, dm) with `enrichUserAvatar` helper | ✅ | `backend/src/functions/{photos,videos,events,cliques,dm}.ts` |
-| Backend: APIM per-IP 10/min sub-limit on avatar sub-paths | ✅ | `apim_policy.xml` |
+| ~~Backend: APIM per-IP 10/min sub-limit on avatar sub-paths~~ — superseded by 2026-04-27 rate-limit removal (above) | ✅ then ❌ removed | `apim_policy.xml` |
 | Flutter: `AvatarWidget` extended (thumbUrl / framePreset / cacheKey, size-aware URL selection) | ✅ | `app/lib/widgets/avatar_widget.dart` |
 | Flutter: `UserModel` + 5 response models carry avatar denorm fields | ✅ | `app/lib/models/*.dart` |
 | Flutter: avatar feature (api, repo, picker sheet, editor, welcome prompt, animated empty-state, first-visit hint) | ✅ | `app/lib/features/profile/**` |
@@ -214,7 +236,7 @@ Deploy order: migration 009 → backend → client. Backend silent-push path mus
 | Storage Account | `stcliquepixprod` | eastus | Ready — `photos` container, blob public access disabled |
 | PostgreSQL | `pg-cliquepixdb` | eastus2 | Ready — v18, `cliquepix` DB with 10 tables (incl. `event_dm_threads`, `event_dm_messages`) |
 | Key Vault | `kv-cliquepix-prod` | eastus | Ready — `pg-connection-string` + `fcm-credentials` + `web-pubsub-connection-string` stored |
-| API Management | `apim-cliquepix-002` | eastus | Ready — Developer SKU, API imported, rate limiting configured |
+| API Management | `apim-cliquepix-002` | eastus | Ready — Developer SKU, API imported. **NO rate-limit-by-key** as of 2026-04-27 (see incident history in `apim_policy.xml`); CORS is the only inbound policy |
 | Front Door | `fd-cliquepix-prod` | global | Ready — Standard SKU (no WAF) |
 | Static Web App | `swa-cliquepix-prod` | eastus2 | Ready — clique-pix.com + www |
 | DNS Zone | `clique-pix.com` | global | Ready — api CNAME, apex ALIAS, www CNAME, TXT validation |

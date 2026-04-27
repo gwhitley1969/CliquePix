@@ -1,8 +1,8 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/utils/lifecycle_aware_poller_mixin.dart';
 import '../../../widgets/branded_sliver_app_bar.dart';
 import '../../../widgets/empty_state_widget.dart';
 import '../../../widgets/error_widget.dart';
@@ -18,34 +18,13 @@ class CliquesListScreen extends ConsumerStatefulWidget {
 }
 
 class _CliquesListScreenState extends ConsumerState<CliquesListScreen>
-    with WidgetsBindingObserver {
-  Timer? _pollTimer;
+    with LifecycleAwarePollerMixin {
+  @override
+  Duration get pollInterval => const Duration(seconds: 30);
 
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    _startPolling();
-  }
-
-  @override
-  void dispose() {
-    _pollTimer?.cancel();
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
-  }
-
-  void _startPolling() {
-    _pollTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (mounted) ref.read(cliquesListProvider.notifier).refresh();
-    });
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      ref.read(cliquesListProvider.notifier).refresh();
-    }
+  void onPoll() {
+    ref.read(cliquesListProvider.notifier).refresh();
   }
 
   @override

@@ -837,7 +837,7 @@ Backend computes `should_prompt_for_avatar` on every auth response as `avatar_bl
 
 **AuthNotifier rule:** client-side `AuthNotifier.updateUserAvatar(UserModel)` is a pure in-memory state swap. It MUST NOT trigger a token refresh — spurious refresh calls would disturb the 5-layer Entra defense's counters. The backend's confirm response already returns a fresh enriched user; just drop it into `AuthAuthenticated(user)`.
 
-**Rate limiting:** APIM policy includes a per-user 10/min cap on `/api/users/me/avatar*` sub-paths (keyed on JWT subject with IP fallback), in addition to the global 120/min. Avatar uploads aren't high-frequency; the stricter sub-limit is abuse protection.
+**Rate limiting:** removed entirely from APIM on 2026-04-27 after four consecutive user-blocking 429 incidents traced to APIM Developer-tier in-memory counter staleness. The previous 10/min avatar sub-limit and 600/min global limit are gone — `apim_policy.xml` now contains only `<base />` + `<cors>`. Abuse protection lives at the application layer: JWT auth, event-membership checks, User Delegation SAS expiry (5 min photo / 30 min video block), orphan cleanup timer. **Do not re-add `rate-limit-by-key` to `apim_policy.xml`** until APIM is migrated off Developer tier (Standard v2 has a distributed cache and an SLA). See `apim_policy.xml` in-file comment for the full incident history.
 
 **Account deletion:** `deleteMe` in `auth.ts` deletes both avatar blobs before the cascade row delete. Idempotent (`deleteIfExists`), so missing blobs don't block the flow.
 

@@ -92,11 +92,13 @@
             android:name="flutterEmbedding"
             android:value="2" />
 
-        <!-- image_cropper's uCrop backend (avatar square-crop UI) -->
+        <!-- image_cropper's uCrop backend (avatar square-crop UI). Custom dark theme
+             defined in res/values/styles.xml — fixes top-icon clipping, dark/light
+             theme contrast, and gesture-nav inset handling on modern Android. -->
         <activity
             android:name="com.yalantis.ucrop.UCropActivity"
             android:screenOrientation="portrait"
-            android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
+            android:theme="@style/UCropTheme" />
 
     </application>
 

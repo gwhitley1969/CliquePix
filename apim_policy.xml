@@ -1,20 +1,44 @@
 <!--
-  APIM policy for the "CliquePix API v1" — applies at the "All operations" scope
-  on that API (NOT the global / "All APIs" scope).
+  APIM policy for the "CliquePix API v1" - applies at the "All operations"
+  scope on that API (NOT the global / "All APIs" scope).
 
-  Order matters:
-    1. <base /> inherits any higher-scope policies (none today).
-    2. <cors> runs next so browser preflight OPTIONS requests are answered
-       before rate-limit-by-key counts them against the per-IP quota.
-    3. <rate-limit-by-key> rate-limits authenticated users by JWT subject
-       (so different users behind the same NAT/corporate IP each get their
-       own quota) and falls back to IP for unauthenticated requests.
-       The `var auth = ...` line declares the Authorization header value
-       explicitly inside the expression block — don't drop it.
+  HISTORY OF RATE-LIMIT REMOVAL (2026-04-27):
+  rate-limit-by-key was removed from this policy after four consecutive
+  user-blocking failures in beta:
+    1. Original 120/min limit was easily exceeded by normal usage
+       (5-layer Entra refresh defense, 30s feed polling, avatar SAS
+       regeneration on every list/detail handler).
+    2. Bumping to 300/min did not help; the Developer-tier in-memory
+       counter cache appears to persist stale state across policy edits.
+    3. Bumping to 600/min and bypassing critical paths still produced
+       429 responses on a first-attempt upload (verified via
+       APIM "RateLimitExceeded" metric).
+    4. The same first-upload 429 reappeared on a follow-up attempt.
 
-  Source of truth: this file. If APIM drifts, update this file first, then
-  redeploy via Azure portal (APIs → CliquePix API v1 → Design → All operations
-  → Inbound processing → </> icon) or `az apim api policy create`.
+  Abuse protection now comes entirely from the application layer:
+    - JWT bearer-token validation (every endpoint)
+    - Event / clique membership check (every endpoint that accepts an
+      event_id or clique_id)
+    - User Delegation SAS (5-minute expiry, scoped to a single blob
+      path; client cannot read or list)
+    - Orphan cleanup timer (every 15 min) deletes pending uploads
+    - Per-user video count cap (PER_USER_VIDEO_LIMIT, enforced in
+      backend/src/functions/videos.ts)
+
+  If real abuse risk emerges post-beta, the right response is:
+    - Move APIM off Developer tier (Standard v2 has a distributed
+      rate-limit cache and an SLA), THEN
+    - Add per-user upload-frequency caps at the Functions layer where
+      we control the logic and can debug it
+    - Configure Azure Front Door WAF for genuine bot traffic patterns
+
+  Do NOT re-add rate-limit-by-key to this policy without first migrating
+  off APIM Developer tier. The 4-incident history is documented
+  reproducibly above; repeating it would be a regression.
+
+  Source of truth: this file. Deploy via az rest PUT against the
+  management API policy URL with a JSON body of the form:
+    { "properties": { "format": "rawxml", "value": "<contents of this file>" } }
 -->
 <policies>
     <inbound>
@@ -39,37 +63,6 @@
                 <header>x-request-id</header>
             </expose-headers>
         </cors>
-        <rate-limit-by-key calls="120" renewal-period="60" counter-key="@{
-            var auth = context.Request.Headers.GetValueOrDefault("Authorization", "");
-            if (auth.StartsWith("Bearer ")) {
-                var jwt = auth.Substring(7).AsJwt();
-                if (jwt != null && jwt.Subject != null) {
-                    return jwt.Subject;
-                }
-            }
-            return context.Request.IpAddress;
-        }" retry-after-header-name="Retry-After" />
-        <!--
-          Tighter sub-limit for avatar mutation endpoints. Avatar uploads
-          aren't high-frequency; a user has no legitimate reason to change
-          their headshot more than a few times per minute. 10/min is
-          defense-in-depth against abuse without impairing UX. Keyed on
-          JWT subject (same fallback chain as the global limit).
-        -->
-        <choose>
-            <when condition="@(context.Request.Url.Path.Contains("/users/me/avatar"))">
-                <rate-limit-by-key calls="10" renewal-period="60" counter-key="@{
-                    var auth = context.Request.Headers.GetValueOrDefault("Authorization", "");
-                    if (auth.StartsWith("Bearer ")) {
-                        var jwt = auth.Substring(7).AsJwt();
-                        if (jwt != null && jwt.Subject != null) {
-                            return "avatar:" + jwt.Subject;
-                        }
-                    }
-                    return "avatar:" + context.Request.IpAddress;
-                }" retry-after-header-name="Retry-After" />
-            </when>
-        </choose>
     </inbound>
     <backend>
         <base />

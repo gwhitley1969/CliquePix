@@ -1,7 +1,7 @@
+import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart' show debugPrint, Uint8List;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -26,7 +26,19 @@ class _CameraCaptureScreenState extends ConsumerState<CameraCaptureScreen> {
   bool _isUploading = false;
   String _statusText = '';
   String? _errorText;
+  String? _errorDetails;
+  bool _showDetails = false;
   double _progress = 0;
+  // 429 cooldown: wall-clock time at which retries become tappable again.
+  DateTime? _retryAvailableAt;
+  Timer? _cooldownTicker;
+  Duration _cooldownRemaining = Duration.zero;
+
+  @override
+  void dispose() {
+    _cooldownTicker?.cancel();
+    super.dispose();
+  }
 
   Future<void> _pickAndEdit(ImageSource source) async {
     debugPrint('[CliquePix] _pickAndEdit: source=$source');
@@ -79,7 +91,14 @@ class _CameraCaptureScreenState extends ConsumerState<CameraCaptureScreen> {
     if (_editedImage == null) return;
     debugPrint('[CliquePix] _upload: starting, eventId=${widget.eventId}, file=${_editedImage!.path}');
 
-    setState(() { _isUploading = true; _progress = 0; _statusText = 'Compressing...'; _errorText = null; });
+    setState(() {
+      _isUploading = true;
+      _progress = 0;
+      _statusText = 'Compressing...';
+      _errorText = null;
+      _errorDetails = null;
+      _showDetails = false;
+    });
 
     try {
       final compression = ref.read(imageCompressionProvider);
@@ -108,10 +127,13 @@ class _CameraCaptureScreenState extends ConsumerState<CameraCaptureScreen> {
       debugPrint('[CliquePix] _upload: confirm complete');
       setState(() { _progress = 1.0; _statusText = 'Done!'; });
 
+      // Best-effort temp-file cleanup. Don't let cleanup failures mask success.
       try {
         if (await compressed.file.exists()) await compressed.file.delete();
         if (await _editedImage!.exists()) await _editedImage!.delete();
-      } catch (_) {}
+      } catch (cleanupErr) {
+        debugPrint('[CliquePix] _upload: temp cleanup failed (non-fatal): $cleanupErr');
+      }
 
       ref.invalidate(eventPhotosProvider(widget.eventId));
       debugPrint('[CliquePix] _upload: feed invalidated, popping back');
@@ -120,14 +142,75 @@ class _CameraCaptureScreenState extends ConsumerState<CameraCaptureScreen> {
       debugPrint('[CliquePix] _upload: ERROR at "$_statusText": $e');
       debugPrint('[CliquePix] _upload: stack: $stack');
       if (mounted) {
+        final friendly = _friendlyError(e, _statusText);
+        final details = _diagnosticDetails(e, _statusText);
+        final retryAfter = _extractRetryAfter(e);
         setState(() {
           _isUploading = false;
-          _errorText = _friendlyError(e, _statusText);
+          _errorText = friendly;
+          _errorDetails = details;
           _statusText = '';
         });
+        if (retryAfter != null) {
+          _startCooldown(retryAfter);
+        }
       }
     }
   }
+
+  /// Pulls the Retry-After hint from a 429 response. APIM emits both an
+  /// HTTP `Retry-After` header (seconds) and a body like
+  /// `{"statusCode":429,"message":"Rate limit is exceeded. Try again in 37 seconds."}`.
+  /// We trust the header first, then fall back to parsing the body so we
+  /// always have a number to count down from.
+  Duration? _extractRetryAfter(Object e) {
+    if (e is! DioException) return null;
+    if (e.response?.statusCode != 429) return null;
+    final headers = e.response?.headers;
+    final headerVal = headers?.value('retry-after');
+    if (headerVal != null) {
+      final n = int.tryParse(headerVal.trim());
+      if (n != null && n > 0) return Duration(seconds: n);
+    }
+    final body = e.response?.data;
+    if (body is Map) {
+      final msg = body['message']?.toString() ?? '';
+      final m = RegExp(r'(\d+)\s*second').firstMatch(msg);
+      if (m != null) {
+        final n = int.tryParse(m.group(1)!);
+        if (n != null && n > 0) return Duration(seconds: n);
+      }
+    }
+    return const Duration(seconds: 60);
+  }
+
+  void _startCooldown(Duration duration) {
+    _cooldownTicker?.cancel();
+    final until = DateTime.now().add(duration);
+    setState(() {
+      _retryAvailableAt = until;
+      _cooldownRemaining = duration;
+    });
+    _cooldownTicker = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) {
+        t.cancel();
+        return;
+      }
+      final remaining = until.difference(DateTime.now());
+      if (remaining.isNegative || remaining.inSeconds <= 0) {
+        t.cancel();
+        setState(() {
+          _retryAvailableAt = null;
+          _cooldownRemaining = Duration.zero;
+        });
+      } else {
+        setState(() => _cooldownRemaining = remaining);
+      }
+    });
+  }
+
+  bool get _retryDisabled =>
+      _retryAvailableAt != null && DateTime.now().isBefore(_retryAvailableAt!);
 
   String _friendlyError(Object e, String stage) {
     if (e is BlobUploadFailure) {
@@ -141,13 +224,36 @@ class _CameraCaptureScreenState extends ConsumerState<CameraCaptureScreen> {
           return 'This photo is too large to upload.';
       }
       final code = e.azureCode ?? e.statusCode?.toString() ?? 'unknown';
-      return 'Upload failed. Please try again. (code: $code)';
+      return 'Upload failed at "$stage". (code: $code)';
     }
     if (e is DioException) {
-      if (e.type == DioExceptionType.connectionTimeout ||
-          e.type == DioExceptionType.sendTimeout ||
-          e.type == DioExceptionType.receiveTimeout) {
-        return 'Network timed out. Check your connection and retry.';
+      // Check for a structured backend error code first — matches the
+      // pattern used in video_upload_screen._friendlyError.
+      final backendCode = _extractBackendErrorCode(e);
+      if (backendCode != null) {
+        switch (backendCode) {
+          case 'EVENT_EXPIRED':
+            return 'This event has ended. Photos can no longer be uploaded.';
+          case 'NOT_MEMBER':
+            return "You're no longer a member of this event's clique.";
+          case 'EVENT_NOT_FOUND':
+            return 'This event no longer exists. Go back and pick another.';
+        }
+      }
+      switch (e.type) {
+        case DioExceptionType.connectionTimeout:
+        case DioExceptionType.sendTimeout:
+        case DioExceptionType.receiveTimeout:
+          return 'Network timed out. Check your connection and retry.';
+        case DioExceptionType.connectionError:
+          return "Can't reach the server. Check your connection and retry.";
+        case DioExceptionType.cancel:
+          return 'Upload cancelled.';
+        case DioExceptionType.badCertificate:
+          return 'Secure connection failed. Check your device clock and retry.';
+        case DioExceptionType.unknown:
+        case DioExceptionType.badResponse:
+          break;
       }
       final status = e.response?.statusCode;
       switch (status) {
@@ -157,14 +263,69 @@ class _CameraCaptureScreenState extends ConsumerState<CameraCaptureScreen> {
           return 'You can no longer post to this event.';
         case 404:
           return 'This event no longer exists. Go back and pick another.';
+        case 429:
+          final retry = _extractRetryAfter(e);
+          final secs = retry?.inSeconds ?? 60;
+          return 'Too many requests. Please wait ${secs}s and retry.';
       }
       if (status != null && status >= 500) {
-        return 'Something went wrong on our end. Please try again.';
+        return 'Server error at "$stage" (HTTP $status). Please try again.';
+      }
+      if (status != null) {
+        return 'Upload failed at "$stage" (HTTP $status). Tap details for more.';
+      }
+      return 'Upload failed at "$stage" (no response). Tap details for more.';
+    }
+    final typeName = e.runtimeType.toString();
+    return 'Upload failed at "$stage" ($typeName). Tap details for more.';
+  }
+
+  /// Extract a structured backend error code from a Dio response body.
+  /// Backends return `{ "data": null, "error": { "code": "...", "message": "..." } }`.
+  String? _extractBackendErrorCode(DioException e) {
+    final data = e.response?.data;
+    if (data is Map<String, dynamic>) {
+      final err = data['error'];
+      if (err is Map<String, dynamic>) {
+        final code = err['code'];
+        if (code is String) return code;
       }
     }
-    return kDebugMode
-        ? 'Upload failed at: $stage\n$e'
-        : 'Upload failed. Please try again.';
+    return null;
+  }
+
+  /// Verbose diagnostic blob shown in the expandable "Show details" section.
+  /// Captures everything we'd want from an adb logcat session: stage, exception
+  /// type, message, and (for Dio) response status + first chunk of the body.
+  String _diagnosticDetails(Object e, String stage) {
+    final buf = StringBuffer();
+    buf.writeln('Stage: $stage');
+    buf.writeln('Type: ${e.runtimeType}');
+    if (e is DioException) {
+      buf.writeln('Dio type: ${e.type.name}');
+      buf.writeln('HTTP status: ${e.response?.statusCode ?? "(no response)"}');
+      if (e.message != null) buf.writeln('Message: ${e.message}');
+      if (e.error != null && e.error.toString().isNotEmpty) {
+        buf.writeln('Cause: ${_truncate(e.error.toString(), 200)}');
+      }
+      final body = e.response?.data;
+      if (body != null) {
+        buf.writeln('Body: ${_truncate(body.toString(), 300)}');
+      }
+    } else if (e is BlobUploadFailure) {
+      buf.writeln('HTTP status: ${e.statusCode ?? "(none)"}');
+      buf.writeln('Azure code: ${e.azureCode ?? "(none)"}');
+      buf.writeln('Azure message: ${e.azureMessage ?? "(none)"}');
+      buf.writeln('Cause: ${_truncate(e.cause.toString(), 200)}');
+    } else {
+      buf.writeln('Message: ${_truncate(e.toString(), 300)}');
+    }
+    return buf.toString().trimRight();
+  }
+
+  static String _truncate(String s, int max) {
+    if (s.length <= max) return s;
+    return '${s.substring(0, max)}…';
   }
 
   @override
@@ -275,13 +436,58 @@ class _CameraCaptureScreenState extends ConsumerState<CameraCaptureScreen> {
                 border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
               ),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(_errorText!, style: const TextStyle(color: AppColors.error, fontSize: 13), textAlign: TextAlign.center),
                   const SizedBox(height: 8),
-                  GestureDetector(
-                    onTap: _upload,
-                    child: const Text('Tap to Retry', style: TextStyle(color: AppColors.error, fontWeight: FontWeight.w700, fontSize: 14, decoration: TextDecoration.underline)),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      GestureDetector(
+                        onTap: _retryDisabled ? null : _upload,
+                        child: Text(
+                          _retryDisabled
+                              ? 'Wait ${_cooldownRemaining.inSeconds}s'
+                              : 'Tap to Retry',
+                          style: TextStyle(
+                            color: _retryDisabled
+                                ? AppColors.error.withValues(alpha: 0.5)
+                                : AppColors.error,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                            decoration: _retryDisabled ? null : TextDecoration.underline,
+                          ),
+                        ),
+                      ),
+                      if (_errorDetails != null)
+                        GestureDetector(
+                          onTap: () => setState(() => _showDetails = !_showDetails),
+                          child: Text(
+                            _showDetails ? 'Hide details' : 'Show details',
+                            style: const TextStyle(color: AppColors.error, fontWeight: FontWeight.w600, fontSize: 13, decoration: TextDecoration.underline),
+                          ),
+                        ),
+                    ],
                   ),
+                  if (_showDetails && _errorDetails != null) ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.35),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: SelectableText(
+                        _errorDetails!,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11.5,
+                          height: 1.4,
+                          fontFamily: 'monospace',
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -290,7 +496,9 @@ class _CameraCaptureScreenState extends ConsumerState<CameraCaptureScreen> {
         // Upload button — BIG and unmissable
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-          child: Container(
+          child: Opacity(
+            opacity: _retryDisabled ? 0.5 : 1.0,
+            child: Container(
             width: double.infinity,
             height: 56,
             decoration: BoxDecoration(
@@ -307,20 +515,23 @@ class _CameraCaptureScreenState extends ConsumerState<CameraCaptureScreen> {
             child: Material(
               color: Colors.transparent,
               child: InkWell(
-                onTap: _upload,
+                onTap: _retryDisabled ? null : _upload,
                 borderRadius: BorderRadius.circular(16),
-                child: const Row(
+                child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.cloud_upload_rounded, color: Colors.white, size: 22),
-                    SizedBox(width: 10),
+                    const Icon(Icons.cloud_upload_rounded, color: Colors.white, size: 22),
+                    const SizedBox(width: 10),
                     Text(
-                      'Upload to Event',
-                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 18),
+                      _retryDisabled
+                          ? 'Wait ${_cooldownRemaining.inSeconds}s'
+                          : 'Upload to Event',
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 18),
                     ),
                   ],
                 ),
               ),
+            ),
             ),
           ),
         ),
