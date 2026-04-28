@@ -10,6 +10,7 @@ import { generateUploadSas, generateViewSas } from '../shared/services/sasServic
 import { sendToMultipleTokens } from '../shared/services/fcmService';
 import { isValidUUID, validateMimeType } from '../shared/utils/validators';
 import { NotFoundError, ForbiddenError, ValidationError } from '../shared/utils/errors';
+import { canDeleteMedia } from '../shared/utils/permissions';
 import { Photo, PhotoWithUrls } from '../shared/models/photo';
 import { Event } from '../shared/models/event';
 import { enrichUserAvatar } from '../shared/services/avatarEnricher';
@@ -497,8 +498,14 @@ async function deletePhoto(req: HttpRequest, context: InvocationContext): Promis
 
     // Only allow deleting photos via this endpoint — videos have their own DELETE /api/videos/{id}
     // with prefix-delete logic for HLS segments.
-    const photo = await queryOne<Photo>(
-      "SELECT * FROM photos WHERE id = $1 AND status = 'active' AND media_type = 'photo'",
+    // Authorization: uploader OR event organizer (`events.created_by_user_id`).
+    // Enriched with the event JOIN so a single round-trip yields both IDs.
+    type PhotoForDelete = Photo & { event_created_by_user_id: string | null };
+    const photo = await queryOne<PhotoForDelete>(
+      `SELECT p.*, e.created_by_user_id AS event_created_by_user_id
+       FROM photos p
+       JOIN events e ON e.id = p.event_id
+       WHERE p.id = $1 AND p.status = 'active' AND p.media_type = 'photo'`,
       [photoId],
     );
 
@@ -506,8 +513,15 @@ async function deletePhoto(req: HttpRequest, context: InvocationContext): Promis
       throw new NotFoundError('photo');
     }
 
-    if (photo.uploaded_by_user_id !== authUser.id) {
-      throw new ForbiddenError('You can only delete your own photos.');
+    const role = canDeleteMedia({
+      uploadedByUserId: photo.uploaded_by_user_id,
+      eventCreatedByUserId: photo.event_created_by_user_id,
+      authUserId: authUser.id,
+    });
+    if (!role) {
+      throw new ForbiddenError(
+        'You can only delete your own photos or photos from events you created.',
+      );
     }
 
     // Delete blobs (original + thumbnail)
@@ -522,7 +536,14 @@ async function deletePhoto(req: HttpRequest, context: InvocationContext): Promis
       [photoId],
     );
 
-    trackEvent('photo_deleted', { photoId, eventId: photo.event_id, userId: authUser.id });
+    trackEvent('photo_deleted', {
+      photoId,
+      eventId: photo.event_id,
+      userId: authUser.id,
+      deleterRole: role,
+      uploaderId: photo.uploaded_by_user_id ?? '',
+      eventOrganizerId: photo.event_created_by_user_id ?? '',
+    });
 
     return successResponse({ message: 'Photo deleted.' });
   } catch (error) {

@@ -23,6 +23,7 @@ import {
   ValidationError,
   AppError,
 } from '../shared/utils/errors';
+import { canDeleteMedia } from '../shared/utils/permissions';
 import { Photo, VideoWithUrls } from '../shared/models/photo';
 import { Event } from '../shared/models/event';
 import { enrichUserAvatar } from '../shared/services/avatarEnricher';
@@ -764,14 +765,29 @@ async function deleteVideo(req: HttpRequest, context: InvocationContext): Promis
       throw new ValidationError('A valid video ID is required.');
     }
 
-    const video = await queryOne<Photo>(
-      `SELECT * FROM photos WHERE id = $1 AND media_type = 'video'`,
+    // Authorization: uploader OR event organizer (`events.created_by_user_id`).
+    // No `status` filter — uploaders can abort during transcoding (Q5 in
+    // VIDEO_ARCHITECTURE_DECISIONS.md), so deletes are accepted at any status.
+    type VideoForDelete = Photo & { event_created_by_user_id: string | null };
+    const video = await queryOne<VideoForDelete>(
+      `SELECT p.*, e.created_by_user_id AS event_created_by_user_id
+       FROM photos p
+       JOIN events e ON e.id = p.event_id
+       WHERE p.id = $1 AND p.media_type = 'video'`,
       [videoId],
     );
 
     if (!video) throw new NotFoundError('video');
-    if (video.uploaded_by_user_id !== authUser.id) {
-      throw new ForbiddenError('You can only delete your own videos.');
+
+    const role = canDeleteMedia({
+      uploadedByUserId: video.uploaded_by_user_id,
+      eventCreatedByUserId: video.event_created_by_user_id,
+      authUserId: authUser.id,
+    });
+    if (!role) {
+      throw new ForbiddenError(
+        'You can only delete your own videos or videos from events you created.',
+      );
     }
 
     // Mark deleted immediately (Q5: callback discards results if transcode in flight)
@@ -787,7 +803,14 @@ async function deleteVideo(req: HttpRequest, context: InvocationContext): Promis
       console.error(`cleanupVideoBlobs failed for ${videoId} (non-fatal):`, err);
     }
 
-    trackEvent('video_deleted', { videoId, eventId: video.event_id, userId: authUser.id });
+    trackEvent('video_deleted', {
+      videoId,
+      eventId: video.event_id,
+      userId: authUser.id,
+      deleterRole: role,
+      uploaderId: video.uploaded_by_user_id ?? '',
+      eventOrganizerId: video.event_created_by_user_id ?? '',
+    });
 
     return successResponse({ video_id: videoId, status: 'deleted' });
   } catch (error) {

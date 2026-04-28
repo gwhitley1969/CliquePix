@@ -52,7 +52,15 @@ class _MediaListItem {
 
 class EventFeedScreen extends ConsumerStatefulWidget {
   final String eventId;
-  const EventFeedScreen({super.key, required this.eventId});
+  /// Event organizer's user ID — threaded down to each media card so
+  /// organizers see the 3-dot delete menu on others' uploads (moderation).
+  /// Nullable when the event creator's account has been deleted.
+  final String? eventCreatedByUserId;
+  const EventFeedScreen({
+    super.key,
+    required this.eventId,
+    this.eventCreatedByUserId,
+  });
 
   @override
   ConsumerState<EventFeedScreen> createState() => _EventFeedScreenState();
@@ -310,6 +318,7 @@ class _EventFeedScreenState extends ConsumerState<EventFeedScreen>
                       return PhotoCardWidget(
                         photo: photo,
                         eventId: widget.eventId,
+                        eventCreatedByUserId: widget.eventCreatedByUserId,
                         isSelecting: isSelecting,
                         isSelected: selectedIds.contains(photo.id),
                         onSelectionToggle: () {
@@ -322,6 +331,7 @@ class _EventFeedScreenState extends ConsumerState<EventFeedScreen>
                       return VideoCardWidget(
                         video: video,
                         eventId: widget.eventId,
+                        eventCreatedByUserId: widget.eventCreatedByUserId,
                         isSelecting: isSelecting && video.isReady,
                         isSelected: selectedIds.contains(video.id),
                         onSelectionToggle: () {

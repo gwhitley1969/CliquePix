@@ -79,6 +79,7 @@ A persistent group of people (e.g., “Girls Night Out” or bachelor party)
   - Confirmation dialog warns that deletion is permanent
   - All photos are removed from cloud storage
   - Clique members are notified via push notification
+- Event organizer can also remove individual photos or videos uploaded by other clique members within their event (moderation/cleanup of inappropriate content). Uploaders retain delete permission for their own content. Uploader takes precedence when both apply, so an organizer deleting their own upload is logged as a self-delete. All deletions are auditable via the `deleterRole` telemetry dimension on `photo_deleted` / `video_deleted`.
 
 ---
 

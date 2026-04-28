@@ -2,13 +2,16 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'confirm_destructive_dialog.dart';
 
-/// Card-header 3-dot menu shown to the uploader of a photo or video.
+/// Card-header 3-dot menu for deleting a photo or video.
 ///
-/// Renders nothing unless the current user owns the media AND the feed
-/// is not in multi-select (download) mode. When tapped, opens a popup
-/// with a single Delete action; confirmation runs through
-/// [confirmDestructive]; on confirm, the parent's [onDelete] callback
-/// is awaited.
+/// Renders nothing unless the current user is allowed to delete the media
+/// AND the feed is not in multi-select (download) mode. Authorization is
+/// computed by the parent: the uploader OR the event organizer
+/// (`events.created_by_user_id`) is allowed; everyone else sees no menu.
+///
+/// When tapped, opens a popup with a single Delete action; confirmation
+/// runs through [confirmDestructive] using copy from [deleteDialogCopy];
+/// on confirm, the parent's [onDelete] callback is awaited.
 ///
 /// Error mapping for the post-delete SnackBar is done by
 /// [_deleteErrorMessage] — it reads the Azure Functions error envelope
@@ -20,10 +23,15 @@ class MediaOwnerMenu extends StatelessWidget {
   /// `'Video'` — capitalized for titles, downcased inline in messages.
   final String mediaLabel;
 
-  /// Whether the currently-signed-in user uploaded this media item.
-  /// Parent is expected to compare `media.uploadedByUserId` against
-  /// `authStateProvider.user.id` and pass the boolean here.
-  final bool isOwner;
+  /// Whether the current user is allowed to delete this media (uploader
+  /// OR event organizer). Computed by parent.
+  final bool canDelete;
+
+  /// True when the deleting user is the event organizer acting on
+  /// someone else's media (moderation). Drives differentiated dialog
+  /// + SnackBar copy via [deleteDialogCopy]. False for self-uploader
+  /// deletes (uploader takes precedence).
+  final bool isOrganizerDeletingOthers;
 
   /// Hide the menu while the feed is in multi-select download mode
   /// so the 3-dot tap target can't be confused with a selection tap.
@@ -38,24 +46,31 @@ class MediaOwnerMenu extends StatelessWidget {
   const MediaOwnerMenu({
     super.key,
     required this.mediaLabel,
-    required this.isOwner,
+    required this.canDelete,
     required this.isSelecting,
     required this.onDelete,
+    this.isOrganizerDeletingOthers = false,
   });
 
   Future<void> _handleSelect(BuildContext context, String value) async {
     if (value != 'delete') return;
+    final copy = deleteDialogCopy(
+      mediaLabel: mediaLabel,
+      isOrganizerDeletingOthers: isOrganizerDeletingOthers,
+    );
     final confirmed = await confirmDestructive(
       context,
-      title: 'Delete $mediaLabel?',
-      body: 'This ${mediaLabel.toLowerCase()} will be permanently deleted.',
+      title: copy.title,
+      body: copy.body,
+      confirmLabel: copy.confirmLabel,
     );
     if (!confirmed || !context.mounted) return;
     try {
       await onDelete();
       if (!context.mounted) return;
+      final successWord = isOrganizerDeletingOthers ? 'removed' : 'deleted';
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$mediaLabel deleted')),
+        SnackBar(content: Text('$mediaLabel $successWord')),
       );
     } catch (e) {
       if (!context.mounted) return;
@@ -67,7 +82,8 @@ class MediaOwnerMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!isOwner || isSelecting) return const SizedBox.shrink();
+    if (!canDelete || isSelecting) return const SizedBox.shrink();
+    final menuLabel = isOrganizerDeletingOthers ? 'Remove' : 'Delete';
     return PopupMenuButton<String>(
       icon: Icon(
         Icons.more_vert,
@@ -78,14 +94,14 @@ class MediaOwnerMenu extends StatelessWidget {
       color: const Color(0xFF1A2035),
       padding: EdgeInsets.zero,
       onSelected: (v) => _handleSelect(context, v),
-      itemBuilder: (_) => const [
+      itemBuilder: (_) => [
         PopupMenuItem<String>(
           value: 'delete',
           child: Row(
             children: [
-              Icon(Icons.delete, color: Color(0xFFEF4444)),
-              SizedBox(width: 12),
-              Text('Delete', style: TextStyle(color: Color(0xFFEF4444))),
+              const Icon(Icons.delete, color: Color(0xFFEF4444)),
+              const SizedBox(width: 12),
+              Text(menuLabel, style: const TextStyle(color: Color(0xFFEF4444))),
             ],
           ),
         ),
@@ -106,13 +122,13 @@ class MediaOwnerMenu extends StatelessWidget {
 ///     invalidated by the caller before this catch runs — the UI reflects
 ///     success even though the DELETE itself returned 404.
 ///   - 403 should never reach the user because the menu is gated by
-///     `isOwner`; the handler is here as defense in depth.
+///     `canDelete`; the handler is here as defense in depth.
 String _deleteErrorMessage(Object e, String label) {
   final noun = label.toLowerCase();
   if (e is DioException) {
     final code = _extractErrorCode(e);
     if (code == 'FORBIDDEN') {
-      return 'You can only delete your own ${noun}s.';
+      return "You don't have permission to delete this $noun.";
     }
     if (code == 'PHOTO_NOT_FOUND' || code == 'VIDEO_NOT_FOUND') {
       return '$label already removed.';

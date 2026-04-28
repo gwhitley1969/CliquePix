@@ -291,6 +291,8 @@ GET    /api/photos/{photoId}
 DELETE /api/photos/{photoId}
 ```
 
+**Authorization for `DELETE /api/photos/{photoId}` and `DELETE /api/videos/{videoId}`:** the caller must be either (a) the uploader (`photos.uploaded_by_user_id`) or (b) the event organizer (`events.created_by_user_id`). The organizer path lets event creators moderate inappropriate content uploaded by other clique members. Random clique members continue to receive HTTP 403. Both handlers use a JOIN against `events` in the same SELECT, then run the shared `canDeleteMedia` helper (`backend/src/shared/utils/permissions.ts`). Uploader takes precedence when both apply. The deleter's role (`'uploader' | 'organizer'`) is recorded on the `photo_deleted` / `video_deleted` telemetry events alongside `uploaderId` and `eventOrganizerId` for moderation auditability.
+
 ### Reactions
 ```
 POST   /api/photos/{photoId}/reactions
@@ -860,7 +862,7 @@ Store in Key Vault:
 Every API endpoint must enforce:
 - user is authenticated (valid Entra token verified by the Function)
 - user belongs to the clique/event they are accessing (membership check)
-- user can only delete their own photos
+- on media delete: caller must be the uploader OR the event organizer (`events.created_by_user_id`); see `canDeleteMedia` in `backend/src/shared/utils/permissions.ts`
 
 ## Blob Storage Security
 

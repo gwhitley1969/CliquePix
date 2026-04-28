@@ -1,6 +1,50 @@
 # DEPLOYMENT_STATUS.md — Clique Pix v1
 
-Last updated: 2026-04-27 (APIM rate-limit removed, WorkManager fired-too-often fix shipped, lifecycle-aware polling adopted on three feed screens)
+Last updated: 2026-04-28 (event-organizer media moderation deployed to backend; clean release APK built; web SWA pending merge to main)
+
+## Organizer media moderation — `canDeleteMedia` (2026-04-28)
+
+**Status:** ✅ backend deployed to prod; ✅ release APK built (62.5 MB). Web SWA deploy pending merge to `main`. On-device verification (Samsung + iPhone) pending.
+
+**What changed and why.** Until now, only the uploader could delete a photo or video. If a clique member uploaded inappropriate content into an event and refused to remove it, the event organizer had no recourse short of deleting the entire event (which destroyed everyone else's content). The new authorization model accepts EITHER the uploader OR the event organizer (`events.created_by_user_id`) on `DELETE /api/photos/{id}` and `DELETE /api/videos/{id}`. Random clique members continue to receive HTTP 403. Uploader takes precedence when both apply, so an organizer deleting their own upload is logged as a self-delete.
+
+| Phase | Files | Status |
+|---|---|---|
+| Backend: `canDeleteMedia` helper + 8 unit tests | `backend/src/shared/utils/permissions.ts`, `backend/src/__tests__/permissions.test.ts` | ✅ |
+| Backend: `deletePhoto` enriched SELECT (JOIN events) + role-aware telemetry | `backend/src/functions/photos.ts:488-548` | ✅ |
+| Backend: `deleteVideo` enriched SELECT + role-aware telemetry (no `status` filter preserved) | `backend/src/functions/videos.ts:758-810` | ✅ |
+| Backend: tsc green | — | ✅ |
+| Backend: jest 157/157 green (was 149 before; +8 new) | — | ✅ |
+| Mobile: shared `deleteDialogCopy` helper for self-vs-organizer copy | `app/lib/widgets/confirm_destructive_dialog.dart` | ✅ |
+| Mobile: `MediaOwnerMenu` rename `isOwner→canDelete`; `isOrganizerDeletingOthers` prop drives Remove vs Delete copy | `app/lib/widgets/media_owner_menu.dart` | ✅ |
+| Mobile: `PhotoCardWidget` + `VideoCardWidget` accept `eventCreatedByUserId`; compute `canDelete = isUploader \|\| isOrganizerDeletingOthers` | `app/lib/features/photos/presentation/photo_card_widget.dart`, `app/lib/features/videos/presentation/video_card_widget.dart` | ✅ |
+| Mobile: `EventFeedScreen` threads `eventCreatedByUserId` from `EventDetailScreen` | `app/lib/features/photos/presentation/event_feed_screen.dart`, `app/lib/features/events/presentation/event_detail_screen.dart` | ✅ |
+| Mobile: `PhotoDetailScreen` + `VideoPlayerScreen` watch `eventDetailProvider`, gate Delete on `canDelete`, branch dialog body | `app/lib/features/photos/presentation/photo_detail_screen.dart`, `app/lib/features/videos/presentation/video_player_screen.dart` | ✅ |
+| Mobile: `flutter analyze` 54 issues (was 55; same pre-existing baseline; zero new errors/warnings introduced) | — | ✅ |
+| Web: `MediaCard` accepts `eventCreatedByUserId`; computes `canDelete`; branches `<ConfirmDestructive>` copy + success toast | `webapp/src/features/photos/MediaCard.tsx` | ✅ |
+| Web: `MediaFeed` + `EventDetailScreen` thread the prop | `webapp/src/features/photos/MediaFeed.tsx`, `webapp/src/features/events/EventDetailScreen.tsx` | ✅ |
+| Web: `vite build` green (2164 modules, bundle budget intact) | — | ✅ |
+| Docs: PRD §5.2 + ARCHITECTURE §6 + CLAUDE.md Security Rules + BETA_TEST_PLAN §4/§5/§12.5 + this file | as listed | ✅ |
+| Backend deploy (`func azure functionapp publish func-cliquepix-fresh`) | — | ✅ Deployed 2026-04-28 — health endpoints 200 via direct (`func-cliquepix-fresh.azurewebsites.net`) AND Front Door (`api.clique-pix.com`) |
+| Release APK built (`flutter clean && flutter pub get && flutter build apk --release`) | `app/build/app/outputs/flutter-apk/app-release.apk` (62.5 MB) | ✅ Built 2026-04-28 |
+| Mobile on-device verification (Samsung + iPhone, 3-account scenario per `BETA_TEST_PLAN.md` §4 + §5) | — | ⏳ Pending |
+| Web SWA deploy (auto via GH Actions on merge to `main`) | — | ⏳ Pending |
+| App Insights: organizer-abuse alert wired (Kusto query B in plan) | — | ⏳ Pending |
+
+**Telemetry shape change (additive — backward compatible):**
+- `photo_deleted` / `video_deleted` gain three new dimensions: `deleterRole` ∈ `'uploader' | 'organizer'`, `uploaderId` (UUID or `''` if account deleted), `eventOrganizerId` (UUID or `''` if account deleted)
+- `userId` (the deleter) remains unchanged
+- Existing Kusto queries continue to function; new queries can filter on `tostring(customDimensions.deleterRole) == "organizer"` for moderation auditing
+
+**Deploy order:** backend → mobile + web (parallel). Backend first is safe because pre-existing clients ignore the new capability (the menu just stays hidden for organizers). Once backend is live, organizers gain the ability via mobile/web ship.
+
+**No DB migration.** `events.created_by_user_id` already exists. The handler enriches its SELECT with a JOIN against `events`. No schema change.
+
+**Operational note:** Both `events.created_by_user_id` and `photos.uploaded_by_user_id` are nullable since migration 004 (ON DELETE SET NULL on user account deletion). The `canDeleteMedia` helper guards against nullable comparisons; if both IDs are null no one can delete the media (the cleanup timer reaps it on event expiry — correct behavior).
+
+**Out of scope (future):** notifying the original uploader when an organizer removes their content; extending moderation to clique owners; bulk moderation tools; appeals workflow.
+
+---
 
 ## APIM rate-limit removal + client traffic reduction (2026-04-27)
 

@@ -85,6 +85,10 @@ This is a manual smoke test checklist to run before each beta release. Every ite
 - [ ] **Delete own photo from feed 3-dot** — your own photo card shows a 3-dot icon in the header; tap → "Delete" (red) → dark "Delete Photo?" dialog → Confirm → card disappears immediately (no 30s flicker). SnackBar "Photo deleted".
 - [ ] **Non-uploader sees no 3-dot on others' photos** — another user's photo card in the same feed has no 3-dot icon. Tapping into detail → PopupMenu shows Save + Share but no Delete.
 - [ ] **Photo detail delete — feed invalidation** — delete a photo from the AppBar PopupMenu in detail view → pop back → feed is already missing the photo (no 30s wait).
+- [ ] **Organizer can remove others' photo from feed** — sign in as event organizer (a user who created the event but did NOT upload the target photo). Open the feed → 3-dot icon IS visible on the other user's photo card. Tap → menu reads "Remove" (not "Delete"). Tap → dark "Remove Photo?" dialog with body "You're removing this photo. It will be permanently deleted for everyone in this event." Confirm → card disappears immediately. SnackBar "Photo removed". On Device B (the original uploader), the photo disappears on the next 30s poll.
+- [ ] **Organizer can remove others' photo from detail** — open someone else's photo in detail view as the event organizer → AppBar PopupMenu shows "Remove" (red). Confirm → returns to feed with item already gone.
+- [ ] **Uploader self-delete copy unchanged** — when the uploader deletes their own photo (even if they're also the organizer), dialog still reads "Delete Photo?" / "This photo will be permanently deleted." (uploader precedence over organizer).
+- [ ] **Non-organizer non-uploader sees no 3-dot on photos** — a third clique member who is neither uploader nor event organizer opens the feed → no 3-dot on others' photo cards. Photo detail PopupMenu shows Save + Share but no Delete.
 
 ## 5. Videos
 
@@ -132,6 +136,11 @@ This is a manual smoke test checklist to run before each beta release. Every ite
 - [ ] **Delete own video from feed 3-dot** — your own video card (any state: processing / failed / ready) shows a 3-dot icon in the header; tap → "Delete" → confirm → card disappears. SnackBar "Video deleted".
 - [ ] **Non-uploader sees no 3-dot on others' videos** — another user's video card has no 3-dot icon. Player screen PopupMenu shows Save + Share but no Delete.
 - [ ] **Delete own processing video — no ghost card** — tap Delete while the video is still transcoding → card disappears → does NOT re-appear as a "Polishing your video" ghost card after 30s (local-pending retire loop must have cleared it).
+- [ ] **Organizer can remove others' video from feed** — sign in as event organizer (not the uploader). Feed shows 3-dot on the other user's video card. Tap → menu reads "Remove". Confirm → "Remove Video?" dialog with body "You're removing this video. It will be permanently deleted for everyone in this event." Confirm → card disappears. SnackBar "Video removed".
+- [ ] **Organizer can remove others' video from player** — open someone else's video player as organizer → AppBar PopupMenu shows "Remove" (not "Delete"). Confirm → returns to feed with item gone.
+- [ ] **Organizer can remove others' processing video** — uploader's video is still transcoding, organizer taps 3-dot → "Remove" → card disappears, no ghost re-render. Backend telemetry: `video_deleted` with `deleterRole='organizer'`.
+- [ ] **Uploader self-delete copy unchanged (video)** — uploader deletes their own video → dialog still reads "Delete Video?" / "This video will be permanently deleted."
+- [ ] **Non-organizer non-uploader sees no 3-dot on videos** — third clique member who is neither uploader nor organizer sees no 3-dot on others' video cards.
 - [ ] **Dialog consistency** — open each destructive dialog (event delete, leave clique, delete clique, remove member, delete account, delete photo, delete video). All 7 dialogs are pixel-identical (dark `#1A2035` bg, 16px corners, red `#EF4444` destructive button, 70% alpha body text).
 
 ## 6. Direct Messages
@@ -206,6 +215,18 @@ This is a manual smoke test checklist to run before each beta release. Every ite
 - [ ] **Feed scroll** — 60fps, no jank with 20+ items
 - [ ] **App cold start** — splash to usable: < 3 seconds
 - [ ] **Thumbnail load** — feed thumbnails load within 500ms on 4G
+- [ ] **`deleterRole` telemetry recorded** — after running the organizer-delete tests above, query App Insights:
+  ```kusto
+  customEvents
+  | where timestamp > ago(1h)
+  | where name in ("photo_deleted","video_deleted")
+  | where tostring(customDimensions.deleterRole) == "organizer"
+  | project timestamp, name,
+            uploaderId = tostring(customDimensions.uploaderId),
+            eventOrganizerId = tostring(customDimensions.eventOrganizerId),
+            userId = tostring(customDimensions.userId)
+  ```
+  Should return one row per organizer-delete with `userId == eventOrganizerId` and a non-empty `uploaderId` distinct from `eventOrganizerId`.
 - [ ] **Background polling pauses** — open event feed (30 s polling active) → background the app → wait 2 minutes → check App Insights `customEvents` for `event_id=<eventId>` listings during the 2 min. **Should be zero** (polling pauses on `AppLifecycleState.paused`). Foreground the app → one immediate refresh fires + polling resumes.
 - [ ] **WorkManager fires at most once per 4 hours** — `customEvents | where name == "wm_refresh_success" | summarize count() by bin(timestamp, 1h)` should show ≤ 1 per hour (designed cadence ~3 / day). If it exceeds, the 4 h `wm_last_run_at_ms` SharedPreferences floor in `background_token_service.dart:callbackDispatcher` is broken.
 
@@ -255,6 +276,8 @@ Run in a fresh browser window per test where possible; for cross-browser coverag
 - [ ] **Media card** — each card shows uploader avatar (initials + gradient) + name + relative time + photo + reaction pills + download icon
 - [ ] **Reactions** — tap ❤️ on a photo → counter increments optimistically → persists after page refresh
 - [ ] **Delete own media** — 3-dot menu visible only on your own cards → Delete → confirm dialog → card disappears
+- [ ] **Organizer can remove others' media on web** — sign in (browser 2) as the event organizer who is NOT the uploader → 3-dot is visible on the uploader's photo + video cards → label reads "Remove" → confirm dialog title is "Remove this photo?" / "Remove this video?" with body about permanent deletion for everyone → confirm → toast "Photo removed" / "Video removed" → card vanishes. Test in BOTH Chrome AND Safari (HLS path differs)
+- [ ] **Non-organizer non-uploader on web** — sign in as a third clique member who is neither uploader nor organizer → no 3-dot icon visible on others' cards in the feed
 - [ ] **Photo download** — download icon saves `cliquepix-<id>.jpg` to Downloads folder
 - [ ] **Video download** — download icon on a video card saves the MP4 fallback as `cliquepix-<id>.mp4`
 - [ ] **Video playback (lightbox)** — tap a video card → lightbox opens; video auto-initializes and plays. Test on Safari (native HLS) AND Chrome (`hls.js` loads as a separate chunk)

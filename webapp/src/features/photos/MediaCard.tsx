@@ -22,7 +22,16 @@ import {
   removeVideoReaction,
 } from '../../api/endpoints/videos';
 
-export function MediaCard({ item, onOpen }: { item: Media; onOpen: () => void }) {
+export function MediaCard({
+  item,
+  onOpen,
+  eventCreatedByUserId,
+}: {
+  item: Media;
+  onOpen: () => void;
+  /** Event organizer's user ID — enables organizer moderation deletes. */
+  eventCreatedByUserId?: string | null;
+}) {
   const qc = useQueryClient();
   const { accounts } = useMsal();
   const myOid = accounts[0]?.localAccountId;
@@ -32,7 +41,13 @@ export function MediaCard({ item, onOpen }: { item: Media; onOpen: () => void })
   // verified user id from React Query instead.
   const verifiedUser = qc.getQueryData<{ id: string }>(['auth', 'verify']);
   const myUserId = verifiedUser?.id ?? myOid;
-  const isOwner = myUserId != null && item.uploadedByUserId === myUserId;
+  const isUploader = myUserId != null && item.uploadedByUserId === myUserId;
+  const isOrganizerDeletingOthers =
+    myUserId != null &&
+    eventCreatedByUserId != null &&
+    eventCreatedByUserId === myUserId &&
+    item.uploadedByUserId !== myUserId;
+  const canDelete = isUploader || isOrganizerDeletingOthers;
 
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [downloading, setDownloading] = useState(false);
@@ -41,7 +56,9 @@ export function MediaCard({ item, onOpen }: { item: Media; onOpen: () => void })
     mutationFn: () =>
       item.mediaType === 'photo' ? deletePhoto(item.id) : deleteVideo(item.id),
     onSuccess: () => {
-      toast.success(item.mediaType === 'photo' ? 'Photo deleted' : 'Video deleted');
+      const noun = item.mediaType === 'photo' ? 'Photo' : 'Video';
+      const verb = isOrganizerDeletingOthers ? 'removed' : 'deleted';
+      toast.success(`${noun} ${verb}`);
       qc.invalidateQueries({
         queryKey: ['event', item.eventId, item.mediaType === 'photo' ? 'photos' : 'videos'],
       });
@@ -106,7 +123,7 @@ export function MediaCard({ item, onOpen }: { item: Media; onOpen: () => void })
           </div>
           <div className="text-xs text-white/50">{formatRelative(item.createdAt)}</div>
         </div>
-        {isOwner && (
+        {canDelete && (
           <DropdownMenu.Root>
             <DropdownMenu.Trigger
               className="p-1.5 -mr-1 rounded text-white/60 hover:text-white hover:bg-white/5 focus:outline-none focus:ring-2 focus:ring-aqua/50"
@@ -124,7 +141,7 @@ export function MediaCard({ item, onOpen }: { item: Media; onOpen: () => void })
                   onSelect={() => setConfirmDelete(true)}
                   className="flex items-center gap-2 px-3 py-2 text-sm text-error hover:bg-white/5 cursor-pointer focus:outline-none focus:bg-white/5"
                 >
-                  <Trash2 size={14} /> Delete
+                  <Trash2 size={14} /> {isOrganizerDeletingOthers ? 'Remove' : 'Delete'}
                 </DropdownMenu.Item>
               </DropdownMenu.Content>
             </DropdownMenu.Portal>
@@ -184,9 +201,21 @@ export function MediaCard({ item, onOpen }: { item: Media; onOpen: () => void })
       <ConfirmDestructive
         open={confirmDelete}
         onOpenChange={setConfirmDelete}
-        title={item.mediaType === 'photo' ? 'Delete this photo?' : 'Delete this video?'}
-        message="This permanently removes it for everyone in the event. This cannot be undone."
-        confirmLabel="Delete"
+        title={
+          isOrganizerDeletingOthers
+            ? item.mediaType === 'photo'
+              ? 'Remove this photo?'
+              : 'Remove this video?'
+            : item.mediaType === 'photo'
+              ? 'Delete this photo?'
+              : 'Delete this video?'
+        }
+        message={
+          isOrganizerDeletingOthers
+            ? `You're removing this ${item.mediaType}. It will be permanently deleted for everyone in this event. This cannot be undone.`
+            : 'This permanently removes it for everyone in the event. This cannot be undone.'
+        }
+        confirmLabel={isOrganizerDeletingOthers ? 'Remove' : 'Delete'}
         onConfirm={() => {
           deleteMut.mutate();
           setConfirmDelete(false);

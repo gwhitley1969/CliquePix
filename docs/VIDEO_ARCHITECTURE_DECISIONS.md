@@ -1028,6 +1028,8 @@ When a user deletes a video (or its event) while a transcode is in progress:
 3. When the job completes and POSTs to `/api/internal/video-processing-complete`, the Function sees the row is already `deleted`, discards the results, and prefix-deletes any blobs the job already wrote
 4. Wasted compute is a few minutes of FFmpeg time (~$0.01 per discarded transcode at MVP scale) — acceptable cost for not having to build job cancellation
 
+**Updated 2026-04-28 — organizer-delete also follows this path.** As of the moderation feature, the event organizer (`events.created_by_user_id`) can also trigger a delete during transcoding. The `deleteVideo` handler intentionally does NOT filter on `status` (it accepts deletes at any status) so the same Q5 mechanics apply unchanged — the row flips to `deleted`, the in-flight job's eventual callback sees the deleted state and discards. Authorization is computed via `canDeleteMedia` (`backend/src/shared/utils/permissions.ts`); the deleter's role (`'uploader' | 'organizer'`) is recorded on the `video_deleted` telemetry alongside `uploaderId` and `eventOrganizerId`. See `docs/ARCHITECTURE.md` §6 + this file's referencing entries below for moderation context.
+
 ### Q6: HEVC fallback on Android — Rely on video_player auto-fallback + telemetry
 
 The transcoder always outputs **H.264** for both HLS and MP4 fallback (HEVC is the input format we accept, not the output we deliver — see Decision 3). This means the HEVC-on-old-Android problem is largely a non-issue at the playback layer because we never serve HEVC.

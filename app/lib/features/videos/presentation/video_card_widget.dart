@@ -21,6 +21,10 @@ import 'videos_providers.dart';
 class VideoCardWidget extends ConsumerWidget {
   final VideoModel video;
   final String eventId;
+  /// Event organizer's user ID — passed down from the feed so the 3-dot
+  /// menu can render for organizers acting on someone else's media.
+  /// Nullable when the event creator's account has been deleted.
+  final String? eventCreatedByUserId;
   final bool isSelecting;
   final bool isSelected;
   final VoidCallback? onSelectionToggle;
@@ -29,6 +33,7 @@ class VideoCardWidget extends ConsumerWidget {
     super.key,
     required this.video,
     required this.eventId,
+    this.eventCreatedByUserId,
     this.isSelecting = false,
     this.isSelected = false,
     this.onSelectionToggle,
@@ -39,8 +44,13 @@ class VideoCardWidget extends ConsumerWidget {
     final authState = ref.watch(authStateProvider);
     final currentUserId =
         authState is AuthAuthenticated ? authState.user.id : null;
-    final isOwner =
+    final isUploader =
         currentUserId != null && video.uploadedByUserId == currentUserId;
+    final isOrganizerDeletingOthers = currentUserId != null &&
+        eventCreatedByUserId != null &&
+        eventCreatedByUserId == currentUserId &&
+        video.uploadedByUserId != currentUserId;
+    final canDelete = isUploader || isOrganizerDeletingOthers;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppTheme.standardPadding, vertical: 8),
@@ -96,7 +106,8 @@ class VideoCardWidget extends ConsumerWidget {
                     ),
                     MediaOwnerMenu(
                       mediaLabel: 'Video',
-                      isOwner: isOwner,
+                      canDelete: canDelete,
+                      isOrganizerDeletingOthers: isOrganizerDeletingOthers,
                       isSelecting: isSelecting,
                       onDelete: () async {
                         final repo =

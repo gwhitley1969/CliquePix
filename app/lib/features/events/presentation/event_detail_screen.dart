@@ -416,7 +416,10 @@ class _EventDetailBodyState extends ConsumerState<_EventDetailBody> {
 
         // Photo feed
         SliverFillRemaining(
-          child: EventFeedScreen(eventId: eventId),
+          child: EventFeedScreen(
+            eventId: eventId,
+            eventCreatedByUserId: widget.event.createdByUserId,
+          ),
         ),
       ],
     );

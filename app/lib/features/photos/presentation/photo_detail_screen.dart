@@ -11,6 +11,7 @@ import '../../../widgets/confirm_destructive_dialog.dart';
 import '../../../widgets/error_widget.dart';
 import '../../auth/domain/auth_state.dart';
 import '../../auth/presentation/auth_providers.dart';
+import '../../events/presentation/events_providers.dart';
 import 'photos_providers.dart';
 import 'reaction_bar_widget.dart';
 
@@ -50,8 +51,17 @@ class PhotoDetailScreen extends ConsumerWidget {
               final currentUserId = authState is AuthAuthenticated
                   ? authState.user.id
                   : null;
-              final isOwner = currentUserId != null &&
+              final eventAsync =
+                  ref.watch(eventDetailProvider(photo.eventId));
+              final eventCreatedByUserId =
+                  eventAsync.valueOrNull?.createdByUserId;
+              final isUploader = currentUserId != null &&
                   photo.uploadedByUserId == currentUserId;
+              final isOrganizerDeletingOthers = currentUserId != null &&
+                  eventCreatedByUserId != null &&
+                  eventCreatedByUserId == currentUserId &&
+                  photo.uploadedByUserId != currentUserId;
+              final canDelete = isUploader || isOrganizerDeletingOthers;
               return PopupMenuButton<String>(
               icon: const Icon(Icons.more_vert, color: AppColors.whiteSurface),
               onSelected: (value) async {
@@ -93,10 +103,15 @@ class PhotoDetailScreen extends ConsumerWidget {
                     }
                     break;
                   case 'delete':
+                    final copy = deleteDialogCopy(
+                      mediaLabel: 'Photo',
+                      isOrganizerDeletingOthers: isOrganizerDeletingOthers,
+                    );
                     final confirm = await confirmDestructive(
                       context,
-                      title: 'Delete Photo?',
-                      body: 'This photo will be permanently deleted.',
+                      title: copy.title,
+                      body: copy.body,
+                      confirmLabel: copy.confirmLabel,
                     );
                     if (confirm) {
                       try {
@@ -119,8 +134,20 @@ class PhotoDetailScreen extends ConsumerWidget {
               itemBuilder: (_) => [
                 const PopupMenuItem(value: 'save', child: Row(children: [Icon(Icons.download), SizedBox(width: 8), Text('Save to Device')])),
                 const PopupMenuItem(value: 'share', child: Row(children: [Icon(Icons.share), SizedBox(width: 8), Text('Share')])),
-                if (isOwner)
-                  const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete, color: Color(0xFFEF4444)), SizedBox(width: 8), Text('Delete', style: TextStyle(color: Color(0xFFEF4444)))])),
+                if (canDelete)
+                  PopupMenuItem(
+                    value: 'delete',
+                    child: Row(
+                      children: [
+                        const Icon(Icons.delete, color: Color(0xFFEF4444)),
+                        const SizedBox(width: 8),
+                        Text(
+                          isOrganizerDeletingOthers ? 'Remove' : 'Delete',
+                          style: const TextStyle(color: Color(0xFFEF4444)),
+                        ),
+                      ],
+                    ),
+                  ),
               ],
               );
             },

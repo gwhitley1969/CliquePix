@@ -106,7 +106,7 @@ export function EventDetailScreen() {
             No photos or videos yet. Drop some above to start.
           </div>
         ) : (
-          <MediaFeed media={media} />
+          <MediaFeed media={media} eventCreatedByUserId={event.createdByUserId} />
         )}
       </div>
 

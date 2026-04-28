@@ -12,6 +12,7 @@ import '../../../services/storage_service.dart';
 import '../../../widgets/confirm_destructive_dialog.dart';
 import '../../auth/domain/auth_state.dart';
 import '../../auth/presentation/auth_providers.dart';
+import '../../events/presentation/events_providers.dart';
 import 'videos_providers.dart';
 
 /// In-app video player screen.
@@ -316,11 +317,21 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
   /// the event feed. Works even when the player failed to init (e.g., broken
   /// HDR blobs from pre-v0.1.5 transcodes) because the AppBar is rendered
   /// unconditionally — the menu stays reachable in the error state.
-  Future<void> _confirmAndDeleteVideo() async {
+  ///
+  /// [isOrganizerDeletingOthers] drives the moderation-flavored dialog copy
+  /// (Remove vs Delete). Captured at call time from the build-method state.
+  Future<void> _confirmAndDeleteVideo({
+    required bool isOrganizerDeletingOthers,
+  }) async {
+    final copy = deleteDialogCopy(
+      mediaLabel: 'Video',
+      isOrganizerDeletingOthers: isOrganizerDeletingOthers,
+    );
     final confirm = await confirmDestructive(
       context,
-      title: 'Delete Video?',
-      body: 'This video will be permanently deleted.',
+      title: copy.title,
+      body: copy.body,
+      confirmLabel: copy.confirmLabel,
     );
     if (!confirm) return;
     try {
@@ -351,16 +362,26 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Watch the video detail so we can gate the Delete action on ownership.
-    // `.valueOrNull` gives us null while loading / on error — in both cases
-    // we hide the Delete item (it's the safer default; the menu still works
-    // for Save/Share when the player has playback info).
+    // Watch the video detail + event detail so we can gate the Delete
+    // action on ownership (uploader OR event organizer). `.valueOrNull`
+    // gives us null while loading / on error — in both cases we hide the
+    // Delete item (the safer default; the menu still works for Save/Share
+    // when the player has playback info).
     final videoAsync = ref.watch(videoDetailProvider(widget.videoId));
+    final eventAsync = ref.watch(eventDetailProvider(widget.eventId));
     final authState = ref.watch(authStateProvider);
     final currentUserId =
         authState is AuthAuthenticated ? authState.user.id : null;
-    final isOwner = currentUserId != null &&
-        videoAsync.valueOrNull?.uploadedByUserId == currentUserId;
+    final uploaderId = videoAsync.valueOrNull?.uploadedByUserId;
+    final eventCreatedByUserId = eventAsync.valueOrNull?.createdByUserId;
+    final isUploader =
+        currentUserId != null && uploaderId == currentUserId;
+    final isOrganizerDeletingOthers = currentUserId != null &&
+        eventCreatedByUserId != null &&
+        eventCreatedByUserId == currentUserId &&
+        uploaderId != null &&
+        uploaderId != currentUserId;
+    final canDelete = isUploader || isOrganizerDeletingOthers;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -378,7 +399,9 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
                 case 'share':
                   await _shareVideo();
                 case 'delete':
-                  await _confirmAndDeleteVideo();
+                  await _confirmAndDeleteVideo(
+                    isOrganizerDeletingOthers: isOrganizerDeletingOthers,
+                  );
               }
             },
             itemBuilder: (_) => [
@@ -406,15 +429,17 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
                   ),
                 ),
               ],
-              if (isOwner)
-                const PopupMenuItem(
+              if (canDelete)
+                PopupMenuItem(
                   value: 'delete',
                   child: Row(
                     children: [
-                      Icon(Icons.delete, color: Color(0xFFEF4444)),
-                      SizedBox(width: 8),
-                      Text('Delete',
-                          style: TextStyle(color: Color(0xFFEF4444))),
+                      const Icon(Icons.delete, color: Color(0xFFEF4444)),
+                      const SizedBox(width: 8),
+                      Text(
+                        isOrganizerDeletingOthers ? 'Remove' : 'Delete',
+                        style: const TextStyle(color: Color(0xFFEF4444)),
+                      ),
                     ],
                   ),
                 ),

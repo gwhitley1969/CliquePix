@@ -54,3 +54,31 @@ Future<bool> confirmDestructive(
   );
   return result ?? false;
 }
+
+/// Title/body strings for media (photo/video) deletion confirmation.
+/// Two flavors:
+///   - Self-uploader → straightforward `Delete X?` / `This X will be permanently deleted.`
+///   - Organizer removing someone else's media → `Remove X?` / wording that
+///     emphasises the moderation action ("permanently deleted for everyone").
+///
+/// Centralised here so the menu (`media_owner_menu.dart`), photo detail
+/// screen, and video player screen can't drift.
+({String title, String body, String confirmLabel}) deleteDialogCopy({
+  required String mediaLabel,
+  required bool isOrganizerDeletingOthers,
+}) {
+  final lower = mediaLabel.toLowerCase();
+  if (isOrganizerDeletingOthers) {
+    return (
+      title: 'Remove $mediaLabel?',
+      body:
+          "You're removing this $lower. It will be permanently deleted for everyone in this event.",
+      confirmLabel: 'Remove',
+    );
+  }
+  return (
+    title: 'Delete $mediaLabel?',
+    body: 'This $lower will be permanently deleted.',
+    confirmLabel: 'Delete',
+  );
+}

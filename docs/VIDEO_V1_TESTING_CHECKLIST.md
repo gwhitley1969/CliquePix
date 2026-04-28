@@ -126,15 +126,27 @@ This tests the FCM `video_ready` push routing in `push_notification_service.dart
 
 ### 9. Video deletion
 
-Delete is exposed in **two** places:
-- **Feed card 3-dot menu** (`MediaOwnerMenu` in `video_card_widget.dart`) — visible on your own videos in all three states (processing / failed / ready); hidden when the feed is in multi-select download mode.
-- **Video player AppBar PopupMenu** — gated on `videoDetailProvider.valueOrNull?.uploadedByUserId == currentUser.id`.
+Delete is exposed in **two** places, gated by `canDelete = isUploader || isOrganizerDeletingOthers` (since 2026-04-28):
+- **Feed card 3-dot menu** (`MediaOwnerMenu` in `video_card_widget.dart`) — visible on your own videos in all three states (processing / failed / ready), and on OTHER members' videos in events YOU created. Hidden when the feed is in multi-select download mode. Menu label flips between "Delete" (self) and "Remove" (organizer-of-others).
+- **Video player AppBar PopupMenu** — gated on `canDelete = isUploader || isOrganizerDeletingOthers`, computed from `videoDetailProvider` + `eventDetailProvider(eventId)`.
 
+Backend authorization runs via `canDeleteMedia` (`backend/src/shared/utils/permissions.ts`); uploader takes precedence over organizer when both apply. Telemetry: `video_deleted` carries `deleterRole` ∈ `'uploader' | 'organizer'` plus `uploaderId` and `eventOrganizerId` for moderation auditing.
+
+**Self-uploader delete:**
 - [ ] Find a video you uploaded; tap its 3-dot in the feed header → "Delete" (red) → dark "Delete Video?" dialog → Confirm → card disappears immediately. SnackBar "Video deleted".
 - [ ] Try the same from the player screen PopupMenu — same flow, pops back to feed on success.
 - [ ] Delete while video is still processing → card disappears → NO ghost "Polishing your video" card re-appears (local-pending retire loop).
-- [ ] Non-uploader viewing the same clique sees NO 3-dot on your videos.
 - [ ] Verify the corresponding blob is cleaned up by checking Azure Storage Explorer (or wait for the next timer cleanup).
+
+**Organizer-deleting-others (added 2026-04-28):**
+- [ ] Sign in as the event organizer (you created the event but did NOT upload the target video). The other user's video card shows the 3-dot icon. Tap → menu reads "Remove" (red, not "Delete"). Tap → dark "Remove Video?" dialog with body "You're removing this video. It will be permanently deleted for everyone in this event." Confirm → card disappears. SnackBar "Video removed".
+- [ ] Same flow from the video player AppBar PopupMenu when opening someone else's video as the organizer.
+- [ ] Organizer-delete works on a still-processing video (organizer + Q5 mechanics). Card disappears, no ghost card re-renders.
+- [ ] Telemetry: `customEvents | where name == "video_deleted" and tostring(customDimensions.deleterRole) == "organizer"` returns the row with `userId == eventOrganizerId` and a non-empty `uploaderId` distinct from `userId`.
+
+**Negative tests:**
+- [ ] Non-uploader, non-organizer viewing the same clique sees NO 3-dot on your videos.
+- [ ] Organizer deleting their own upload sees the **self-uploader** copy ("Delete Video?", SnackBar "Video deleted") — uploader takes precedence over organizer in `canDeleteMedia`.
 
 ### 10. Event expiration
 

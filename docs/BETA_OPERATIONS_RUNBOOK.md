@@ -350,6 +350,32 @@ Fix shipped in 2026-04-27 APK:
 
 If the symptom recurs on a current APK, check whether `wm_last_run_at_ms` is being written successfully (SharedPreferences encryption issue?) and whether the Workmanager dispatcher is actually being invoked — `[AUTH-LAYER-4]` debug logs should fire on each invocation.
 
+### "Organizer reports they can't see the 3-dot delete menu on others' photos/videos" (added 2026-04-28)
+
+The event organizer should see a 3-dot menu on every clique member's media in events they created (the menu reads "Remove" instead of "Delete"). If they don't:
+
+1. **Confirm they're the actual event creator.** Run:
+   ```sql
+   SELECT id, name, created_by_user_id FROM events WHERE id = '<eventId>';
+   ```
+   The `created_by_user_id` must equal the organizer's `users.id`. If they joined the event via a clique invite but DIDN'T create it, they have NO moderation power — that's by design (scope is `events.created_by_user_id` only, not clique owner).
+2. **Confirm the user's APK is post-2026-04-28.** Pre-2026-04-28 builds gate the menu strictly on `uploadedByUserId == currentUserId`. The new build threads `eventCreatedByUserId` from `EventDetailScreen` → `EventFeedScreen` → cards. Have them install the latest `app-release.apk`.
+3. **Confirm the backend is on the deploy that includes `canDeleteMedia`.** Hit `https://api.clique-pix.com/api/health` — should return 200 with the new build. If a curl `DELETE` from the organizer's account returns `FORBIDDEN`, the backend hasn't been redeployed.
+4. **Web client:** confirm `eventCreatedByUserId={event.createdByUserId}` is passed in `EventDetailScreen.tsx` → `<MediaFeed>`. If a user reports the bug ONLY on web, this prop wiring is the most likely regression.
+5. **Edge case — original event creator deleted their account.** Migration 004 sets `events.created_by_user_id` to NULL on user account deletion (ON DELETE SET NULL). Once null, NO ONE qualifies as the organizer. The event is effectively unmoderated. The cleanup timer will still reap on expiry. Out of scope to reassign moderation.
+
+### "An organizer is mass-deleting other members' content abusively" (added 2026-04-28)
+
+The 5-min App Insights alert (Kusto query B in §7) is the early-warning. If you get paged:
+
+1. **Open the row.** It contains `organizerId`, `eventId`, `uniqueUploadersAffected`, `deletions`. A high `uniqueUploadersAffected` against a single event is the strongest signal.
+2. **Check the event.** Does it look spammy or genuinely conflicted? Sometimes "mass delete" is legitimate cleanup of test uploads or accidental duplicates.
+3. **Decision tree:**
+   - Legitimate cleanup → no action.
+   - Genuinely abusive moderator → there is no in-app appeals workflow in v1. Out-of-band recovery: photos/videos are soft-deleted (`status='deleted'`); blobs are deleted but the DB row exists for ~7 days until the cleanup timer hard-deletes the event. Within that window you can manually reset `status='active'` (blobs are gone, so URLs will 404 — content is unrecoverable). Better path: reach out to the affected uploader to apologize and ask them to re-upload.
+   - Pattern across multiple events by the same organizer → consider de-platforming via `DELETE /api/users/me` (admin variant TBD post-v1).
+4. **Long-term:** if abuse becomes a pattern, design an appeals/notification workflow (currently out of scope — the choice in the design phase was deliberately silent removal to keep moderation friction-free).
+
 ---
 
 ## 3. Database Operations
@@ -570,6 +596,49 @@ let yes = customEvents
 let later = customEvents | where name == "avatar_prompt_snoozed" | where timestamp > ago(7d) | count;
 let dismiss = customEvents | where name == "avatar_prompt_dismissed" | where timestamp > ago(7d) | count;
 print shown = toscalar(shown), yes = toscalar(yes), later = toscalar(later), dismiss = toscalar(dismiss)
+```
+
+**Organizer media moderation — volume per day** (added 2026-04-28; sanity baseline):
+```kql
+customEvents
+| where timestamp > ago(30d)
+| where name in ("photo_deleted","video_deleted")
+| where tostring(customDimensions.deleterRole) == "organizer"
+| summarize count() by bin(timestamp, 1d)
+| render timechart
+```
+
+**Organizer abuse signal** (alert candidate — 5+ deletes by one organizer in a 5-min window against media they didn't upload):
+```kql
+let WINDOW = 5m;
+let THRESHOLD = 5;
+customEvents
+| where timestamp > ago(7d)
+| where name in ("photo_deleted","video_deleted")
+| where tostring(customDimensions.deleterRole) == "organizer"
+| extend organizerId = tostring(customDimensions.userId),
+         eventId     = tostring(customDimensions.eventId),
+         uploaderId  = tostring(customDimensions.uploaderId)
+| summarize deletions = count(),
+            uniqueUploadersAffected = dcount(uploaderId),
+            sampleEvent = any(eventId)
+            by organizerId, bin(timestamp, WINDOW)
+| where deletions >= THRESHOLD
+```
+Wire as an App Insights Logs alert (5-min cadence, email to bluebuildapps@gmail.com). Tune the threshold after the first week's data.
+
+**Per-event cleanup ratio** (% of media in an event that was organizer-removed — high values flag conflict-heavy events):
+```kql
+customEvents
+| where name in ("photo_deleted","video_deleted")
+| where timestamp > ago(30d)
+| extend eventId = tostring(customDimensions.eventId),
+         role    = tostring(customDimensions.deleterRole)
+| summarize organizerDeletes = countif(role == "organizer"),
+            totalDeletes     = count()
+            by eventId
+| extend cleanupRatio = todouble(organizerDeletes) / todouble(totalDeletes)
+| order by cleanupRatio desc
 ```
 
 ---

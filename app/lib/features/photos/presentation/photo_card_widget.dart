@@ -17,6 +17,10 @@ import 'reaction_bar_widget.dart';
 class PhotoCardWidget extends ConsumerWidget {
   final PhotoModel photo;
   final String eventId;
+  /// Event organizer's user ID — passed down from the feed so the 3-dot
+  /// menu can render for organizers acting on someone else's media.
+  /// Nullable when the event creator's account has been deleted.
+  final String? eventCreatedByUserId;
   final bool isSelecting;
   final bool isSelected;
   final VoidCallback? onSelectionToggle;
@@ -25,6 +29,7 @@ class PhotoCardWidget extends ConsumerWidget {
     super.key,
     required this.photo,
     required this.eventId,
+    this.eventCreatedByUserId,
     this.isSelecting = false,
     this.isSelected = false,
     this.onSelectionToggle,
@@ -35,8 +40,13 @@ class PhotoCardWidget extends ConsumerWidget {
     final authState = ref.watch(authStateProvider);
     final currentUserId =
         authState is AuthAuthenticated ? authState.user.id : null;
-    final isOwner =
+    final isUploader =
         currentUserId != null && photo.uploadedByUserId == currentUserId;
+    final isOrganizerDeletingOthers = currentUserId != null &&
+        eventCreatedByUserId != null &&
+        eventCreatedByUserId == currentUserId &&
+        photo.uploadedByUserId != currentUserId;
+    final canDelete = isUploader || isOrganizerDeletingOthers;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppTheme.standardPadding, vertical: 8),
@@ -92,7 +102,8 @@ class PhotoCardWidget extends ConsumerWidget {
                     ),
                     MediaOwnerMenu(
                       mediaLabel: 'Photo',
-                      isOwner: isOwner,
+                      canDelete: canDelete,
+                      isOrganizerDeletingOthers: isOrganizerDeletingOthers,
                       isSelecting: isSelecting,
                       onDelete: () async {
                         await ref
