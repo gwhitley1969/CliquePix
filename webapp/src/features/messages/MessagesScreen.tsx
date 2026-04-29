@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
-import { ChevronLeft, MessageCircle } from 'lucide-react';
+import { ChevronLeft, MessageCircle, Plus } from 'lucide-react';
 import { listEventThreads } from '../../api/endpoints/messages';
+import { getEvent } from '../../api/endpoints/events';
 import { LoadingSpinner } from '../../components/LoadingSpinner';
 import { EmptyState } from '../../components/EmptyState';
 import { formatRelative } from '../../lib/formatDate';
@@ -13,6 +14,13 @@ export function MessagesScreen() {
     queryFn: () => listEventThreads(id!),
     enabled: !!id,
   });
+  const eventQuery = useQuery({
+    queryKey: ['event', id],
+    queryFn: () => getEvent(id!),
+    enabled: !!id,
+  });
+  const canStartNew = eventQuery.data?.status !== 'expired';
+  const newMessageHref = `/events/${id}/messages/new`;
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6">
@@ -22,7 +30,17 @@ export function MessagesScreen() {
       >
         <ChevronLeft size={16} /> Back to event
       </Link>
-      <h1 className="text-2xl font-bold mb-6">Messages</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold">Messages</h1>
+        {canStartNew && threads.data && threads.data.length > 0 && (
+          <Link
+            to={newMessageHref}
+            className="inline-flex items-center gap-1 rounded bg-gradient-primary px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 active:opacity-80 transition-opacity"
+          >
+            <Plus size={16} /> New message
+          </Link>
+        )}
+      </div>
       {threads.isLoading ? (
         <LoadingSpinner />
       ) : !threads.data || threads.data.length === 0 ? (
@@ -30,6 +48,16 @@ export function MessagesScreen() {
           icon={MessageCircle}
           title="No messages yet"
           subtitle="Direct messages within this event will appear here."
+          action={
+            canStartNew ? (
+              <Link
+                to={newMessageHref}
+                className="inline-flex items-center gap-1 rounded bg-gradient-primary px-4 py-2 text-sm font-medium text-white hover:opacity-90 active:opacity-80 transition-opacity"
+              >
+                <Plus size={16} /> Start a conversation
+              </Link>
+            ) : undefined
+          }
         />
       ) : (
         <ul className="space-y-2">
