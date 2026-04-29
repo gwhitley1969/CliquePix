@@ -14,6 +14,7 @@ import { canDeleteMedia } from '../shared/utils/permissions';
 import { Photo, PhotoWithUrls } from '../shared/models/photo';
 import { Event } from '../shared/models/event';
 import { enrichUserAvatar } from '../shared/services/avatarEnricher';
+import { deleteNotificationsForPhoto } from '../shared/db/notificationCleanup';
 
 /**
  * Shape returned by listPhotos / getPhoto SQL: raw photo + uploader
@@ -528,6 +529,24 @@ async function deletePhoto(req: HttpRequest, context: InvocationContext): Promis
     await deleteBlob(photo.blob_path);
     if (photo.thumbnail_blob_path) {
       await deleteBlob(photo.thumbnail_blob_path);
+    }
+
+    // Clean up notifications referencing this photo BEFORE the soft-delete.
+    // Photos use UPDATE...status='deleted' but getPhoto filters status='active'
+    // so a stale `new_photo` notification would 404 on tap. See
+    // notificationCleanup.ts.
+    try {
+      const cleaned = await deleteNotificationsForPhoto(photoId);
+      if (cleaned > 0) {
+        trackEvent('stale_notifications_deleted', {
+          trigger: 'photo_deleted',
+          photoId,
+          count: String(cleaned),
+        });
+      }
+    } catch (err) {
+      context.error(`Failed to clean notifications for photo ${photoId} (non-fatal):`, err);
+      trackEvent('stale_notifications_cleanup_failed', { trigger: 'photo_deleted', photoId });
     }
 
     // Soft-delete the photo record

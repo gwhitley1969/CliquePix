@@ -491,6 +491,46 @@ WHERE media_type = 'video'
 GROUP BY processing_status;
 ```
 
+### Force-clean stale notifications (one-shot)
+
+The 15-min `cleanupExpired` timer runs `sweepStaleNotifications()` on every tick. After deploying a fresh notification-cleanup change, you can clear the historical accumulation immediately instead of waiting up to 15 min for the first sweep. Idempotent and safe to re-run.
+
+```sql
+-- Drop notifications whose target event no longer exists
+DELETE FROM notifications
+WHERE payload_json ? 'event_id'
+  AND NOT EXISTS (
+    SELECT 1 FROM events e WHERE e.id::text = notifications.payload_json->>'event_id'
+  );
+
+-- Drop notifications whose target photo is gone or soft-deleted
+DELETE FROM notifications
+WHERE payload_json ? 'photo_id'
+  AND NOT EXISTS (
+    SELECT 1 FROM photos p
+    WHERE p.id::text = notifications.payload_json->>'photo_id'
+      AND p.status = 'active'
+  );
+
+-- Drop notifications whose target video is gone or soft-deleted
+DELETE FROM notifications
+WHERE payload_json ? 'video_id'
+  AND NOT EXISTS (
+    SELECT 1 FROM photos p
+    WHERE p.id::text = notifications.payload_json->>'video_id'
+      AND p.status = 'active'
+  );
+
+-- Drop notifications whose target clique no longer exists
+DELETE FROM notifications
+WHERE payload_json ? 'clique_id'
+  AND NOT EXISTS (
+    SELECT 1 FROM cliques c WHERE c.id::text = notifications.payload_json->>'clique_id'
+  );
+```
+
+Telemetry: `stale_notifications_deleted` with `trigger ∈ {event_manual_delete, photo_deleted, video_deleted, periodic_sweep}`. See `docs/NOTIFICATION_SYSTEM.md` → "Notification cleanup on target deletion" for the full design.
+
 ---
 
 ## 4. Key Rotation

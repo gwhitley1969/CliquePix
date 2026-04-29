@@ -4,6 +4,7 @@ import { deleteBlob, deleteBlobsByPrefix } from '../shared/services/blobService'
 import { sendToMultipleTokens, sendSilentToMultipleTokens } from '../shared/services/fcmService';
 import { trackEvent } from '../shared/services/telemetryService';
 import { initTelemetry } from '../shared/services/telemetryService';
+import { sweepStaleNotifications } from '../shared/db/notificationCleanup';
 import * as path from 'path';
 
 // Helper: prefix-delete all blobs under a video's directory
@@ -142,6 +143,30 @@ async function cleanupExpired(myTimer: Timer, context: InvocationContext): Promi
     );
     trackEvent('expired_events_deleted', { count: String(deleteCount) });
     context.log(`Deleted ${deleteCount} expired events`);
+  }
+
+  // Sweep stale notifications. Runs AFTER the event hard-delete so any
+  // newly-orphaned event_* notifications (and photos/videos/cliques whose
+  // targets were just removed by a prior delete site that didn't wire the
+  // synchronous helpers) are cleaned in this same pass. See
+  // notificationCleanup.ts for the four orphan categories.
+  try {
+    const swept = await sweepStaleNotifications();
+    if (swept.events + swept.photos + swept.videos + swept.cliques > 0) {
+      trackEvent('stale_notifications_deleted', {
+        trigger: 'periodic_sweep',
+        events: String(swept.events),
+        photos: String(swept.photos),
+        videos: String(swept.videos),
+        cliques: String(swept.cliques),
+      });
+      context.log(
+        `Stale notification sweep: ${swept.events} event-orphans, ${swept.photos} photo-orphans, ${swept.videos} video-orphans, ${swept.cliques} clique-orphans`,
+      );
+    }
+  } catch (err) {
+    context.error('Stale notification sweep failed (non-fatal):', err);
+    trackEvent('stale_notifications_cleanup_failed', { trigger: 'periodic_sweep' });
   }
 
   trackEvent('expired_photos_deleted', { count: String(deletedCount) });

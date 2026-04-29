@@ -5,6 +5,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
+import '../../../core/utils/api_error_messages.dart';
 import '../../../core/utils/date_utils.dart';
 import '../../../services/storage_service.dart';
 import '../../../widgets/confirm_destructive_dialog.dart';
@@ -158,7 +159,22 @@ class PhotoDetailScreen extends ConsumerWidget {
       ),
       body: photoAsync.when(
         loading: () => const Center(child: CircularProgressIndicator(color: AppColors.whiteSurface)),
-        error: (err, _) => AppErrorWidget(message: err.toString()),
+        error: (err, _) {
+          final gone = isPermanentlyGone(err);
+          return AppErrorWidget(
+            message: friendlyApiErrorMessage(err, resourceLabel: 'photo'),
+            retryLabel: gone ? 'Go Back' : 'Try Again',
+            onRetry: gone
+                ? () {
+                    if (context.canPop()) {
+                      context.pop();
+                    } else {
+                      context.go('/events');
+                    }
+                  }
+                : () => ref.invalidate(photoDetailProvider(photoId)),
+          );
+        },
         data: (photo) => Column(
           children: [
             Expanded(

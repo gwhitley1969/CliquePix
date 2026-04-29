@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_gradients.dart';
+import '../../../core/utils/api_error_messages.dart';
 import '../../../widgets/app_bottom_nav.dart';
 import '../../../widgets/confirm_destructive_dialog.dart';
 import '../../../widgets/error_widget.dart';
@@ -31,7 +32,24 @@ class EventDetailScreen extends ConsumerWidget {
       backgroundColor: const Color(0xFF0E1525),
       body: eventAsync.when(
         loading: () => const Center(child: CircularProgressIndicator(color: AppColors.electricAqua)),
-        error: (err, _) => AppErrorWidget(message: err.toString()),
+        error: (err, _) {
+          final gone = isPermanentlyGone(err);
+          return AppErrorWidget(
+            message: friendlyApiErrorMessage(err, resourceLabel: 'event'),
+            retryLabel: gone ? 'Go Back' : 'Try Again',
+            onRetry: gone
+                ? () {
+                    // Cold-start FCM taps may have an empty back stack — fall
+                    // back to the events list so we never close the app.
+                    if (context.canPop()) {
+                      context.pop();
+                    } else {
+                      context.go('/events');
+                    }
+                  }
+                : () => ref.invalidate(eventDetailProvider(eventId)),
+          );
+        },
         data: (event) => _EventDetailBody(
           event: event,
           eventId: eventId,

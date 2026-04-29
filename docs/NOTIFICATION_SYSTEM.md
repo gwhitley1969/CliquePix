@@ -272,9 +272,9 @@ const _fcmNotificationDetails = NotificationDetails(
 
 ### Notification tap routing
 
-**File:** `app/lib/services/push_notification_service.dart`, `_navigateFromNotification()`
+Two callsites — keep them in sync.
 
-Extracts keys from FCM `data` payload and routes via GoRouter:
+**FCM tap (background / terminated / foreground-tap):** `app/lib/services/push_notification_service.dart`, `_navigateFromNotification()`
 
 | Data Keys | Route |
 |-----------|-------|
@@ -283,6 +283,23 @@ Extracts keys from FCM `data` payload and routes via GoRouter:
 | `type: 'dm_message'` + `thread_id` + `event_id` | `/events/{eventId}/dm/{threadId}` |
 | `event_id` (default) | `/events/{eventId}` |
 | `clique_id` (no event) | `/cliques/{cliqueId}` |
+
+**In-app list tap:** `app/lib/features/notifications/presentation/notifications_screen.dart`, `_handleNotificationTap()`
+
+| `notification.type` | Required `payload_json` keys | Route |
+|---------------------|------------------------------|-------|
+| `new_photo` | `event_id`, `photo_id` | `/events/{eventId}/photos/{photoId}` |
+| `new_video` / `video_ready` | `event_id`, `video_id` | `/events/{eventId}/videos/{videoId}` |
+| `video_processing_failed` | `event_id` | `/events/{eventId}` |
+| `event_expiring` / `event_expired` / `event_deleted` | `event_id` | `/events/{eventId}` |
+| `member_joined` | `clique_id` | `/cliques/{cliqueId}` |
+| Anything else / row missing its required key | — | Fallback: `event_id` → `/events/{eventId}` ; else `clique_id` → `/cliques/{cliqueId}` ; else no-op |
+
+`markRead` always fires first regardless of which branch is taken, so the unread dot disappears even when a row has nowhere meaningful to navigate. All payload reads use `as String?` so a malformed JSONB row falls through to the fallback rather than crashing.
+
+**FCM/in-app divergence on `new_photo`:** the FCM handler still bottoms out on `event_id` for `new_photo` rather than deep-linking to the photo. This is intentional for now — a stale FCM push minutes after the photo was deleted would 404 the user. The in-app list is safe to deep-link because the row was just fetched from the DB. Backfilling the FCM handler is a tracked follow-up.
+
+**`dm_message` is not stored in the in-app list.** The `notifications.type` CHECK constraint forbids it; DM notifications are FCM-only. Don't add a `dm_message` branch to `_handleNotificationTap`.
 
 ---
 
@@ -325,12 +342,14 @@ Note: `new_video` and `event_expired` are in the schema CHECK constraint but are
 **File:** `app/lib/features/notifications/presentation/notifications_screen.dart`
 
 - Gradient header, scrollable list
-- Type-specific icons and color gradients per notification type
-- Unread badge indicator
+- Type-specific icons and color gradients per notification type (covers all eight schema types — `new_photo`, `new_video`, `video_ready`, `video_processing_failed`, `event_expiring`, `event_expired`, `event_deleted`, `member_joined`)
+- Unread dot indicator
 - "Time ago" display (e.g., "2 hours ago")
-- Swipe-to-dismiss (calls `DELETE /api/notifications/{id}`)
-- "Clear All" button with confirmation dialog
-- Tap → mark as read + navigate to event/clique
+- Tap routing — type-aware via `_handleNotificationTap` (table above)
+- Per-row delete — two affordances, both gated on the shared `confirmDestructive` dialog and both showing a floating SnackBar on success / a red error SnackBar on failure:
+  - **Trailing trash IconButton** (discoverable single-tap affordance on every row). Lives outside the row's InkWell so its taps don't bubble to `onTap`.
+  - **Swipe-to-dismiss (right-to-left)**. Uses `Dismissible.confirmDismiss` so the row only animates out on a successful `DELETE /api/notifications/{id}` — failed API calls snap the row back instead of disappearing-then-reappearing on next refresh.
+- "Clear All" — separate confirmation dialog, surfaced both as a SliverAppBar action and an in-list TextButton row
 - Empty state: "You'll be notified when new photos are shared"
 
 ---
@@ -458,6 +477,35 @@ The timer function runs hourly (minute 0) and checks for events expiring within 
 
 ---
 
+## Notification cleanup on target deletion
+
+**File:** `backend/src/shared/db/notificationCleanup.ts`
+
+The `notifications` table has only one FK (`user_id` → users). Target IDs (`event_id`, `photo_id`, `video_id`, `clique_id`) live inside JSONB `payload_json` with no FK and no cascade. Without explicit cleanup, every notification about a deleted event / photo / video / clique would survive forever in OTHER users' lists, and tapping one would 404 on the resource fetch.
+
+**Two-tier strategy:**
+
+1. **Synchronous helpers** at user-visible delete sites — fire immediately so members see the related notification disappear on next list refresh, not 15 min later.
+2. **Periodic sweep** (`sweepStaleNotifications`) appended to the existing 15-min `cleanupExpired` timer in `timers.ts`. Catches whatever the synchronous wiring missed (account deletion bulk-photo delete in `auth.ts`, sole-owner-leaves clique delete in `cliques.ts`, races, future delete sites we forget to wire).
+
+| Helper | Used by | Trigger |
+|---|---|---|
+| `deleteNotificationsForEvent(eventId)` | `events.ts:deleteEvent` | Organizer manual event delete |
+| `deleteNotificationsForPhoto(photoId)` | `photos.ts:deletePhoto` | Uploader / organizer photo delete |
+| `deleteNotificationsForVideo(videoId)` | `videos.ts:deleteVideo` | Uploader / organizer video delete |
+| `deleteNotificationsForClique(cliqueId)` | (none yet — clique delete relies on the sweep) | — |
+| `sweepStaleNotifications()` | `timers.ts:cleanupExpired` (every 15 min) | Periodic safety net |
+
+The sweep removes notifications whose target is missing OR (for photos / videos) soft-deleted. `getPhoto` / `getVideo` filter on `status='active'`, so soft-deleted rows return 404 to the client and are treated as gone for notification purposes. Cliques and events are hard-deleted at all sites, so the sweep checks raw existence.
+
+**Drift hazard:** every NEW delete site that removes an event / photo / video / clique must EITHER call one of the targeted helpers OR rely on the periodic sweep covering it within 15 minutes. Add a one-line comment at any new site.
+
+**Telemetry:** each cleanup fires `stale_notifications_deleted` with `trigger ∈ {event_manual_delete, photo_deleted, video_deleted, periodic_sweep}` and a count. Failures fire `stale_notifications_cleanup_failed` (non-fatal — the parent operation still completes; the next sweep catches the orphan).
+
+**Operator runbook:** to force-clean stale rows immediately after deploy without waiting up to 15 min for the first timer pass, run the four sweep DELETEs from `backend/src/shared/db/notificationCleanup.ts` (`sweepStaleNotifications`) directly via psql. Idempotent and safe to re-run. See `docs/BETA_OPERATIONS_RUNBOOK.md` §X.
+
+---
+
 ## Code References
 
 | File | Purpose |
@@ -471,6 +519,8 @@ The timer function runs hourly (minute 0) and checks for events expiring within 
 | `backend/src/functions/dm.ts` | `dm_message` Web PubSub + FCM fallback |
 | `backend/src/functions/timers.ts` | `event_expiring` timer-driven push |
 | `backend/src/functions/notifications.ts` | In-app notification CRUD endpoints |
+| `backend/src/shared/db/notificationCleanup.ts` | Synchronous + periodic stale-notification cleanup |
+| `app/lib/core/utils/api_error_messages.dart` | Friendly Dio-error mapping for destination screens (covers 404 / 401 / network / 5xx) |
 | `app/lib/services/push_notification_service.dart` | FCM token registration, tap routing |
 | `app/lib/main.dart` | Notification channel setup, foreground message handler |
 | `app/lib/features/notifications/presentation/notifications_screen.dart` | In-app notification list UI |

@@ -99,6 +99,10 @@ class PushNotificationService {
     }
   }
 
+  // Type-aware tap routing for FCM notifications. Mirrors
+  // `_handleNotificationTap` in
+  // `app/lib/features/notifications/presentation/notifications_screen.dart`
+  // (the in-app list). Keep both in sync when adding a new notification type.
   void _navigateFromNotification(Map<String, dynamic> data) {
     try {
       final router = _ref.read(routerProvider);

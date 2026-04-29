@@ -10,6 +10,7 @@ import { deleteBlob } from '../shared/services/blobService';
 import { sendToMultipleTokens } from '../shared/services/fcmService';
 import { Event } from '../shared/models/event';
 import { enrichUserAvatar } from '../shared/services/avatarEnricher';
+import { deleteNotificationsForEvent } from '../shared/db/notificationCleanup';
 
 interface EventRowWithCreator extends Event {
   photo_count: number;
@@ -250,6 +251,23 @@ async function deleteEvent(req: HttpRequest, context: InvocationContext): Promis
       if (photo.thumbnail_blob_path) {
         await deleteBlob(photo.thumbnail_blob_path);
       }
+    }
+
+    // Clean up notifications referencing this event BEFORE the cascade DB
+    // delete. notifications has no FK on event_id, so the cascade does NOT
+    // touch the user-facing notification list. See notificationCleanup.ts.
+    try {
+      const cleaned = await deleteNotificationsForEvent(eventId);
+      if (cleaned > 0) {
+        trackEvent('stale_notifications_deleted', {
+          trigger: 'event_manual_delete',
+          eventId,
+          count: String(cleaned),
+        });
+      }
+    } catch (err) {
+      context.error(`Failed to clean notifications for event ${eventId} (non-fatal):`, err);
+      trackEvent('stale_notifications_cleanup_failed', { trigger: 'event_manual_delete', eventId });
     }
 
     // CASCADE deletes photos and reactions

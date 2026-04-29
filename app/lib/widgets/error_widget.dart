@@ -6,11 +6,13 @@ import 'gradient_button.dart';
 class AppErrorWidget extends StatelessWidget {
   final String message;
   final VoidCallback? onRetry;
+  final String? retryLabel;
 
   const AppErrorWidget({
     super.key,
     required this.message,
     this.onRetry,
+    this.retryLabel,
   });
 
   @override
@@ -32,7 +34,7 @@ class AppErrorWidget extends StatelessWidget {
               const SizedBox(height: 24),
               SizedBox(
                 width: 160,
-                child: GradientButton(text: 'Try Again', onPressed: onRetry),
+                child: GradientButton(text: retryLabel ?? 'Try Again', onPressed: onRetry),
               ),
             ],
           ],

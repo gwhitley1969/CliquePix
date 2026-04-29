@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_gradients.dart';
+import '../../../core/utils/api_error_messages.dart';
 import '../../../core/utils/lifecycle_aware_poller_mixin.dart';
 import '../../../widgets/avatar_widget.dart';
 import '../../../widgets/confirm_destructive_dialog.dart';
@@ -165,7 +166,20 @@ class _CliqueDetailScreenState extends ConsumerState<CliqueDetailScreen>
             });
             return const Center(child: CircularProgressIndicator(color: AppColors.electricAqua));
           }
-          return AppErrorWidget(message: err.toString());
+          final gone = isPermanentlyGone(err);
+          return AppErrorWidget(
+            message: friendlyApiErrorMessage(err, resourceLabel: 'clique'),
+            retryLabel: gone ? 'Go Back' : 'Try Again',
+            onRetry: gone
+                ? () {
+                    if (context.canPop()) {
+                      context.pop();
+                    } else {
+                      context.go('/cliques');
+                    }
+                  }
+                : () => ref.invalidate(cliqueDetailProvider(cliqueId)),
+          );
         },
         data: (clique) {
           final isOwner = clique.createdByUserId == currentUserId;

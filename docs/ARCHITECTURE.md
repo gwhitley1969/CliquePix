@@ -735,7 +735,8 @@ Timer-triggered Azure Function on a schedule (every 15 minutes):
    - `reactions` (FK `photo_id` ON DELETE CASCADE, cascaded from photos)
    - `event_dm_threads` (FK `event_id` ON DELETE CASCADE)
    - `event_dm_messages` (FK `thread_id` ON DELETE CASCADE, cascaded from threads)
-8. Log `expired_photos_deleted` and `expired_events_deleted` telemetry events with counts
+8. **Sweep stale notifications.** `notifications` has no FK on event/photo/video/clique — orphaned rows would survive event hard-delete and produce 404s when users tap them. After step 7, run the four-DELETE `sweepStaleNotifications` (see `backend/src/shared/db/notificationCleanup.ts` and `docs/NOTIFICATION_SYSTEM.md`) so the user-facing notification list does not retain rows pointing at non-existent targets. Synchronous-helper variants run at the user-initiated delete sites for immediate feedback.
+9. Log `expired_photos_deleted`, `expired_events_deleted`, and `stale_notifications_deleted` telemetry events with counts
 
 ### Orphan Cleanup
 

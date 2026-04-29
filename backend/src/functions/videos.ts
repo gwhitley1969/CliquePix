@@ -27,6 +27,7 @@ import { canDeleteMedia } from '../shared/utils/permissions';
 import { Photo, VideoWithUrls } from '../shared/models/photo';
 import { Event } from '../shared/models/event';
 import { enrichUserAvatar } from '../shared/services/avatarEnricher';
+import { deleteNotificationsForVideo } from '../shared/db/notificationCleanup';
 
 // ====================================================================================
 // Constants
@@ -788,6 +789,23 @@ async function deleteVideo(req: HttpRequest, context: InvocationContext): Promis
       throw new ForbiddenError(
         'You can only delete your own videos or videos from events you created.',
       );
+    }
+
+    // Clean up notifications referencing this video BEFORE the soft-delete.
+    // Same rationale as photos.ts:deletePhoto — getVideo filters
+    // status='active' so a stale video_ready notification would 404 on tap.
+    try {
+      const cleaned = await deleteNotificationsForVideo(videoId);
+      if (cleaned > 0) {
+        trackEvent('stale_notifications_deleted', {
+          trigger: 'video_deleted',
+          videoId,
+          count: String(cleaned),
+        });
+      }
+    } catch (err) {
+      context.error(`Failed to clean notifications for video ${videoId} (non-fatal):`, err);
+      trackEvent('stale_notifications_cleanup_failed', { trigger: 'video_deleted', videoId });
     }
 
     // Mark deleted immediately (Q5: callback discards results if transcode in flight)
