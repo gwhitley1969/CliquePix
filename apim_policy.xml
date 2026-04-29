@@ -2,7 +2,22 @@
   APIM policy for the "CliquePix API v1" - applies at the "All operations"
   scope on that API (NOT the global / "All APIs" scope).
 
-  HISTORY OF RATE-LIMIT REMOVAL (2026-04-27):
+  HISTORY OF RATE-LIMIT REMOVAL (most recent first):
+
+  2026-04-29 (incident #5 — the one this comment is about):
+    A brand-new test user hit the same 429 on their FIRST upload attempt
+    even though this file was clean. Audit at all four APIM policy scopes
+    found <rate-limit calls="5" renewal-period="60" /> AND
+    <quota calls="100" renewal-period="604800" /> on the "starter"
+    PRODUCT-scope policy — APIM's default scaffolding from when the
+    service was first provisioned, never touched. New users auto-subscribe
+    to "starter" and got slammed at 5 requests/min on first sign-in. The
+    fix was to PUT a base/-only policy on the starter product. The lesson:
+    when diagnosing a 429, audit ALL FOUR APIM policy scopes — global,
+    product, API, operation — not just the API scope. This file only
+    covers the API scope; cleaning it does not clean the others.
+
+  2026-04-27 (incidents #1-4 — the original mass cleanup):
   rate-limit-by-key was removed from this policy after four consecutive
   user-blocking failures in beta:
     1. Original 120/min limit was easily exceeded by normal usage
@@ -32,13 +47,22 @@
       we control the logic and can debug it
     - Configure Azure Front Door WAF for genuine bot traffic patterns
 
-  Do NOT re-add rate-limit-by-key to this policy without first migrating
-  off APIM Developer tier. The 4-incident history is documented
-  reproducibly above; repeating it would be a regression.
+  Do NOT re-add rate-limit-by-key OR <rate-limit> OR <quota> at ANY
+  APIM scope without first migrating off APIM Developer tier. The
+  5-incident history is documented reproducibly above; repeating it
+  would be a regression.
 
-  Source of truth: this file. Deploy via az rest PUT against the
-  management API policy URL with a JSON body of the form:
+  Source of truth: this file (API scope only). For the other three
+  scopes, the source of truth is the live APIM service — audit them
+  with the Phase 0+A script in docs/BETA_OPERATIONS_RUNBOOK.md §2.
+
+  Deploy this file via az rest PUT against the management API policy
+  URL with a JSON body of the form:
     { "properties": { "format": "rawxml", "value": "<contents of this file>" } }
+
+  An Azure Monitor metric alert ("apim-429-detected") fires on any APIM
+  429 within 5 minutes; if it fires, run the Phase 0+A audit before
+  doing anything else.
 -->
 <policies>
     <inbound>

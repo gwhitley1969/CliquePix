@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/upload_url_silent_retry.dart';
+import '../../../services/telemetry_service.dart';
 import '../domain/local_pending_video.dart';
 import 'videos_providers.dart';
 
@@ -52,10 +54,28 @@ class _VideoUploadScreenState extends ConsumerState<VideoUploadScreen> {
 
     try {
       final repo = await ref.read(videosRepositoryProvider.future);
+      final telemetry = ref.read(telemetryServiceProvider);
       final result = await repo.uploadVideo(
         eventId: widget.eventId,
         file: widget.videoFile,
         durationSeconds: widget.durationSeconds,
+        wrapGetUploadUrl: (call) => silentRetryOn429(
+          call,
+          onSilenced: (sec) => telemetry.record(
+            'video_upload_url_429_silenced',
+            extra: {
+              'retryAfterSeconds': sec.toString(),
+              'eventId': widget.eventId,
+            },
+          ),
+          onSilentRetrySucceeded: () => telemetry.record(
+            'video_upload_url_429_silent_retry_succeeded',
+          ),
+          onSilentRetryFailed: (status) => telemetry.record(
+            'video_upload_url_429_silent_retry_failed',
+            extra: {'finalStatus': (status ?? -1).toString()},
+          ),
+        ),
         onProgress: (p) {
           final percent = (p * 100).toInt();
           final statusText = p < 0.05

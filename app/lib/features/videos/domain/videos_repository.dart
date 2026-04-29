@@ -22,18 +22,27 @@ class VideosRepository {
     required File file,
     required int durationSeconds,
     required void Function(double progress) onProgress,
+    /// Optional wrapper for the get-upload-url call. Lets callers (e.g., the
+    /// upload screen) silently retry on a 429 from APIM without leaking
+    /// retry/telemetry concerns into the repository.
+    Future<Map<String, dynamic>> Function(
+      Future<Map<String, dynamic>> Function() call,
+    )? wrapGetUploadUrl,
   }) async {
     final filename = file.path.split(Platform.pathSeparator).last;
     final sizeBytes = await file.length();
 
     // 1. Get upload URLs from the backend
     onProgress(0.05);
-    final uploadInfo = await api.getUploadUrl(
-      eventId,
-      filename: filename,
-      sizeBytes: sizeBytes,
-      durationSeconds: durationSeconds,
-    );
+    Future<Map<String, dynamic>> doGetUploadUrl() => api.getUploadUrl(
+          eventId,
+          filename: filename,
+          sizeBytes: sizeBytes,
+          durationSeconds: durationSeconds,
+        );
+    final uploadInfo = wrapGetUploadUrl != null
+        ? await wrapGetUploadUrl(doGetUploadUrl)
+        : await doGetUploadUrl();
     final videoId = uploadInfo['video_id'] as String;
     final blockUrlsRaw = uploadInfo['block_upload_urls'] as List<dynamic>;
     final blockUrls = blockUrlsRaw

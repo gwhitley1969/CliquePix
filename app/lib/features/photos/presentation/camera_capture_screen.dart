@@ -10,6 +10,8 @@ import 'package:pro_image_editor/pro_image_editor.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_gradients.dart';
+import '../../../core/utils/upload_url_silent_retry.dart';
+import '../../../services/telemetry_service.dart';
 import '../domain/blob_upload_service.dart';
 import 'photos_providers.dart';
 
@@ -107,7 +109,23 @@ class _CameraCaptureScreenState extends ConsumerState<CameraCaptureScreen> {
       setState(() { _progress = 0.2; _statusText = 'Getting upload URL...'; });
 
       final repo = ref.read(photosRepositoryProvider);
-      final uploadInfo = await repo.getUploadUrl(widget.eventId);
+      final telemetry = ref.read(telemetryServiceProvider);
+      final uploadInfo = await silentRetryOn429(
+        () => repo.getUploadUrl(widget.eventId),
+        onSilenced: (sec) => telemetry.record(
+          'photo_upload_url_429_silenced',
+          extra: {
+            'retryAfterSeconds': sec.toString(),
+            'eventId': widget.eventId,
+          },
+        ),
+        onSilentRetrySucceeded: () =>
+            telemetry.record('photo_upload_url_429_silent_retry_succeeded'),
+        onSilentRetryFailed: (status) => telemetry.record(
+          'photo_upload_url_429_silent_retry_failed',
+          extra: {'finalStatus': (status ?? -1).toString()},
+        ),
+      );
       debugPrint('[CliquePix] _upload: got uploadUrl, photoId=${uploadInfo.photoId}');
       setState(() { _progress = 0.4; _statusText = 'Uploading to cloud...'; });
 

@@ -1,6 +1,38 @@
 # DEPLOYMENT_STATUS.md — Clique Pix v1
 
-Last updated: 2026-04-28 (event-organizer media moderation deployed to backend; clean release APK built; web SWA pending merge to main)
+Last updated: 2026-04-29 (APIM Product-scope rate-limit + quota removed from "starter" — fifth and (finally) actual root cause of the recurring upload 429; client silent-retry safety net added)
+
+## APIM Product-scope `rate-limit` + `quota` removal — incident #5 (2026-04-29)
+
+**Status:** ✅ APIM "starter" product policy cleaned in production; ✅ 429 metric alert wired; ✅ client-side silent-retry shipped to repo (APK build pending).
+
+**What changed and why.** A brand-new test user hit HTTP 429 on their FIRST upload attempt with the body `{statusCode: 429, message: "Rate limit is exceeded. Try again in 38 seconds."}`. The 2026-04-27 cleanup had only addressed the **API**-scope policy. APIM has FOUR policy scopes (Global → Product → API → Operation). A Phase 0+A audit found APIM's **default starter Product policy** — created automatically when the service was first provisioned and never touched — still contained `<rate-limit calls="5" renewal-period="60" />` AND `<quota calls="100" renewal-period="604800" />` (5/min + 100/week). New users auto-subscribed to the `starter` product hit the 5/min cap during their first auth-verify + list-events + list-cliques + get-upload-url chain.
+
+| Change | Status | Files |
+|---|---|---|
+| APIM `starter` product policy: PUT clean `<base />`-only policy. Removed both `<rate-limit>` and `<quota>` | ✅ Deployed 2026-04-29 via `az rest PUT` | (live APIM service) |
+| APIM `unlimited` product: confirmed already had no policy (404) | ✅ No-op | — |
+| APIM Global scope: confirmed already empty | ✅ No-op | — |
+| APIM Operation scope (all 7 operations): confirmed no policies (404) | ✅ No-op | — |
+| `apim_policy.xml`: in-file comment now warns about ALL FOUR scopes (was API-scope-only); incident #5 added to history | ✅ | `apim_policy.xml` |
+| Azure Monitor metric alert `apim-429-detected` (count Requests > 0 where GatewayResponseCode includes 429, 5-min window, 1-min eval) | ✅ Created 2026-04-29 | (Azure Monitor) |
+| New utility `silentRetryOn429<T>` — wraps a Future-returning call with one-shot 429 silent retry, honors Retry-After header (capped 60s), per-device 5-min cooldown via SharedPreferences | ✅ | `app/lib/core/utils/upload_url_silent_retry.dart` |
+| Photo upload: `camera_capture_screen` wraps `getUploadUrl` with silent retry. User sees no error banner on first 429 — just a slightly longer "Getting upload URL..." progress phase. Telemetry: `photo_upload_url_429_silenced` / `_silent_retry_succeeded` / `_silent_retry_failed` | ✅ | `app/lib/features/photos/presentation/camera_capture_screen.dart` |
+| Video upload: `VideosRepository.uploadVideo` accepts an optional `wrapGetUploadUrl` callback so the screen can supply silent-retry without coupling the repo to telemetry/SharedPreferences. `video_upload_screen` passes `silentRetryOn429`. Same telemetry shape with `video_*` prefix | ✅ | `app/lib/features/videos/domain/videos_repository.dart`, `app/lib/features/videos/presentation/video_upload_screen.dart` |
+| `flutter analyze`: 54 issues (matches pre-change baseline; zero new errors/warnings) | ✅ | — |
+| Release APK build (`flutter clean && flutter pub get && flutter build apk --release`) | ⏳ Pending | `app/build/app/outputs/flutter-apk/app-release.apk` |
+| On-device verification (affected test user retries upload) | ⏳ Pending | — |
+
+**Backup of prior live policies:** `C:\Users\genew\AppData\Local\Temp\apim-bak-20260429-1432\` — contains `global.xml`, `api.xml`, `product-starter.xml` (with the 5/min + 100/week rules), `product-starter-after.xml` (the clean replacement), and `product-clean.json` (the body used in the PUT).
+
+**Operational note for future maintainers:**
+- When an APIM 429 alert fires, run the Phase 0+A audit script in `docs/BETA_OPERATIONS_RUNBOOK.md` §2 BEFORE anything else. It enumerates all four scopes; the clean state is "no flagged files."
+- Do NOT re-add `<rate-limit>`, `<rate-limit-by-key>`, or `<quota>` at ANY scope until APIM is migrated to Standard v2 (distributed cache + SLA). The 5-incident history in `apim_policy.xml`'s in-file comment is canonical.
+- The client-side `silentRetryOn429` is a safety net, not a substitute for the APIM cleanup. It silences ONE 429 per 5-min window per device; a sixth incident with sustained 429s would still surface to users.
+
+---
+
+
 
 ## Organizer media moderation — `canDeleteMedia` (2026-04-28)
 

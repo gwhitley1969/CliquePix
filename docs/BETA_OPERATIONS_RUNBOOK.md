@@ -330,12 +330,77 @@ If `create = true` is missing, the regression is back — re-add it, run `npm ru
 
 ### Photo / video upload returns "Too many requests" (HTTP 429)
 
-**Should not happen in beta** — APIM `rate-limit-by-key` was removed on 2026-04-27 (see `apim_policy.xml` in-file comment for the four-incident history). If a 429 surfaces, the source is no longer APIM. Triage:
+**Should not happen in beta** — all four APIM policy scopes (Global, Product, API, Operation) were verified clean as of 2026-04-29 (see `apim_policy.xml` in-file comment for the five-incident history). The Azure Monitor alert `apim-429-detected` fires on any APIM 429 within 5 minutes; if it triggers, run the Phase 0+A audit BELOW first, before anything else.
 
-1. **Check APIM `Requests` metric filtered by `GatewayResponseCode=429`** — should be flat zero. If non-zero, someone re-added a rate-limit policy; revert via the deploy command in `apim_policy.xml`'s comment.
-2. **Check Azure Storage `Throttling Errors`** on `stcliquepixprod` — extremely unlikely for beta volumes, but possible if a single blob path is hammered. Storage 429 → `BlobUploadFailure` on the client, surfaced with the Azure error code in the user-visible message.
-3. **Check the user's APK version.** If they're on a pre-2026-04-27 APK, the `_friendlyError` for 429 may differ. Updated APKs show a live "Wait Ns" countdown with `Retry-After` parsing and a "Show details" panel covering Dio type / HTTP status / response body. Have them install the latest `app-release.apk`.
-4. **Check Front Door** metrics for `PercentageOfClientErrors` → 429 — Standard tier has no built-in rate limit, but a misconfigured WAF rule could in principle return 429. Currently no WAF.
+#### Phase 0+A — Audit ALL FOUR APIM policy scopes
+
+The 2026-04-29 incident (#5) reproduced because the prior cleanup only touched the API-scope policy. APIM has FOUR scopes and a rate-limit at any of them produces the same 429 body. Always audit all four.
+
+```bash
+BAK="/c/Users/genew/AppData/Local/Temp/apim-bak-$(date +%Y%m%d-%H%M)"
+mkdir -p "$BAK"
+SUB=25410e67-b3c8-49a2-8cf0-ab9f77ce613f
+RG=rg-cliquepix-prod
+APIM=apim-cliquepix-002
+API=cliquepix-v1
+
+# Global scope
+az rest --method GET --uri "https://management.azure.com/subscriptions/$SUB/resourceGroups/$RG/providers/Microsoft.ApiManagement/service/$APIM/policies/policy?api-version=2022-08-01&format=rawxml" --output-file "$BAK/global.xml" 2>/dev/null
+
+# API scope
+az rest --method GET --uri "https://management.azure.com/subscriptions/$SUB/resourceGroups/$RG/providers/Microsoft.ApiManagement/service/$APIM/apis/$API/policies/policy?api-version=2022-08-01&format=rawxml" --output-file "$BAK/api.xml"
+
+# Product scopes
+az apim product list -g "$RG" --service-name "$APIM" --query "[].name" -o tsv > "$BAK/products.txt"
+while read -r p; do
+  az rest --method GET --uri "https://management.azure.com/subscriptions/$SUB/resourceGroups/$RG/providers/Microsoft.ApiManagement/service/$APIM/products/$p/policies/policy?api-version=2022-08-01&format=rawxml" --output-file "$BAK/product-$p.xml" 2>/dev/null
+done < "$BAK/products.txt"
+
+# Operation scopes
+az apim api operation list -g "$RG" --service-name "$APIM" --api-id "$API" --query "[].name" -o tsv > "$BAK/ops.txt"
+while read -r op; do
+  az rest --method GET --uri "https://management.azure.com/subscriptions/$SUB/resourceGroups/$RG/providers/Microsoft.ApiManagement/service/$APIM/apis/$API/operations/$op/policies/policy?api-version=2022-08-01&format=rawxml" --output-file "$BAK/op-$op.xml" 2>/dev/null
+done < "$BAK/ops.txt"
+
+# The grep that names the culprit:
+grep -l 'rate-limit\|<quota' "$BAK"/*.xml || echo "ALL CLEAN"
+```
+
+Flagged file → corresponding scope is the source of the 429.
+
+#### Phase B — Remove the rate-limit from the flagged scope
+
+For a **product** scope (most likely — APIM ships default-product policies), PUT a clean replacement:
+
+```bash
+echo '{"properties":{"format":"rawxml","value":"<policies><inbound><base /></inbound><backend><base /></backend><outbound><base /></outbound><on-error><base /></on-error></policies>"}}' > "$BAK/product-clean.json"
+az rest --method PUT --uri "https://management.azure.com/subscriptions/$SUB/resourceGroups/$RG/providers/Microsoft.ApiManagement/service/$APIM/products/<PRODUCT>/policies/policy?api-version=2022-08-01" --headers "Content-Type=application/json" --body "@$BAK/product-clean.json"
+```
+
+For an **operation** scope, DELETE the policy entirely (APIM falls back to API scope):
+
+```bash
+az rest --method DELETE --uri "https://management.azure.com/subscriptions/$SUB/resourceGroups/$RG/providers/Microsoft.ApiManagement/service/$APIM/apis/$API/operations/<OP>/policies/policy?api-version=2022-08-01"
+```
+
+For the **API** scope, redeploy `apim_policy.xml` (the local source of truth — see commands in its in-file comment).
+
+#### Phase C — Force counter-cache invalidation (Developer-tier gotcha)
+
+APIM Developer tier has a single in-memory counter cache. Even after the policy clears, in-flight counters can keep firing for one ~60s window:
+
+```bash
+sleep 90
+az apim api update -g rg-cliquepix-prod -n apim-cliquepix-002 --api-id cliquepix-v1 --protocols https
+```
+
+The `--protocols https` toggle is idempotent and forces APIM to refresh policies on the gateway pod.
+
+#### Other 429 sources (rule-out only — none have been observed)
+
+- **Azure Storage `Throttling Errors`** on `stcliquepixprod` — Storage 429 → `BlobUploadFailure` on the client, surfaced with the Azure error code. Extremely unlikely at beta volumes.
+- **Front Door WAF** — Standard tier has no built-in rate limit but a custom WAF rule could 429. Currently no WAF configured.
+- **Old APK** — pre-2026-04-29 APKs do NOT have the silent-retry safety net and will surface the 429 banner directly. Have the user install the latest `app-release.apk`.
 
 ### WorkManager (Layer 4) firing too often
 
