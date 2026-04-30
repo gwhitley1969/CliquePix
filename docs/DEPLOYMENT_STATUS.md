@@ -1,6 +1,48 @@
 # DEPLOYMENT_STATUS.md — Clique Pix v1
 
-Last updated: 2026-04-30 (Weekly Friday 5 PM local reminder shipped — client-only, no backend changes)
+Last updated: 2026-04-30 (Real-time event fan-out shipped — Web PubSub `new_event` + FCM fallback + always-on connection lifecycle)
+
+## Real-time event fan-out — `new_event` (2026-04-30)
+
+**Status:** ✅ Code complete on local branch, ✅ migration 011 written, ✅ backend tsc + jest 157/157 green, ✅ flutter analyze 54-issue baseline preserved, ✅ flutter test 68/68 green. **Pending:** migration 011 apply to prod DB → backend deploy → on-device verification → APK build → docs commit.
+
+**What's the user-visible win:** when a clique member creates a new Event, every other clique member sees it appear on their screen with sub-second latency when foregrounded, gets a system notification when backgrounded, and finds the event waiting in their in-app notifications list. Closing-and-reopening the app to "see" the new event is no longer needed. Reported bug filed by @user 2026-04-30 — fix delivers the requested behavior.
+
+**Free incidental win:** the same architectural shift fixes a latent `video_ready` Web PubSub delivery bug. Pre-fix, `video_ready` only reached users on `EventFeedScreen` because the connection was per-DM-screen-only. Post-fix, all signed-in users receive `video_ready` real-time regardless of which screen they're on. No additional code change required for this fix — it's a side-effect of the connection-lifecycle promotion.
+
+**Architecture:** copies the existing `pushVideoReady` pattern (`backend/src/functions/videos.ts:274-339`) for the dual Web PubSub + FCM + in-app notification fan-out. The new piece is making the client Web PubSub connection always-on while signed in (was previously per-DM-screen, only opened when the user navigated to a DM thread).
+
+| Phase | Status | Files |
+|---|---|---|
+| Migration 011 — widen `notifications.type` CHECK constraint to include `'new_event'` | ✅ Written | `backend/src/shared/db/migrations/011_new_event_notification_type.sql` (new) |
+| Backend `pushNewEvent` helper + call site in `createEvent` | ✅ | `backend/src/functions/events.ts` |
+| Backend tsc + jest (157/157) | ✅ | — |
+| `DmRealtimeService` — added `Stream<NewEventEvent> onNewEvent` + dispatch branch for `type: 'new_event'` | ✅ | `app/lib/features/dm/domain/dm_realtime_service.dart` |
+| `RealtimeProviderInvalidator` widget — subscribes to `onNewEvent`, invalidates `allEventsListProvider` + `eventsListProvider(cliqueId)` + `notificationsListProvider`, telemetry `new_event_received` | ✅ | `app/lib/widgets/realtime_provider_invalidator.dart` (new) |
+| `ShellScreen` — wraps the navigationShell in `RealtimeProviderInvalidator` so the subscription lives across all 4 bottom-tab branches and out-of-shell screens | ✅ | `app/lib/app/shell_screen.dart` |
+| `AuthNotifier` — constructor injection of `DmRealtimeService` + `DmRepository`; `_connectRealtime()` 3-step dance on `_startLifecycle`; `_realtime.disconnect()` on `_stopLifecycle`; `_reconnectRealtimeIfDropped()` runs in parallel with Friday reminder via `Future.wait` on every `AppLifecycleState.resumed` | ✅ | `app/lib/features/auth/presentation/auth_providers.dart` |
+| `PushNotificationService` — foreground `onMessage` invalidates events providers when `type: 'new_event'`; `_navigateFromNotification` routes `new_event` taps to `/events/{eventId}` with `new_event_tapped_fcm` telemetry | ✅ | `app/lib/services/push_notification_service.dart` |
+| `notifications_screen.dart` — `case 'new_event':` in `_handleNotificationTap` routing to `/events/{eventId}`; new "New Event" icon (event_rounded, electric-aqua → deep-blue gradient) and title in `_iconAndColors` / `_title` | ✅ | `app/lib/features/notifications/presentation/notifications_screen.dart` |
+| `flutter analyze`: 54 issues (matches baseline; zero new errors/warnings) | ✅ | — |
+| `flutter test`: 68/68 pass (no new tests — orchestration helpers don't get unit tests in this codebase, matches `pushVideoReady` convention) | ✅ | — |
+| Docs updated: PRD §5.14, ARCHITECTURE §10 + §12, NOTIFICATION_SYSTEM trigger matrix + new "New Event Real-Time Fan-Out" subsection, CLAUDE.md Push Triggers + Real-Time Feed sections, BETA_TEST_PLAN §7.1, BETA_OPERATIONS_RUNBOOK §7 with 4 new Kusto queries, this entry | ✅ | as listed |
+| Migration 011 apply to `pg-cliquepixdb` (prod) | ⏳ Pending | — |
+| Backend deploy `func azure functionapp publish func-cliquepix-fresh` | ⏳ Pending | — |
+| Backend smoke: `POST /api/cliques/{id}/events` from a test account → confirm `new_event_push_sent` in App Insights with expected `recipientCount` | ⏳ Pending | — |
+| APK release build (`flutter clean && flutter pub get && flutter build apk --release`) | ⏳ Pending | — |
+| On-device verification per BETA_TEST_PLAN.md §7.1 (Samsung + iPhone, two-account scenario) | ⏳ Pending | — |
+
+**Telemetry events** (App Insights `customEvents`):
+- Server: `new_event_push_sent { eventId, cliqueId, recipientCount, webPubSubFailures, fcmFailures }`.
+- Client: `new_event_received { eventId, cliqueId }`, `new_event_tapped_fcm { eventId }`, `realtime_connected { reason: 'auth_start' | 'reconnect_on_resume' }`, `realtime_connect_failed { errorCode }`, `realtime_reconnected_on_resume`.
+
+**Deploy order (must be sequential):** migration 011 → backend → APK. Backend deploy is safe before clients update because old clients harmlessly fall through the `type:` switch on `new_event` Web PubSub messages — they keep working as before. APK ship completes the user-visible change.
+
+**Rollback plan:** revert client commit (legacy build still works for everything except real-time event arrival). Backend `pushNewEvent` is best-effort and can be flagged off via env var `DISABLE_NEW_EVENT_PUSH=true` if a problem emerges (one-line guard at the top of the helper — TODO: add this guard if a need arises).
+
+**No new dependencies, no new RBAC, no infrastructure change.** Reuses existing Web PubSub `wps-cliquepix-prod`, FCM credentials, and the same notifications table.
+
+---
 
 ## Weekly Friday 5 PM local reminder (2026-04-30)
 

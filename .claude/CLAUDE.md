@@ -985,6 +985,7 @@ FCM (Firebase Cloud Messaging) for push delivery to both Android and iOS. FCM is
 | Event expiring in 24h | `event_expiring` | — | All event clique members | `{ event_id }` |
 | Event expired | `event_expired` | — | All event clique members | `{ event_id }` |
 | Event deleted by organizer | `event_deleted` | — | All clique members except deleter | `{ event_id, event_name }` |
+| **Event created by clique member** | `new_event` | All clique members **except creator** (foreground real-time refresh of `allEventsListProvider`) | All clique members **except creator** | `{ type: 'new_event', event_id, clique_id, event_name, creator_name, clique_name }` |
 | **Weekly Friday 5 PM reminder** (client-scheduled) | `friday_reminder` (local) | — | **Self only** (local notification — no FCM, no Web PubSub) | `{ type: 'friday_reminder' }` |
 
 **No notifications sent** for member removals, voluntary departures, or video upload initiation (the feed placeholder card is enough signal to the uploader; other members are notified when the video is ready to play, not when it starts transcoding).
@@ -1042,15 +1043,22 @@ Foreground taps use a static callback: `main.dart` `onDidReceiveNotificationResp
 
 ## Real-Time / Near-Real-Time Feed
 
-### v1 Approach
+### v1 Approach (multi-layer)
 
-- Push notification on new photo / clique join → user taps to open relevant screen
-- Refresh on app resume via `WidgetsBindingObserver` (`didChangeAppLifecycleState`)
-- Pull-to-refresh via `RefreshIndicator` on all list/detail screens
-- 30-second polling via `Timer.periodic` while clique list/detail screens are active
-- This pattern applies to: event feed, cliques list, clique detail (members)
+- **Always-on Web PubSub** (since 2026-04-30) — `DmRealtimeService` is connected on `AuthAuthenticated` from `AuthNotifier._startLifecycle` (not per-DM-screen as it was originally). Disconnects on `_stopLifecycle`. Reconnects on `AppLifecycleState.resumed` if dropped. Delivers DM messages, `video_ready`, and `new_event` to whichever screen the user is currently on. Sub-second latency when the connection is alive.
+- **FCM push** as the always-arrives fallback for backgrounded / terminated devices and for foreground users when the WebSocket is dropped. Same payload shape as Web PubSub data envelope so both paths trigger identical client behavior.
+- **Refresh on app resume** via `WidgetsBindingObserver` (`didChangeAppLifecycleState`) — invalidates the events / cliques providers so the next read fetches fresh.
+- **Pull-to-refresh** via `RefreshIndicator` on all list/detail screens.
+- **30-second polling** via `Timer.periodic` (lifecycle-aware via `LifecycleAwarePollerMixin`) on `event_feed_screen`, `cliques_list_screen`, `clique_detail_screen`. Defense-in-depth — the always-on Web PubSub is the primary signal, polling catches anything missed.
 
-This is sufficient. Most photo sharing happens in bursts during active events. Do not introduce SignalR, Web PubSub, or event streaming for v1.
+`HomeScreen` (the dashboard with `allEventsListProvider`) does NOT poll. It relies on the Web PubSub `new_event` real-time path + FCM fallback + app-resume refresh.
+
+**Web PubSub event types currently dispatched** in `DmRealtimeService` `_connectInternal` (per `app/lib/features/dm/domain/dm_realtime_service.dart`):
+- `dm_message_created` — emits to `onMessage` stream (consumed by `DmChatScreen`)
+- `video_ready` — emits to `onVideoReady` stream (consumed by `EventFeedScreen` + the always-on `RealtimeProviderInvalidator` since 2026-04-30)
+- `new_event` — emits to `onNewEvent` stream (consumed by `RealtimeProviderInvalidator`, which invalidates `allEventsListProvider`, `eventsListProvider(cliqueId)`, `notificationsListProvider`)
+
+Add new types by extending the type switch in `_connectInternal` and adding a corresponding `Stream<...>` getter, then subscribe wherever invalidation is needed.
 
 ---
 

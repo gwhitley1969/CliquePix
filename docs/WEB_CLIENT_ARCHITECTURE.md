@@ -266,6 +266,7 @@ Lives under `features/landing/`. Public — no auth required. Composed of sectio
   - `dm_message_created` → `['thread', threadId, 'messages']`
   - `video_ready` → `['event', eventId, 'videos']` — visible on the uploader's own session, per Decision 10
   - `notification_created` → `['notifications']`
+  - **`new_event` — not yet handled (tracked follow-up)**: mobile shipped real-time `new_event` fan-out on 2026-04-30 (see `docs/NOTIFICATION_SYSTEM.md` "New Event Real-Time Fan-Out"). Backend already publishes `new_event` to every clique member's Web PubSub user channel. Web parity needs: (1) a dispatch branch in `realtimeClient.ts` that invalidates `['events', 'all']` and `['events', cliqueId]` and `['notifications']`, (2) any in-app notifications-list rendering for `new_event` rows. Estimated < 30 lines of code; deferred so the mobile fix could ship first against the user-reported bug.
 
 ## 11. App Insights (RUM)
 

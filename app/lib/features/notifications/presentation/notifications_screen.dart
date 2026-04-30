@@ -136,6 +136,7 @@ class NotificationsScreen extends ConsumerWidget {
       case 'event_expiring':
       case 'event_expired':
       case 'event_deleted':
+      case 'new_event':
         if (eventId != null) {
           context.push('/events/$eventId');
           return;
@@ -322,6 +323,8 @@ class _NotificationTile extends StatelessWidget {
         return (Icons.delete_forever_rounded, [const Color(0xFF6B7280), const Color(0xFFEF4444)]);
       case 'member_joined':
         return (Icons.person_add_rounded, [AppColors.electricAqua, AppColors.violetAccent]);
+      case 'new_event':
+        return (Icons.event_rounded, [AppColors.electricAqua, AppColors.deepBlue]);
       default:
         return (Icons.notifications_rounded, [AppColors.deepBlue, AppColors.violetAccent]);
     }
@@ -337,6 +340,7 @@ class _NotificationTile extends StatelessWidget {
       case 'event_expired': return 'Event Expired';
       case 'event_deleted': return 'Event Deleted';
       case 'member_joined': return 'New Member';
+      case 'new_event': return 'New Event';
       default: return 'Notification';
     }
   }

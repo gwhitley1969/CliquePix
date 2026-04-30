@@ -508,7 +508,9 @@ Payload includes enough to render the message immediately:
 Keep it simple:
 
 - one WebSocket connection per user (singleton `DmRealtimeService`)
+- **Connection is now always-on while signed in (since 2026-04-30)** — opened from `AuthNotifier._startLifecycle` on `AuthAuthenticated`, closed from `_stopLifecycle` on sign-out / delete-account, reconnected on `AppLifecycleState.resumed` if dropped. Previously the connection was opened lazily by `DmChatScreen.initState`, which meant DM users got it but Home / Cliques / Notifications users did not. The shift was driven by the `new_event` real-time fan-out (see `docs/NOTIFICATION_SYSTEM.md` "New Event Real-Time Fan-Out") and incidentally fixes a latent `video_ready` delivery gap.
 - client filters incoming messages by `thread_id` to display in the active chat
+- the type-based dispatch in `_connectInternal` now handles three event types: `dm_message_created`, `video_ready`, `new_event`. Add new types by extending the switch and exposing a `Stream<...>` getter
 - on reconnect, the service re-negotiates a fresh URL (client access tokens expire after 1 hour)
 - do not implement presence yet
 - do not implement typing events yet

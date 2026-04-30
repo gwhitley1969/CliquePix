@@ -202,6 +202,7 @@ Users can upload a headshot that replaces their initials everywhere in the app. 
 - Push notifications via FCM (Firebase Cloud Messaging)
 - Notification types:
   - New photo added to event ("New Photo!")
+  - **New event created in a clique you're in ("New Event!")** — fans out to all clique members except the creator, real-time when foregrounded (Web PubSub) and FCM when backgrounded
   - Someone joins a clique ("New Member!")
   - Event expiring in 24 hours
   - Event expired

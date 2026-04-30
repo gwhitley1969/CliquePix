@@ -33,6 +33,7 @@ FCM is a **transport mechanism only** — no Firebase backend services (Auth, Fi
 | User joins clique | `member_joined` | All existing members except joiner | -- | All except joiner | `{ clique_id }` |
 | Event expiring (24h) | `event_expiring` | All event members | -- | All members | `{ event_id }` |
 | Event deleted | `event_deleted` | All clique members except deleter | -- | All except deleter | `{ event_id }` |
+| **Event created by clique member** | `new_event` | All clique members **except creator** | All clique members **except creator** (real-time refresh of `allEventsListProvider` + `notificationsListProvider`) | All except creator | `{ type: 'new_event', event_id, clique_id, event_name, creator_name, clique_name }` |
 | **Token refresh (silent / invisible)** | `token_refresh` (silent) | Users inactive 9-11h, max 1/6h per user | -- | -- | `{ type: 'token_refresh', userId }` |
 | **Weekly Friday 5 PM reminder** | `friday_reminder` | -- (local-only via `zonedSchedule`) | -- | -- | `{ type: 'friday_reminder' }` |
 
@@ -505,6 +506,54 @@ DM body is truncated to 100 characters.
   }
 }
 ```
+
+### new_event (added 2026-04-30)
+
+```json
+{
+  "notification": {
+    "title": "New Event!",
+    "body": "Alice started \"Beach Day 2026\" in Bachelor Party Crew"
+  },
+  "data": {
+    "type": "new_event",
+    "event_id": "uuid",
+    "clique_id": "uuid"
+  }
+}
+```
+
+Body falls back to `"A new event was created in {cliqueName}"` if the creator's display name is null on the auth user.
+
+---
+
+## New Event Real-Time Fan-Out (added 2026-04-30)
+
+The `new_event` notification was added to fix a reported bug where users wouldn't see a freshly-created Event from another clique member until they closed and re-opened the app. The fix combines a backend fan-out helper with an architectural shift on the client: the Web PubSub connection became always-on for signed-in users (was previously per-DM-screen-only).
+
+**Backend** (`backend/src/functions/events.ts`):
+- `pushNewEvent(eventId, creatorUserId, cliqueId, eventName, cliqueName, creatorName)` — mirrors `pushVideoReady` from `videos.ts`. Called best-effort from `createEvent` after the DB INSERT.
+- Recipient set: all clique members EXCEPT the creator (creator is already on Event Detail; doesn't need a real-time refresh and would get a redundant push).
+- Web PubSub: `sendToUser(memberId, { type: 'new_event', event_id, clique_id })` per recipient.
+- FCM: `sendToMultipleTokens(tokens, 'New Event!', body, payload)` with stale-token cleanup on failures.
+- Notifications row: INSERT one `new_event` row per recipient with `payload_json = { event_id, clique_id, event_name, creator_name, clique_name }`. Wrapped in its own try/catch so a constraint failure (e.g., migration 011 not yet applied) doesn't erase the Web PubSub + FCM successes.
+- Telemetry: `new_event_push_sent { eventId, cliqueId, recipientCount, webPubSubFailures, fcmFailures }`.
+- Migration 011 (`011_new_event_notification_type.sql`) widens the `notifications.type` CHECK constraint to include `'new_event'`.
+
+**Client** (`app/lib/`):
+- `DmRealtimeService` (`features/dm/domain/dm_realtime_service.dart`) gained a `Stream<NewEventEvent> onNewEvent` getter and a dispatch branch for `type == 'new_event'`.
+- `RealtimeProviderInvalidator` (`widgets/realtime_provider_invalidator.dart`) is a `ConsumerStatefulWidget` mounted at the root of `ShellScreen`. It subscribes to `onNewEvent` for the entire signed-in session and on each emit invalidates `allEventsListProvider`, `eventsListProvider(cliqueId)`, `notificationsListProvider`.
+- `AuthNotifier._startLifecycle` now opens the Web PubSub connection via a 3-step dance (wire `onNegotiate` → `dmRepo.negotiate()` → `realtimeService.connect(url)`). `_stopLifecycle` calls `realtimeService.disconnect()`. `AppLifecycleService.onResumed` reconnects if dropped (in parallel with the Friday reminder reschedule via `Future.wait`).
+- `PushNotificationService` foreground `onMessage` listener invalidates `allEventsListProvider` + `eventsListProvider(cliqueId)` for `new_event`. `_navigateFromNotification` routes `new_event` taps to `/events/{eventId}`.
+- `notifications_screen.dart` `_handleNotificationTap` adds a `case 'new_event':` routing to `/events/{eventId}` and a "New Event" icon (event_rounded with electric-aqua → deep-blue gradient) and title.
+
+**Latent bug also fixed**: `video_ready` Web PubSub delivery previously only reached users on `EventFeedScreen` because the connection was per-DM-screen. With always-on Web PubSub, all signed-in users receive `video_ready` real-time regardless of which screen they're on.
+
+**Multi-device**: each device gets the Web PubSub message + the FCM push. Accepted (matches all other notifications).
+
+**Telemetry events** (App Insights `customEvents`):
+- Server: `new_event_push_sent { recipientCount, webPubSubFailures, fcmFailures }`.
+- Client: `new_event_received` (Web PubSub arrival), `new_event_tapped_fcm`, `realtime_connected`, `realtime_connect_failed`, `realtime_reconnected_on_resume`.
 
 ---
 

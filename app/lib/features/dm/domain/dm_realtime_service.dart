@@ -13,10 +13,21 @@ class VideoReadyEvent {
   const VideoReadyEvent({required this.eventId, required this.videoId});
 }
 
+/// NewEventEvent — emitted when the backend pushes a `new_event` notification
+/// via Web PubSub. Fans out to listeners that need to invalidate cached
+/// events lists so a freshly-created Event from another clique member
+/// appears immediately on Home / All Events screens.
+class NewEventEvent {
+  final String eventId;
+  final String cliqueId;
+  const NewEventEvent({required this.eventId, required this.cliqueId});
+}
+
 class DmRealtimeService {
   WebSocketChannel? _channel;
   final _messageController = StreamController<DmMessageModel>.broadcast();
   final _videoReadyController = StreamController<VideoReadyEvent>.broadcast();
+  final _newEventController = StreamController<NewEventEvent>.broadcast();
   Timer? _reconnectTimer;
   String? _url;
   int _reconnectAttempts = 0;
@@ -25,6 +36,7 @@ class DmRealtimeService {
 
   Stream<DmMessageModel> get onMessage => _messageController.stream;
   Stream<VideoReadyEvent> get onVideoReady => _videoReadyController.stream;
+  Stream<NewEventEvent> get onNewEvent => _newEventController.stream;
   bool get isConnected => _channel != null;
 
   Future<void> connect(String url) async {
@@ -59,6 +71,13 @@ class DmRealtimeService {
             if (eventId != null && videoId != null) {
               _videoReadyController.add(VideoReadyEvent(eventId: eventId, videoId: videoId));
               debugPrint('[CliquePix Realtime] video_ready: $videoId in event $eventId');
+            }
+          } else if (type == 'new_event') {
+            final eventId = json['event_id'] as String?;
+            final cliqueId = json['clique_id'] as String?;
+            if (eventId != null && cliqueId != null) {
+              _newEventController.add(NewEventEvent(eventId: eventId, cliqueId: cliqueId));
+              debugPrint('[CliquePix Realtime] new_event: $eventId in clique $cliqueId');
             }
           }
         } catch (e) {
@@ -120,5 +139,6 @@ class DmRealtimeService {
     disconnect();
     _messageController.close();
     _videoReadyController.close();
+    _newEventController.close();
   }
 }

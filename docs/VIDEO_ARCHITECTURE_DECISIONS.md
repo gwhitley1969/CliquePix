@@ -744,6 +744,14 @@ The uploader's instant-preview UX already covers the "I want to know when my vid
 
 Web PubSub on the uploader's open WebSocket connection is the right channel — it silently flips a Riverpod provider without any visible notification.
 
+### Update 2026-04-30: connection lifecycle shift incidentally repaired a latent gap
+
+When this decision shipped, the WebSocket connection was opened lazily by `DmChatScreen.initState`. That meant `video_ready` Web PubSub delivery only worked for users currently on `EventFeedScreen` (the screen that subscribed to `onVideoReady`) AND who happened to have the WebSocket open via a recent DM session. Other clique members (uploader on Home, viewer on Cliques tab, etc.) received `video_ready` via FCM only — losing the sub-second feed-card upgrade promised by this decision.
+
+The `new_event` real-time fan-out (2026-04-30) promoted the WebSocket connection to **always-on while signed in** — opened from `AuthNotifier._startLifecycle`, closed from `_stopLifecycle`, reconnected on `AppLifecycleState.resumed`. As a side effect, all clique members now receive `video_ready` real-time regardless of which screen they're on. The `RealtimeProviderInvalidator` widget at the root of `ShellScreen` could be extended in the future to subscribe to `onVideoReady` for app-wide video card refresh, but the existing `EventFeedScreen.onVideoReady` listener is sufficient because that's the only screen where stale video state matters.
+
+See `docs/NOTIFICATION_SYSTEM.md` "New Event Real-Time Fan-Out" and `docs/EVENT_DM_CHAT_ARCHITECTURE.md` "Connection model" for the lifecycle details.
+
 ---
 
 ## Decision 11: Stable cacheKey for SAS-backed images in feed cards

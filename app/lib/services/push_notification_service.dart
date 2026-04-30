@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/routing/app_router.dart';
 import '../features/auth/presentation/auth_providers.dart';
+import '../features/events/presentation/events_providers.dart';
 import '../features/notifications/presentation/notifications_providers.dart';
 import '../features/photos/presentation/photos_providers.dart';
 import '../features/videos/presentation/videos_providers.dart';
@@ -60,11 +61,23 @@ class PushNotificationService {
       //  - everything else: invalidate the notifications list so any new
       //    in-app notification row appears immediately
       FirebaseMessaging.onMessage.listen((message) {
-        if (message.data['type'] == 'token_refresh') {
+        final type = message.data['type'];
+        if (type == 'token_refresh') {
           _handleSilentRefresh();
           return;
         }
         _ref.invalidate(notificationsListProvider);
+        // For new_event, also invalidate the events caches so a backgrounded
+        // → foregrounded user with delivered FCM sees Home / per-clique
+        // events refresh on next read. Web PubSub already covers the
+        // foreground-while-arrives case via RealtimeProviderInvalidator.
+        if (type == 'new_event') {
+          _ref.invalidate(allEventsListProvider);
+          final cliqueId = message.data['clique_id'];
+          if (cliqueId is String && cliqueId.isNotEmpty) {
+            _ref.invalidate(eventsListProvider(cliqueId));
+          }
+        }
       });
 
       // Background tap: user taps notification while app is backgrounded
@@ -139,6 +152,21 @@ class PushNotificationService {
           // telemetry is best-effort
         }
         router.go('/events');
+        return;
+      }
+
+      // New event from another clique member: route directly to the event
+      // detail screen. eventId is required; if the data envelope is
+      // malformed (no eventId), fall through to the generic eventId/cliqueId
+      // fallbacks below — defensive.
+      if (type == 'new_event' && eventId != null) {
+        try {
+          _ref.read(telemetryServiceProvider).record('new_event_tapped_fcm',
+              extra: {'eventId': eventId});
+        } catch (_) {
+          // telemetry is best-effort
+        }
+        router.push('/events/$eventId');
         return;
       }
 

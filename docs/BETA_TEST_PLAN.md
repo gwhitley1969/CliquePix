@@ -162,7 +162,23 @@ This is a manual smoke test checklist to run before each beta release. Every ite
 - [ ] **Clear all** — "Clear All" button with confirmation deletes all
 - [ ] **Tap navigation** — tapping a notification navigates to the correct event/clique
 
-### 7.1 Weekly Friday Reminder (added 2026-04-30)
+### 7.1 New Event Real-Time Fan-Out (added 2026-04-30)
+
+Cross-user real-time delivery — User B creates an event, User A (clique member, NOT the creator) sees it appear without restarting the app.
+
+- [ ] **Foreground real-time (Android)**: User A on Home screen of clique-mate's clique. User B creates a new event in that clique. User A sees the new event card appear on Home within ~1 second. App Insights shows `new_event_push_sent` (server) and `new_event_received` (User A's device) correlated by `eventId`
+- [ ] **Foreground real-time (iOS)**: same scenario on iPhone for User A
+- [ ] **Backgrounded → tap FCM**: User A backgrounds the app. User B creates event. User A's device shows a heads-up FCM notification *"New Event!"* / *"{B} started '{eventName}' in {cliqueName}"* within ~3 sec. Tap → app opens to `/events/{eventId}` (Event Detail). `new_event_tapped_fcm` telemetry fires
+- [ ] **Backgrounded → foreground via app icon**: User A backgrounds. User B creates event. User A foregrounds via app icon (NOT the notification). On resume, Web PubSub reconnects (`realtime_reconnected_on_resume` telemetry) and HomeScreen shows the new event card
+- [ ] **In-app notifications list**: User A taps Notifications tab → sees a "New Event" row with event_rounded icon and gradient (electric-aqua → deep-blue). Body says *"{B} started '{eventName}' in {cliqueName}"*. Tap → routes to `/events/{eventId}`
+- [ ] **Creator excluded**: User B (the creator) does NOT receive the FCM push, does NOT see a new notification row in their own list, and stays on Event Detail (where they navigated post-create) without disruption
+- [ ] **Multi-device**: User A signed in on phone + tablet → both update simultaneously. Tap on either → both navigate independently
+- [ ] **Sign-out cleanup**: User A signs out → Web PubSub disconnects (`disconnect()` log line in debug build) → User B creates event → User A's old device receives nothing
+- [ ] **Re-sign-in re-connects**: User A signs back in → Web PubSub reconnects (`realtime_connected { reason: 'auth_start' }`) → next event from User B arrives real-time
+- [ ] **Latent video_ready bug fix verification**: User A on Home (NOT on EventFeedScreen) → User B uploads a video to a shared event and waits for transcode → User A's `notificationsListProvider` invalidates within ~1 sec of `video_ready` delivery (verify by tapping Notifications tab and seeing the new row without pull-to-refresh). Pre-fix this would have required A to be on EventFeedScreen
+- [ ] **No regression to Friday reminder** — verify §7.2 still passes
+
+### 7.2 Weekly Friday Reminder (added 2026-04-30)
 
 Client-only, scheduled via `flutter_local_notifications.zonedSchedule`. No FCM, no backend involvement. See `docs/NOTIFICATION_SYSTEM.md` "Weekly Friday Reminder."
 

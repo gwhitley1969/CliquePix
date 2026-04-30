@@ -746,6 +746,59 @@ customEvents
 | order by cleanupRatio desc
 ```
 
+**New event real-time fan-out — server emit** (added 2026-04-30):
+```kql
+customEvents
+| where name == "new_event_push_sent"
+| where timestamp > ago(7d)
+| extend recipientCount   = toint(customDimensions.recipientCount),
+         webPubSubFailures = toint(customDimensions.webPubSubFailures),
+         fcmFailures      = toint(customDimensions.fcmFailures)
+| summarize total_pushes = count(),
+            total_recipients = sum(recipientCount),
+            total_wps_failures = sum(webPubSubFailures),
+            total_fcm_failures = sum(fcmFailures)
+| extend wps_failure_rate = round(100.0 * total_wps_failures / total_recipients, 2),
+         fcm_failure_rate = round(100.0 * total_fcm_failures / total_recipients, 2)
+```
+Healthy: failure rates < 1%. Sustained > 5% indicates Web PubSub or FCM service degradation; cross-check Azure Service Health.
+
+**New event real-time delivery rate** (foreground % — proxy: `new_event_received` / `new_event_push_sent` recipient count):
+```kql
+let scheduled_recipients =
+  customEvents
+  | where name == "new_event_push_sent"
+  | where timestamp > ago(7d)
+  | summarize total = sum(toint(customDimensions.recipientCount));
+let received =
+  customEvents
+  | where name == "new_event_received"
+  | where timestamp > ago(7d)
+  | count;
+print server_recipient_count = toscalar(scheduled_recipients),
+      client_received        = toscalar(received),
+      foreground_delivery_rate_pct = round(100.0 * toscalar(received) / toscalar(scheduled_recipients), 1)
+```
+Expectation: anywhere from 30-80% depending on how often the average user has the app foregrounded. Below 20% suggests a Web PubSub connection-lifecycle bug (e.g., `_connectRealtime` failing silently on auth start).
+
+**Realtime connection health**:
+```kql
+customEvents
+| where timestamp > ago(7d)
+| where name in ("realtime_connected","realtime_connect_failed","realtime_reconnected_on_resume")
+| summarize count() by name
+```
+`realtime_connect_failed` should be near zero. `realtime_reconnected_on_resume` count over 7d divided by daily active users tells you how often the WebSocket gets dropped (cell-signal blips, OS-killed, etc.) — high values are normal on iOS where backgrounded apps lose the connection.
+
+**New event tap-through** (engagement):
+```kql
+let pushes = customEvents | where name == "new_event_push_sent" | where timestamp > ago(7d) | summarize total = sum(toint(customDimensions.recipientCount));
+let taps   = customEvents | where name == "new_event_tapped_fcm" | where timestamp > ago(7d) | count;
+print recipients = toscalar(pushes), taps = toscalar(taps),
+      tap_rate_pct = round(100.0 * toscalar(taps) / toscalar(pushes), 1)
+```
+Reasonable: 5-15% (most users see the event in-app via Web PubSub and don't tap the FCM banner).
+
 **Friday reminder coverage** (added 2026-04-30 — should approach 100% of recently-active signed-in users):
 ```kql
 let scheduled =

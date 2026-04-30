@@ -8,6 +8,7 @@ import { validateRequiredString, validateOptionalString, validateRetentionHours,
 import { NotFoundError, ForbiddenError, ValidationError } from '../shared/utils/errors';
 import { deleteBlob } from '../shared/services/blobService';
 import { sendToMultipleTokens } from '../shared/services/fcmService';
+import { sendToUser } from '../shared/services/webPubSubService';
 import { Event } from '../shared/models/event';
 import { enrichUserAvatar } from '../shared/services/avatarEnricher';
 import { deleteNotificationsForEvent } from '../shared/db/notificationCleanup';
@@ -83,8 +84,11 @@ async function createEvent(req: HttpRequest, context: InvocationContext): Promis
       throw new ValidationError('A valid clique ID is required.');
     }
 
-    // Verify clique exists
-    const clique = await queryOne('SELECT id FROM cliques WHERE id = $1', [cliqueId]);
+    // Verify clique exists; load `name` for the fan-out push body.
+    const clique = await queryOne<{ id: string; name: string }>(
+      'SELECT id, name FROM cliques WHERE id = $1',
+      [cliqueId],
+    );
     if (!clique) {
       throw new NotFoundError('clique');
     }
@@ -110,10 +114,142 @@ async function createEvent(req: HttpRequest, context: InvocationContext): Promis
       userId: authUser.id,
     });
 
+    // Best-effort fan-out to other clique members. Never blocks the response.
+    // See pushNewEvent below — mirrors pushVideoReady's dual Web PubSub + FCM
+    // + in-app notification pattern.
+    pushNewEvent(
+      event!.id,
+      authUser.id,
+      cliqueId,
+      event!.name,
+      clique.name,
+      authUser.displayName,
+    ).catch((err) => context.error('pushNewEvent failed (non-fatal):', err));
+
     return successResponse(event, 201);
   } catch (error) {
     return handleError(error, context.invocationId);
   }
+}
+
+/**
+ * Fan-out helper for event creation. Mirrors `pushVideoReady` in videos.ts:
+ *   1. Find clique members EXCLUDING the creator.
+ *   2. Web PubSub `sendToUser` to each (foreground real-time refresh).
+ *   3. FCM push to each (background notification + foreground heads-up).
+ *   4. INSERT in-app notifications rows.
+ *
+ * The creator is excluded from both Web PubSub AND FCM here (unlike
+ * pushVideoReady which includes the uploader on Web PubSub for the
+ * instant-preview card upgrade — the creator of an event is already on
+ * the Event Detail screen, so they don't need a real-time refresh).
+ *
+ * Best-effort: each step's failures are caught and logged so a partial
+ * failure (e.g., one user's Web PubSub send throws) does not abort the
+ * remaining work.
+ */
+async function pushNewEvent(
+  eventId: string,
+  creatorUserId: string,
+  cliqueId: string,
+  eventName: string,
+  cliqueName: string,
+  creatorName: string | null,
+): Promise<void> {
+  const payload = {
+    type: 'new_event' as const,
+    event_id: eventId,
+    clique_id: cliqueId,
+  };
+
+  // Recipient set: all clique members EXCEPT the creator.
+  const otherMembers = await query<{ user_id: string }>(
+    `SELECT DISTINCT cm.user_id FROM clique_members cm
+     WHERE cm.clique_id = $1 AND cm.user_id != $2`,
+    [cliqueId, creatorUserId],
+  );
+
+  if (otherMembers.length === 0) {
+    trackEvent('new_event_push_sent', {
+      eventId,
+      cliqueId,
+      recipientCount: '0',
+    });
+    return;
+  }
+
+  // Web PubSub broadcast (foreground real-time feed update).
+  let webPubSubFailures = 0;
+  await Promise.all(
+    otherMembers.map((m) =>
+      sendToUser(m.user_id, payload).catch((err) => {
+        webPubSubFailures++;
+        console.error(`Web PubSub send failed for ${m.user_id}:`, err);
+      }),
+    ),
+  );
+
+  // FCM push to OTHER members for background/terminated devices.
+  const tokens = await query<{ token: string }>(
+    `SELECT pt.token FROM push_tokens pt
+     WHERE pt.user_id = ANY($1::uuid[])`,
+    [otherMembers.map((m) => m.user_id)],
+  );
+
+  let fcmFailures = 0;
+  if (tokens.length > 0) {
+    const body = creatorName
+      ? `${creatorName} started "${eventName}" in ${cliqueName}`
+      : `A new event was created in ${cliqueName}`;
+    try {
+      const failed = await sendToMultipleTokens(
+        tokens.map((t) => t.token),
+        'New Event!',
+        body,
+        payload,
+      );
+      fcmFailures = failed.length;
+      if (failed.length > 0) {
+        await execute('DELETE FROM push_tokens WHERE token = ANY($1)', [failed]);
+      }
+    } catch (err) {
+      console.error('sendToMultipleTokens for new_event failed:', err);
+      fcmFailures = tokens.length;
+    }
+  }
+
+  // Create in-app notification records for each recipient. Wrapped in its
+  // own try/catch — a constraint failure (e.g., migration 011 not yet
+  // applied) should not erase the Web PubSub + FCM successes above.
+  try {
+    await execute(
+      `INSERT INTO notifications (user_id, type, payload_json)
+       SELECT cm.user_id, 'new_event', $1::jsonb
+       FROM clique_members cm
+       WHERE cm.clique_id = $2 AND cm.user_id != $3`,
+      [
+        JSON.stringify({
+          event_id: eventId,
+          clique_id: cliqueId,
+          event_name: eventName,
+          creator_name: creatorName,
+          clique_name: cliqueName,
+        }),
+        cliqueId,
+        creatorUserId,
+      ],
+    );
+  } catch (err) {
+    console.error('INSERT notifications for new_event failed:', err);
+  }
+
+  trackEvent('new_event_push_sent', {
+    eventId,
+    cliqueId,
+    recipientCount: String(otherMembers.length),
+    webPubSubFailures: String(webPubSubFailures),
+    fcmFailures: String(fcmFailures),
+  });
 }
 
 async function listEvents(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {

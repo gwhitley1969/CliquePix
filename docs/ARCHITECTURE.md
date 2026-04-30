@@ -648,6 +648,7 @@ The single exception is the **weekly Friday reminder**, which is a *client-sched
 | `event_expiring` | Timer (24h before expiry) | Event clique members | `{ event_id }` |
 | `event_expired` | Timer (after expiry) | Event clique members | `{ event_id }` |
 | `event_deleted` | Event organizer deletes event | Clique members (excl. deleter) | `{ event_id, event_name }` |
+| `new_event` | A clique member creates a new event | Clique members (excl. creator) — Web PubSub + FCM | `{ type: 'new_event', event_id, clique_id, event_name, creator_name, clique_name }` |
 | `friday_reminder` | Local `zonedSchedule`, weekly Friday 17:00 device-local | Self only (no FCM, no Web PubSub) | `{ type: 'friday_reminder' }` |
 
 **No notifications sent** for member removals or voluntary departures — the member simply disappears from the list.
@@ -785,12 +786,15 @@ This three-layer approach (push + app-resume + polling) covers all cases: push f
 
 ## Real-Time Channels (In Use)
 
-Azure Web PubSub is used for two real-time channels (added during v1 development):
+Azure Web PubSub is used for three real-time channels:
 
 - **DM delivery:** event-centric 1:1 direct messages delivered via WebSocket, with FCM fallback for backgrounded users. See `docs/EVENT_DM_CHAT_ARCHITECTURE.md`.
 - **Video processing-state push:** `video_ready` event pushed to all event members (including the uploader) so feed cards upgrade instantly when transcoding completes. See `docs/VIDEO_ARCHITECTURE_DECISIONS.md` Decision 10.
+- **Event-creation fan-out (added 2026-04-30):** `new_event` published to every clique member (excluding the creator) when a member creates an event. Triggers an immediate invalidation of `allEventsListProvider` so the new event card appears on `HomeScreen` within ~1 second. See `docs/NOTIFICATION_SYSTEM.md` "New Event Real-Time Fan-Out."
 
-The polling + push + app-resume approach above remains the primary feed update mechanism for photos and non-video content.
+**Connection lifecycle (since 2026-04-30):** the client Web PubSub connection in `DmRealtimeService` is now **always-on** while signed in (was per-DM-screen previously). `AuthNotifier._startLifecycle` opens it; `_stopLifecycle` closes it; `AppLifecycleService.onResumed` reconnects if dropped. This shift was required so `new_event` reaches users browsing Home / Cliques / Notifications, and it incidentally fixes a latent `video_ready` delivery gap for users not on `EventFeedScreen`.
+
+The polling + push + app-resume approach remains the catch-up mechanism when the WebSocket is dropped (cell-signal blip, OS-killed, etc.) — FCM fallback covers the same gaps.
 
 ---
 

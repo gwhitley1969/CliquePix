@@ -8,6 +8,9 @@ import '../../../services/api_client.dart';
 import '../../../services/friday_reminder_service.dart';
 import '../../../services/telemetry_service.dart';
 import '../../../services/token_storage_service.dart';
+import '../../dm/domain/dm_realtime_service.dart';
+import '../../dm/domain/dm_repository.dart';
+import '../../dm/presentation/dm_providers.dart';
 import '../data/auth_api.dart';
 import '../domain/app_lifecycle_service.dart';
 import '../domain/auth_repository.dart';
@@ -56,6 +59,8 @@ final authStateProvider =
     ref.watch(authRepositoryProvider),
     ref.watch(tokenStorageServiceProvider),
     ref.watch(telemetryServiceProvider),
+    ref.watch(dmRealtimeServiceProvider),
+    ref.watch(dmRepositoryProvider),
     bootstrap: ref.watch(authBootstrapStateProvider),
   );
 });
@@ -64,6 +69,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
   final AuthRepository _repository;
   final TokenStorageService _tokenStorage;
   final TelemetryService _telemetry;
+  final DmRealtimeService _realtime;
+  final DmRepository _dmRepo;
   AppLifecycleService? _lifecycle;
 
   bool _signingIn = false;
@@ -72,7 +79,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
   AuthNotifier(
     this._repository,
     this._tokenStorage,
-    this._telemetry, {
+    this._telemetry,
+    this._realtime,
+    this._dmRepo, {
     required AuthState bootstrap,
   }) : super(bootstrap) {
     // Optimistic bootstrap: if we seeded AuthAuthenticated from cached
@@ -261,8 +270,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       refreshCallback: _repository.refreshToken,
       reloginCallback: _triggerWelcomeBack,
       telemetry: _telemetryRecord,
-      onResumed: () => FridayReminderService.scheduleOrReschedule(
-          telemetry: _telemetryRecord),
+      onResumed: _onAppResumedTasks,
     );
     _lifecycle!.start();
     // Initial schedule for users who never resume (cold-start sign-in,
@@ -271,6 +279,64 @@ class AuthNotifier extends StateNotifier<AuthState> {
       FridayReminderService.scheduleOrReschedule(
           telemetry: _telemetryRecord),
     );
+    // Initial realtime connect — gives the user instant fan-out for
+    // `new_event`, `video_ready`, and DM messages regardless of which
+    // screen they're on.
+    unawaited(_connectRealtime());
+  }
+
+  /// Auth-independent tasks that must run on every `AppLifecycleState.resumed`.
+  /// Future.wait runs them in parallel so a failure in one cannot prevent
+  /// the others from executing. Per-task `catchError` keeps an exception
+  /// from propagating up and breaking the sibling tasks.
+  Future<void> _onAppResumedTasks() async {
+    await Future.wait([
+      FridayReminderService.scheduleOrReschedule(telemetry: _telemetryRecord)
+          .catchError((Object e) {
+        debugPrint('[AUTH] Friday reminder reschedule on resume failed: $e');
+      }),
+      _reconnectRealtimeIfDropped().catchError((Object e) {
+        debugPrint('[AUTH] Realtime reconnect on resume failed: $e');
+      }),
+    ]);
+  }
+
+  /// 3-step Web PubSub connect dance:
+  ///   (1) Wire onNegotiate so the service can renew its WebSocket URL on
+  ///       token expiry without a sign-out (Web PubSub access tokens TTL ~60min).
+  ///   (2) Idempotent — short-circuit if already connected.
+  ///   (3) Negotiate fresh URL + connect.
+  Future<void> _connectRealtime() async {
+    try {
+      _realtime.onNegotiate = () => _dmRepo.negotiate();
+      if (_realtime.isConnected) return;
+      final url = await _dmRepo.negotiate();
+      await _realtime.connect(url);
+      _telemetryRecord('realtime_connected', extra: {'reason': 'auth_start'});
+    } catch (e) {
+      _telemetryRecord('realtime_connect_failed',
+          errorCode: e.toString().split('\n').first);
+      debugPrint('[AUTH] Realtime connect failed: $e');
+    }
+  }
+
+  /// Resume-hook reconnect: no-op if the WebSocket is still alive; otherwise
+  /// re-runs the connect dance and emits `realtime_reconnected_on_resume`
+  /// telemetry so we can trace how often the connection was dropped.
+  Future<void> _reconnectRealtimeIfDropped() async {
+    if (_realtime.isConnected) return;
+    try {
+      _realtime.onNegotiate = () => _dmRepo.negotiate();
+      final url = await _dmRepo.negotiate();
+      await _realtime.connect(url);
+      _telemetryRecord('realtime_connected',
+          extra: {'reason': 'reconnect_on_resume'});
+      _telemetryRecord('realtime_reconnected_on_resume');
+    } catch (e) {
+      _telemetryRecord('realtime_connect_failed',
+          errorCode: e.toString().split('\n').first);
+      debugPrint('[AUTH] Realtime reconnect failed: $e');
+    }
   }
 
   void _stopLifecycle() {
@@ -279,6 +345,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
     // Cancel the Friday reminder so signed-out devices don't keep firing.
     // Fire-and-forget — never block the sign-out path on this.
     unawaited(FridayReminderService.cancel());
+    // Disconnect Web PubSub so signed-out devices don't keep an open
+    // WebSocket holding stale credentials.
+    try {
+      _realtime.disconnect();
+    } catch (e) {
+      debugPrint('[AUTH] Realtime disconnect failed: $e');
+    }
   }
 
   @override
