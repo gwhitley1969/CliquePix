@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/user_model.dart';
 import '../../../services/api_client.dart';
+import '../../../services/friday_reminder_service.dart';
 import '../../../services/telemetry_service.dart';
 import '../../../services/token_storage_service.dart';
 import '../data/auth_api.dart';
@@ -248,21 +249,36 @@ class AuthNotifier extends StateNotifier<AuthState> {
     state = AuthReloginRequired(email: hint.email, displayName: hint.name);
   }
 
+  void _telemetryRecord(String event,
+      {String? errorCode, Map<String, String>? extra}) {
+    _telemetry.record(event, errorCode: errorCode, extra: extra);
+  }
+
   void _startLifecycle() {
     _lifecycle?.stop();
     _lifecycle = AppLifecycleService(
       tokenStorage: _tokenStorage,
       refreshCallback: _repository.refreshToken,
       reloginCallback: _triggerWelcomeBack,
-      telemetry: (event, {errorCode, extra}) =>
-          _telemetry.record(event, errorCode: errorCode, extra: extra),
+      telemetry: _telemetryRecord,
+      onResumed: () => FridayReminderService.scheduleOrReschedule(
+          telemetry: _telemetryRecord),
     );
     _lifecycle!.start();
+    // Initial schedule for users who never resume (cold-start sign-in,
+    // immediate use). Idempotent — the resume hook reuses the same path.
+    unawaited(
+      FridayReminderService.scheduleOrReschedule(
+          telemetry: _telemetryRecord),
+    );
   }
 
   void _stopLifecycle() {
     _lifecycle?.stop();
     _lifecycle = null;
+    // Cancel the Friday reminder so signed-out devices don't keep firing.
+    // Fire-and-forget — never block the sign-out path on this.
+    unawaited(FridayReminderService.cancel());
   }
 
   @override

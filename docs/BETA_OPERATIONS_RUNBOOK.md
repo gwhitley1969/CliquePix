@@ -746,6 +746,58 @@ customEvents
 | order by cleanupRatio desc
 ```
 
+**Friday reminder coverage** (added 2026-04-30 — should approach 100% of recently-active signed-in users):
+```kql
+let scheduled =
+  customEvents
+  | where timestamp > ago(7d) and name == "friday_reminder_scheduled"
+  | summarize dcount(user_Id);
+let activeUsers =
+  customEvents
+  | where timestamp > ago(7d) and name == "auth_verify_success"
+  | summarize dcount(user_Id);
+print scheduled = toscalar(scheduled),
+      active    = toscalar(activeUsers),
+      coverage  = round(100.0 * toscalar(scheduled) / toscalar(activeUsers), 1)
+```
+
+**Friday reminder reason breakdown** (sanity — `cold_start` should dominate; `tz_changed` rare; `os_purged` should be ~0 unless something is wrong with the OS):
+```kql
+customEvents
+| where name == "friday_reminder_scheduled"
+| where timestamp > ago(30d)
+| summarize count() by tostring(customDimensions.reason)
+| order by count_ desc
+```
+
+**Friday reminder TZ-lookup failures** (should be ~0 — non-zero indicates `flutter_timezone` plugin issues on a real device):
+```kql
+customEvents
+| where name == "friday_reminder_tz_lookup_failed"
+| where timestamp > ago(30d)
+| summarize count() by tostring(customDimensions.errorCode)
+```
+
+**Friday reminder tap-through** (engagement signal — what fraction of fires get tapped? Compare schedules in last week to taps in last week):
+```kql
+let taps =
+  customEvents
+  | where name == "friday_reminder_tapped"
+  | where timestamp > ago(7d)
+  | summarize tap_count = count();
+// Approximate: each user with a schedule got ~1 fire per week. We can't observe
+// the OS-level fire directly (no client telemetry on display), so this is a
+// proxy that's accurate within ±10%.
+let users_scheduled =
+  customEvents
+  | where name == "friday_reminder_scheduled"
+  | where timestamp > ago(7d)
+  | summarize dcount(user_Id);
+print taps      = toscalar(taps),
+      users     = toscalar(users_scheduled),
+      tap_rate  = round(100.0 * toscalar(taps) / toscalar(users_scheduled), 1)
+```
+
 ---
 
 ## Web Client Troubleshooting

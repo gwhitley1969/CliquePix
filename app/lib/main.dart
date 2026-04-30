@@ -5,7 +5,9 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:msal_auth/msal_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest.dart' as tz;
+import 'package:timezone/timezone.dart' as tzlocal;
 import 'package:workmanager/workmanager.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'core/constants/msal_constants.dart';
@@ -140,6 +142,20 @@ void main() async {
 
   tz.initializeTimeZones();
 
+  // Best-effort: read the device's IANA timezone and seed `tz.local` so
+  // `flutter_local_notifications` `zonedSchedule` calls fire at the correct
+  // wall-clock time across DST. Used by FridayReminderService.
+  // If the platform-channel call fails, leaves tz.local at its default
+  // (UTC) — degraded but non-crashing.
+  try {
+    final iana = await FlutterTimezone.getLocalTimezone();
+    if (iana.isNotEmpty) {
+      tzlocal.setLocalLocation(tzlocal.getLocation(iana));
+    }
+  } catch (e) {
+    debugPrint('[CliquePix] FlutterTimezone.getLocalTimezone failed: $e');
+  }
+
   try {
     await Workmanager().initialize(callbackDispatcher);
   } catch (e) {
@@ -173,7 +189,17 @@ void main() async {
           importance: Importance.high,
         ),
       );
-      debugPrint('[CliquePix] Notification channel created');
+      // Separate channel for the weekly Friday reminder so users can mute
+      // reminders without muting photo pushes via OS Settings.
+      await androidPlugin.createNotificationChannel(
+        const AndroidNotificationChannel(
+          'cliquepix_reminders',
+          'Reminders',
+          description: 'Weekly Friday-evening nudge to create an Event',
+          importance: Importance.defaultImportance,
+        ),
+      );
+      debugPrint('[CliquePix] Notification channels created');
 
       // Request Android 13+ notification permission explicitly
       final granted = await androidPlugin.requestNotificationsPermission();

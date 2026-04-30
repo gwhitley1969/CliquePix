@@ -637,6 +637,8 @@ Users must be notified when:
 
 FCM (Firebase Cloud Messaging) for push delivery to both Android and iOS. FCM is a transport mechanism only — no Firebase backend services, no Firebase Auth, no Firestore. Messages use both `notification` (for OS-level display) and `data` (for app navigation) payloads via FCM HTTP v1 API.
 
+The single exception is the **weekly Friday reminder**, which is a *client-scheduled local notification* via `flutter_local_notifications.zonedSchedule` — no FCM, no backend involvement. See "Weekly Friday Reminder" below and `docs/NOTIFICATION_SYSTEM.md` for the full architecture.
+
 ### Notification Types
 
 | Type | Trigger | Recipients | Payload |
@@ -646,8 +648,23 @@ FCM (Firebase Cloud Messaging) for push delivery to both Android and iOS. FCM is
 | `event_expiring` | Timer (24h before expiry) | Event clique members | `{ event_id }` |
 | `event_expired` | Timer (after expiry) | Event clique members | `{ event_id }` |
 | `event_deleted` | Event organizer deletes event | Clique members (excl. deleter) | `{ event_id, event_name }` |
+| `friday_reminder` | Local `zonedSchedule`, weekly Friday 17:00 device-local | Self only (no FCM, no Web PubSub) | `{ type: 'friday_reminder' }` |
 
 **No notifications sent** for member removals or voluntary departures — the member simply disappears from the list.
+
+### Weekly Friday Reminder
+
+Client-only, scheduled via `flutter_local_notifications.zonedSchedule` with `matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime` for DST-aware weekly recurrence. The plugin auto-recurs forever; no backend timer, no `users.timezone` column, no per-device dedup logic.
+
+- **Service:** `app/lib/services/friday_reminder_service.dart`
+- **Wiring:** scheduled on `AuthAuthenticated` from `AuthNotifier._startLifecycle`; cancelled on sign-out / delete-account from `_stopLifecycle`; rescheduled on `AppLifecycleState.resumed` via `AppLifecycleService.onResumed` callback (TZ-change recovery for travelers)
+- **State machine:** the cache check (cached IANA + plugin's `pendingNotificationRequests()`) self-gates so the resume hook is a no-op when nothing changed. Reasons emitted in telemetry: `cold_start` / `tz_changed` / `os_purged`
+- **Channel:** dedicated `cliquepix_reminders` Android channel (default importance), separated from `cliquepix_default` (high importance) so users can mute reminders without muting photo/video pushes
+- **Schedule mode:** `inexactAllowWhileIdle` — does not require `SCHEDULE_EXACT_ALARM` (sidesteps OEM throttling and Play Store policy review)
+- **Timezone:** `flutter_timezone: ^4.0.0` reads the device IANA name; `tz.setLocalLocation` is called in `main.dart` so subsequent `tz.local` references are correct. Without this, `tz.local` defaults to UTC and the schedule fires at the wrong wall-clock time
+- **Tap routing:** `friday_reminder` branch in `PushNotificationService._navigateFromNotification` → `router.go('/events')` (Home dashboard)
+- **Multi-device:** N devices = N simultaneous fires. Accepted (Duolingo/Strava behavior). Server-side dedup would force the architecture into FCM-with-per-device-tokens-and-per-user-timezone
+- **No new manifest permissions** — `inexactAllowWhileIdle` doesn't need exact-alarm perms; `RECEIVE_BOOT_COMPLETED` and `POST_NOTIFICATIONS` already declared
 
 ### Push Notification Pipeline
 
@@ -1066,6 +1083,11 @@ Track these custom telemetry events:
   - L5: `welcome_back_shown`, `welcome_back_continue`, `welcome_back_switch_account`, `cold_start_relogin_required`
 - `dm_thread_created`, `dm_message_sent`, `dm_message_send_failed`
 - `dm_push_sent`, `dm_thread_marked_read_only`
+- Weekly Friday reminder telemetry:
+  - `friday_reminder_scheduled` (with `iana`, `next_fire_at`, `reason` ∈ `'cold_start' | 'tz_changed' | 'os_purged'`)
+  - `friday_reminder_skipped_tz_unchanged` (resume hook no-op)
+  - `friday_reminder_tz_lookup_failed` (`flutter_timezone` returned empty/threw — fell back to UTC)
+  - `friday_reminder_tapped` (user tapped the notification → routes to `/events`)
 
 ## Logging Rules
 

@@ -143,7 +143,8 @@ Leave it out. A missing feature can be added later. A cluttered v1 cannot be un-
 - **Image compression:** flutter_image_compress
 - **Secure token storage:** flutter_secure_storage
 - **Non-sensitive flags:** shared_preferences
-- **Push notifications:** firebase_messaging (FCM transport only)
+- **Push notifications:** firebase_messaging (FCM transport only); `flutter_local_notifications` is also used for foreground heads-up display AND for the **weekly Friday 5 PM local reminder** (the only purely client-scheduled notification in v1 — see Notification Architecture below)
+- **Device timezone:** flutter_timezone (^4.0.0) — reads the IANA name in `main.dart` so `tz.setLocalLocation` is correct for DST-aware `zonedSchedule` recurrence. Required by the Friday reminder; do not remove without replacing the IANA-detection path
 - **Image caching:** cached_network_image
 - **Image editor:** pro_image_editor (^5.1.4 — crop, draw, stickers, filters, text). **Callback rule:** v5.x calls `onCloseEditor` after `onImageEditingComplete` completes. Only pop in `onCloseEditor`, never in `onImageEditingComplete`, or you get a double-pop. **Photos only** — videos skip the editor in v1.
 - **Video player:** `video_player` (official) + `chewie` (UI controls). HLS via AVPlayer (iOS) and ExoPlayer (Android). Versions pinned during implementation.
@@ -984,8 +985,11 @@ FCM (Firebase Cloud Messaging) for push delivery to both Android and iOS. FCM is
 | Event expiring in 24h | `event_expiring` | — | All event clique members | `{ event_id }` |
 | Event expired | `event_expired` | — | All event clique members | `{ event_id }` |
 | Event deleted by organizer | `event_deleted` | — | All clique members except deleter | `{ event_id, event_name }` |
+| **Weekly Friday 5 PM reminder** (client-scheduled) | `friday_reminder` (local) | — | **Self only** (local notification — no FCM, no Web PubSub) | `{ type: 'friday_reminder' }` |
 
 **No notifications sent** for member removals, voluntary departures, or video upload initiation (the feed placeholder card is enough signal to the uploader; other members are notified when the video is ready to play, not when it starts transcoding).
+
+**Client-scheduled local notifications via `flutter_local_notifications.zonedSchedule` are permitted ONLY for displaying static recurring reminders, never for executing code.** The Friday 5 PM reminder is the sole such notification in v1. The previous Layer-2 token-refresh `zonedSchedule` was deleted because that primitive does not run code at fire time — it only displays. For *displaying* a static nudge, it is the correct primitive. See `app/lib/services/friday_reminder_service.dart` and `docs/NOTIFICATION_SYSTEM.md` "Weekly Friday Reminder" subsection.
 
 **Video processing-state propagation has two channels with split recipient lists:**
 - **Web PubSub** (foreground, app running and connected): backend pushes `video_ready` to ALL clique members including the uploader. The uploader needs this signal so their instant-preview card upgrades from "processing + Tap to preview" to the standard active state with poster + play icon. Without it, the uploader keeps seeing the processing card until the 30-second feed poll fires.
@@ -1013,9 +1017,9 @@ See `pushVideoReady` in `backend/src/functions/videos.ts:284-348` and `docs/VIDE
 ### Notification Channel
 
 Created programmatically in `main.dart` at startup:
-- Channel ID: `cliquepix_default` (referenced in AndroidManifest)
-- Importance: HIGH (heads-up banners)
-- Android 13+ permission requested via `requestNotificationsPermission()`
+- `cliquepix_default` — HIGH importance heads-up banners. All FCM-driven pushes (photos, videos, DMs, member joins, event lifecycle) flow through this channel. Referenced in AndroidManifest.
+- `cliquepix_reminders` — DEFAULT importance. Only the weekly Friday reminder uses this channel. Separated so users can mute reminders via OS Settings without muting photo/video pushes.
+- Android 13+ permission requested once via `requestNotificationsPermission()` covers both channels.
 
 ### Token Management
 

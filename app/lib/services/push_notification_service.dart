@@ -128,6 +128,20 @@ class PushNotificationService {
         return;
       }
 
+      // Weekly Friday reminder: drop the user on the Home dashboard so the
+      // contextual UI (clique creation prompts vs Create Event CTA) guides
+      // them. /events/create is rejected because it requires a clique and
+      // would be jarring for users with none.
+      if (type == 'friday_reminder') {
+        try {
+          _ref.read(telemetryServiceProvider).record('friday_reminder_tapped');
+        } catch (_) {
+          // telemetry is best-effort
+        }
+        router.go('/events');
+        return;
+      }
+
       if (type == 'dm_message' && threadId != null && eventId != null) {
         router.push('/events/$eventId/dm/$threadId');
       } else if (eventId != null) {

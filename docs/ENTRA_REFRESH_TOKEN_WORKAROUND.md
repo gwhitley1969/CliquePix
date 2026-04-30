@@ -73,6 +73,8 @@ The codebase previously contained all five service classes (`AlarmRefreshService
 
 On top of that, the original Layer 2 design was architecturally flawed: `flutter_local_notifications.zonedSchedule` with `exactAllowWhileIdle` **only schedules a notification to display** at a time — it does not execute code. `onDidReceiveNotificationResponse` fires only on user tap. A silent `Importance.min` notification the user never saw was never tapped, so no code ever ran. The primitive was the wrong tool.
 
+> **Note for future maintainers:** `zonedSchedule` IS still used in v1 — but for the legitimate use case it was designed for: *displaying* a static recurring reminder. The weekly Friday 5 PM nudge (`app/lib/services/friday_reminder_service.dart`, shipped 2026-04-30) uses it correctly with `inexactAllowWhileIdle` and `dayOfWeekAndTime` recurrence. The rule from CLAUDE.md's Notification Architecture section: *"Client-scheduled local notifications via `zonedSchedule` are permitted ONLY for displaying static recurring reminders, never for executing code."* Don't conflate the two when reading this section's deletion rationale.
+
 The current architecture deletes the notification-based Layer 2 entirely and replaces it with a server-triggered silent push.
 
 ---

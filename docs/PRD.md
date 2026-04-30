@@ -206,10 +206,12 @@ Users can upload a headshot that replaces their initials everywhere in the app. 
   - Event expiring in 24 hours
   - Event expired
   - Event deleted by organizer
+  - **Weekly Friday reminder** — every Friday at 5:00 PM in the user's local timezone, a gentle nudge: *"Evening or weekend plans? Don't forget to create an Event and assign a Clique!"* Tap → Home dashboard. Mute via OS Settings (separate "Reminders" channel)
 - Foreground: heads-up banner slides down from top of screen
 - Background/terminated: standard system notification; tap navigates to relevant screen
 - In-app notification list with read/unread state, type-specific icons
 - No notifications sent for member removals or departures
+- Friday reminder is **client-scheduled (local), not server-pushed** — fires reliably without backend involvement, automatically DST-correct in the user's local timezone, automatically rescheduled if the user travels to a new timezone
 
 ---
 

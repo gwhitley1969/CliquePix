@@ -1,6 +1,43 @@
 # DEPLOYMENT_STATUS.md — Clique Pix v1
 
-Last updated: 2026-04-29 (APIM Product-scope rate-limit + quota removed from "starter" — fifth and (finally) actual root cause of the recurring upload 429; client silent-retry safety net added)
+Last updated: 2026-04-30 (Weekly Friday 5 PM local reminder shipped — client-only, no backend changes)
+
+## Weekly Friday 5 PM local reminder (2026-04-30)
+
+**Status:** ✅ Code complete, all tests green, release APK built (62.7 MB). On-device verification pending.
+
+**What's live:** every signed-in user gets a recurring weekly local notification at Friday 5:00 PM in their device's local timezone — *"Evening or weekend plans? Don't forget to create an Event and assign a Clique!"* Tap routes to the Home dashboard. Mute via OS Settings → Apps → Clique Pix → Notifications → Reminders channel. Multi-device-tolerant (N devices = N simultaneous fires; matches Duolingo/Strava convention).
+
+**Architecture:** client-only via `flutter_local_notifications.zonedSchedule` with `dayOfWeekAndTime` DST-aware weekly recurrence. No backend, no migration, no FCM, no Web PubSub. The plugin auto-recurs forever after the first scheduled fire. TZ-change recovery (SFO→NYC traveler) handled by an `AppLifecycleService.onResumed` callback that re-arms the schedule when the cached IANA differs from the device's current IANA. State-machine reasons (`cold_start` / `tz_changed` / `os_purged`) drive telemetry. Full design: `docs/NOTIFICATION_SYSTEM.md` "Weekly Friday Reminder" subsection.
+
+| Phase | Status | Files |
+|---|---|---|
+| New dep `flutter_timezone: ^4.0.0` (resolved 4.1.1) — required to seed `tz.local` from device IANA so DST-correct schedules fire at the right wall-clock | ✅ | `app/pubspec.yaml`, `app/pubspec.lock` |
+| `FridayReminderService` — schedule/cancel/state-machine + IANA fallback + `pendingNotificationRequests()` cache check | ✅ | `app/lib/services/friday_reminder_service.dart` (new) |
+| `main.dart` — seeds `tz.setLocalLocation` after `tz.initializeTimeZones`; creates second Android channel `cliquepix_reminders` (default importance) alongside `cliquepix_default` | ✅ | `app/lib/main.dart` |
+| `PushNotificationService` — `friday_reminder` tap branch → `router.go('/events')` + `friday_reminder_tapped` telemetry; placed before existing event_id/clique_id fallbacks | ✅ | `app/lib/services/push_notification_service.dart` |
+| `AuthNotifier._startLifecycle` — schedules the reminder fire-and-forget on `AuthAuthenticated`; `_stopLifecycle` cancels on sign-out / delete-account | ✅ | `app/lib/features/auth/presentation/auth_providers.dart` |
+| `AppLifecycleService` — gains `onResumed` callback (auth-independent) so the reminder reschedules on every resume without coupling to the token-refresh path | ✅ | `app/lib/features/auth/domain/app_lifecycle_service.dart` |
+| Unit tests — 16 new tests covering `computeNextFriday5pm` across all weekdays + DST spring-forward, `computeReason` state machine, `flutter_timezone` failure fallback, no-op skip path | ✅ | `app/test/friday_reminder_service_test.dart` (new) |
+| `flutter analyze`: 54 issues (matches pre-change baseline; zero new errors/warnings) | ✅ | — |
+| `flutter test`: 68/68 pass (incl. the 16 new) | ✅ | — |
+| Release APK build (`flutter clean && flutter pub get && flutter build apk --release`) | ✅ | `app/build/app/outputs/flutter-apk/app-release.apk` (62.7 MB, +0.2 MB vs. 2026-04-29 baseline) |
+| Docs: `PRD.md` §5.14, `ARCHITECTURE.md` §10 + §20 telemetry, `NOTIFICATION_SYSTEM.md` trigger matrix + new "Weekly Friday Reminder" subsection, `CLAUDE.md` Frontend deps + Notification Architecture, `BETA_TEST_PLAN.md`, `BETA_OPERATIONS_RUNBOOK.md` Kusto queries | ✅ | as listed |
+| On-device verification (Samsung + iPhone — see `BETA_TEST_PLAN.md` §13 / Friday reminder rows) | ⏳ Pending | — |
+
+**Telemetry events** (visible in App Insights `customEvents`): `friday_reminder_scheduled` { iana, next_fire_at, reason }, `friday_reminder_skipped_tz_unchanged`, `friday_reminder_tz_lookup_failed`, `friday_reminder_tapped`.
+
+**Caught during implementation (DST bug):** `TZDateTime.add(Duration(days: 7))` adds 168 absolute hours, not 7 calendar days — across DST that silently shifts by ±1 hour. Fixed by switching to calendar-day arithmetic via the `TZDateTime` constructor's overflow-day handling (`tz.TZDateTime(loc, n.year, n.month, n.day + 7, 17)`). Caught by the `DST spring-forward` unit test before any device ever ran the code.
+
+**No backend deploy required.** No DB migration. No APIM policy change. No Azure infra change. No web client change (CLAUDE.md: "no Web Push in v1"). Pure mobile feature.
+
+**Operational note:** if a future developer wonders "can we use `zonedSchedule` for X?" — the rule is in `CLAUDE.md`'s Notification Architecture section: **`zonedSchedule` is permitted ONLY for displaying static recurring reminders, never for executing code.** The previous Layer-2 token-refresh `zonedSchedule` was deleted because that primitive does not run code at fire time. The Friday reminder is the only such notification in v1 and the architectural template for any future reminder type.
+
+---
+
+## Earlier history
+
+(Last updated before reminder: 2026-04-29 — APIM Product-scope rate-limit + quota removed from "starter" — fifth and (finally) actual root cause of the recurring upload 429; client silent-retry safety net added)
 
 ## APIM Product-scope `rate-limit` + `quota` removal — incident #5 (2026-04-29)
 

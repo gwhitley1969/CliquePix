@@ -34,8 +34,11 @@ FCM is a **transport mechanism only** — no Firebase backend services (Auth, Fi
 | Event expiring (24h) | `event_expiring` | All event members | -- | All members | `{ event_id }` |
 | Event deleted | `event_deleted` | All clique members except deleter | -- | All except deleter | `{ event_id }` |
 | **Token refresh (silent / invisible)** | `token_refresh` (silent) | Users inactive 9-11h, max 1/6h per user | -- | -- | `{ type: 'token_refresh', userId }` |
+| **Weekly Friday 5 PM reminder** | `friday_reminder` | -- (local-only via `zonedSchedule`) | -- | -- | `{ type: 'friday_reminder' }` |
 
 The `token_refresh` push is **silent** (no `notification` block, no user-visible UI). It wakes the app in the background so MSAL `acquireTokenSilent` can run before the Entra 12h inactivity cliff. Triggered by `refreshTokenPushTimer` in `backend/src/functions/timers.ts`. See `docs/ENTRA_REFRESH_TOKEN_WORKAROUND.md` for the full Layer 2 design.
+
+The `friday_reminder` is **local-only** — scheduled by the client via `flutter_local_notifications.zonedSchedule` on a `dayOfWeekAndTime` recurrence, with no backend involvement. See "Weekly Friday Reminder" below.
 
 ### Explicit non-triggers
 
@@ -45,6 +48,46 @@ These actions do **not** generate any notifications:
 - Member voluntarily leaves clique (no push, no in-app)
 - Video upload started / processing begins (feed placeholder card is sufficient signal)
 - Event expired (the 24h warning covers this; by expiration, media is deleted)
+
+### Weekly Friday Reminder
+
+The only purely client-scheduled local notification in v1. Drops a gentle nudge every **Friday at 5:00 PM in the user's local timezone** to "create an Event and assign a Clique." Tap → `/events` (the contextual Home dashboard). Mute via OS Settings → App → Notifications → Reminders channel.
+
+**Architecture:**
+- **Service:** `app/lib/services/friday_reminder_service.dart` (`FridayReminderService.scheduleOrReschedule()` / `.cancel()`).
+- **Scheduling primitive:** `flutter_local_notifications.zonedSchedule` with `matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime` for DST-aware weekly recurrence. The plugin auto-recurs forever — the schedule does not need to be re-armed after each fire.
+- **Android schedule mode:** `inexactAllowWhileIdle` — does not require `SCHEDULE_EXACT_ALARM`, sidesteps OEM throttling and Play Store policy review for a use case that doesn't need second-precision.
+- **Notification ID:** `9001` — fixed, non-colliding constant.
+- **Channel:** `cliquepix_reminders` (Android, default importance) — separated from `cliquepix_default` so users can mute reminders without muting photo/video pushes. iOS uses the implicit default channel; `DarwinNotificationDetails` is `presentAlert: true, presentBadge: false, presentSound: false`.
+- **Timezone detection:** `flutter_timezone: ^4.0.0` reads the device IANA name; `tz.setLocalLocation` is called in `main.dart` so subsequent `tz.local` references are correct. Without this, `tz.local` defaults to UTC and the reminder fires at the wrong wall-clock time.
+
+**Lifecycle:**
+- **Schedule:** called from `AuthNotifier._startLifecycle()` after each `AuthAuthenticated` transition (initial schedule). Also called on every `AppLifecycleState.resumed` via `AppLifecycleService.onResumed` callback (so a traveler going SFO→NYC has their schedule re-armed for the new TZ). Idempotent — self-gates via the cache check below.
+- **Cancel:** called from `_stopLifecycle()` so signing out / deleting an account stops the device firing.
+
+**Cache + state machine** (`computeReason` is pure, unit-tested):
+1. Read current IANA name via `FlutterTimezone.getLocalTimezone()`. Fall back to `'UTC'` on error/empty.
+2. Read cached IANA from `SharedPreferences` key `friday_reminder_iana_tz`.
+3. Read pending schedules via `flutterLocalNotificationsPlugin.pendingNotificationRequests()` — authoritative source of truth.
+4. Pick reason: `cold_start` (no cache) / `tz_changed` (cache differs) / `os_purged` (cache matches but pending missing — clear-app-data, OS bug) / no-op when cache matches AND pending exists.
+5. On no-op → emit `friday_reminder_skipped_tz_unchanged` and return. Otherwise → cancel id 9001, `zonedSchedule` for next Friday 17:00 in the resolved IANA, persist cache, emit `friday_reminder_scheduled { iana, next_fire_at, reason }`.
+
+**Telemetry events:**
+
+| Event | When |
+|---|---|
+| `friday_reminder_scheduled` | Each successful (re)schedule, with `iana`, `next_fire_at` (ISO8601), and `reason` |
+| `friday_reminder_skipped_tz_unchanged` | Resume hook fired but cache matched and schedule still pending |
+| `friday_reminder_tz_lookup_failed` | `flutter_timezone` returned empty / threw — fell back to UTC |
+| `friday_reminder_tapped` | User tapped the notification (routes to `/events`) |
+
+**Tap routing:** `PushNotificationService._navigateFromNotification` branches on `data.type == 'friday_reminder'` BEFORE the existing `event_id`/`clique_id` fallbacks. Records `friday_reminder_tapped` and `router.go('/events')`.
+
+**Why client-only and not server-side FCM:** a backend FCM path would need a `users.timezone` column, a Friday cron worker, and per-device dedup — significant infra for a once-per-week, no-state-needed nudge. Local scheduling is DST-correct, multi-device-safe (a user signed in on phone + tablet getting two reminders is acceptable; this is industry norm for app reminders), and zero backend cost.
+
+**Multi-device behavior:** signed in on N devices → N reminders fire simultaneously at Friday 5 PM. Accepted; matches Duolingo/Strava behavior. Server-side dedup would force the architecture into FCM-with-per-device-tokens-and-per-user-timezone.
+
+**No new manifest permissions.** `inexactAllowWhileIdle` does not require `SCHEDULE_EXACT_ALARM`/`USE_EXACT_ALARM`. `RECEIVE_BOOT_COMPLETED` (already declared) lets the plugin re-arm schedules after device reboot. `POST_NOTIFICATIONS` covers display permission on Android 13+.
 
 ### Why video_ready has split recipient lists
 
@@ -521,8 +564,9 @@ The sweep removes notifications whose target is missing OR (for photos / videos)
 | `backend/src/functions/notifications.ts` | In-app notification CRUD endpoints |
 | `backend/src/shared/db/notificationCleanup.ts` | Synchronous + periodic stale-notification cleanup |
 | `app/lib/core/utils/api_error_messages.dart` | Friendly Dio-error mapping for destination screens (covers 404 / 401 / network / 5xx) |
-| `app/lib/services/push_notification_service.dart` | FCM token registration, tap routing |
-| `app/lib/main.dart` | Notification channel setup, foreground message handler |
+| `app/lib/services/push_notification_service.dart` | FCM token registration, tap routing (incl. `friday_reminder` branch) |
+| `app/lib/services/friday_reminder_service.dart` | Weekly Friday 5 PM local reminder — scheduling, IANA detection, cancel, state machine |
+| `app/lib/main.dart` | Notification channel setup (`cliquepix_default` + `cliquepix_reminders`), `tz.setLocalLocation` from device IANA, foreground message handler |
 | `app/lib/features/notifications/presentation/notifications_screen.dart` | In-app notification list UI |
 
 ---

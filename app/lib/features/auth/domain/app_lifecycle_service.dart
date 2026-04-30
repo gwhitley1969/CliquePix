@@ -25,6 +25,7 @@ class AppLifecycleService with WidgetsBindingObserver {
   final Future<bool> Function() _refreshCallback;
   final Future<void> Function() _reloginCallback;
   final Future<void> Function()? _onRefreshSuccess;
+  final Future<void> Function()? _onResumed;
   final AuthLayerTelemetry? _telemetry;
 
   bool _isRefreshing = false;
@@ -34,11 +35,13 @@ class AppLifecycleService with WidgetsBindingObserver {
     required Future<bool> Function() refreshCallback,
     required Future<void> Function() reloginCallback,
     Future<void> Function()? onRefreshSuccess,
+    Future<void> Function()? onResumed,
     AuthLayerTelemetry? telemetry,
   })  : _tokenStorage = tokenStorage,
         _refreshCallback = refreshCallback,
         _reloginCallback = reloginCallback,
         _onRefreshSuccess = onRefreshSuccess,
+        _onResumed = onResumed,
         _telemetry = telemetry;
 
   void start() {
@@ -53,6 +56,16 @@ class AppLifecycleService with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      // Auth-independent resume hook (e.g. FridayReminderService TZ-change
+      // recovery). Runs concurrently with the token-refresh path; failures
+      // are swallowed by the callback's own try/catch so they cannot break
+      // auth recovery.
+      final cb = _onResumed;
+      if (cb != null) {
+        cb().catchError((Object e) {
+          debugPrint('[AppLifecycleService] onResumed callback failed: $e');
+        });
+      }
       _onAppResumed();
     }
   }

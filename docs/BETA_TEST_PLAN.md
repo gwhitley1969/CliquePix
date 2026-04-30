@@ -162,6 +162,27 @@ This is a manual smoke test checklist to run before each beta release. Every ite
 - [ ] **Clear all** — "Clear All" button with confirmation deletes all
 - [ ] **Tap navigation** — tapping a notification navigates to the correct event/clique
 
+### 7.1 Weekly Friday Reminder (added 2026-04-30)
+
+Client-only, scheduled via `flutter_local_notifications.zonedSchedule`. No FCM, no backend involvement. See `docs/NOTIFICATION_SYSTEM.md` "Weekly Friday Reminder."
+
+- [ ] **Channel exists** — Settings → Apps → Clique Pix → Notifications shows "Reminders" channel alongside "Clique Pix"
+- [ ] **Channel description** — tapping the "Reminders" channel shows description *"Weekly Friday-evening nudge to create an Event"*
+- [ ] **Initial schedule on sign-in (Android)** — sign in fresh; App Insights shows `friday_reminder_scheduled` with `reason: 'cold_start'`, the device's IANA TZ, and a `next_fire_at` matching next Friday 17:00 in that TZ
+- [ ] **Initial schedule on sign-in (iOS)** — same, on iPhone
+- [ ] **Pending registration check (Android)** — `adb shell dumpsys notification | grep cliquepix_reminders` shows ID 9001 registered (or temporarily add a debug `pendingNotificationRequests()` print)
+- [ ] **Friday 5 PM fire (Android — manual clock)** — disable auto-time, set device clock to Friday 16:59:50 local, wait. Notification displays with title *"Evening or weekend plans?"* + body *"Don't forget to create an Event and assign a Clique!"* within 15 minutes (`inexactAllowWhileIdle` window)
+- [ ] **Tap routing** — tap the notification → app lands on `/events` (Home dashboard). App Insights shows `friday_reminder_tapped`
+- [ ] **Mute via OS** — turn off the "Reminders" channel in OS Settings; manually fire again → notification suppressed; "Clique Pix" channel still delivers a regular FCM photo notification (proves channel separation)
+- [ ] **Sign out cancels** — sign out, roll device clock to next Friday 17:00 → no notification fires. App Insights shows no new `friday_reminder_scheduled` for this device
+- [ ] **Re-sign-in re-schedules** — sign back in → `friday_reminder_scheduled { reason: 'cold_start' }` (cache cleared on sign-out, treated as fresh)
+- [ ] **TZ change recovery (Android)** — change device timezone (Settings → Date & Time → Time zone → e.g. America/Los_Angeles → America/New_York). Background app, resume. App Insights shows `friday_reminder_scheduled { reason: 'tz_changed', iana: 'America/New_York' }` and `next_fire_at` reflects the new TZ
+- [ ] **No-op on resume when nothing changed** — bring app to background, resume immediately. App Insights shows `friday_reminder_skipped_tz_unchanged`, NOT a re-schedule
+- [ ] **iOS UNUserNotificationCenter** — iOS Settings → Notifications → Clique Pix shows the app listed and notifications enabled. (iOS does not expose channels — "Reminders" is Android-only naming)
+- [ ] **Multi-device** — sign in on phone + tablet, both at same TZ. Friday 5 PM fires on BOTH (accepted, documented behavior)
+- [ ] **App reinstall** — uninstall app, reinstall, sign in → fresh `cold_start` schedule fires; previous schedule was wiped with the app
+- [ ] **iOS time-jump caveat** — note that manual clock changes on iOS do NOT always cleanly re-evaluate `UNCalendarNotificationTrigger` schedules. If iOS manual-fire test fails, do NOT assume implementation is broken — wait for an actual Friday or test on Android
+
 ## 8. Auto-Deletion / Expiration
 
 - [ ] **24h warning** — event created with 24h duration → "Event Expiring Soon" push arrives ~24h before expiry
