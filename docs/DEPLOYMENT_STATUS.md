@@ -1,6 +1,42 @@
 # DEPLOYMENT_STATUS.md — Clique Pix v1
 
-Last updated: 2026-04-30 (Real-time event fan-out shipped — Web PubSub `new_event` + FCM fallback + always-on connection lifecycle)
+Last updated: 2026-05-01 (BGTask SIGABRT iOS post-auth crash fixed — Info.plist `BGTaskSchedulerPermittedIdentifiers` removed)
+
+## BGTask SIGABRT iOS post-auth crash — fixed (2026-05-01)
+
+**Status:** ✅ Root cause identified via `flutter run --debug` SIGABRT capture on a tethered iPhone (iOS 26.4.1). ✅ Fix applied in `app/ios/Runner/Info.plist`. ✅ Verified on device — sign-in flow now completes cleanly, app stays foregrounded post-Safari. **Pending:** APK regression check, commit, docs propagation (this entry).
+
+**User-visible symptom (now resolved):** every brand-new iOS user, AND any returning user who signed out + force-killed + relaunched + signed in again, saw the app "vanish" the moment Safari closed after MSAL authentication. Tapping the icon a second time landed them on Events (cached tokens already saved), so the bug was easy to work around but absolutely not shippable through App Store review (Guideline 2.1).
+
+**Root cause:** `app/ios/Runner/Info.plist` declared
+
+```xml
+<key>BGTaskSchedulerPermittedIdentifiers</key>
+<array>
+    <string>com.cliquepix.tokenRefresh</string>
+</array>
+```
+
+iOS 13+ enforces a strict contract on this key: every listed identifier MUST have a corresponding `BGTaskScheduler.shared.register(forTaskWithIdentifier:using:launchHandler:)` call inside `application(_:didFinishLaunchingWithOptions:)` (or earlier). Clique Pix's `AppDelegate.swift` never made that call — `com.cliquepix.tokenRefresh` is consumed only by Android WorkManager (`app/lib/features/auth/domain/background_token_service.dart:18`). The instant iOS checked scheduling state for that identifier (typically when the `FlutterViewController` re-attached to the `UIWindow` after `SFSafariViewController` dismissed), iOS raised `NSInternalInconsistencyException: 'No launch handler registered for task with identifier com.cliquepix.tokenRefresh'` and the app SIGABRT'd. Release builds hide the exception message — to the user the app simply vanished.
+
+**Why it took two debug rounds to catch:** the original `flutter run --release` build silently terminates on SIGABRT — no crash text, no stack — so prior hypothesis-driven fixes (UIAlertController-during-VC-dismiss, FCM permission post-Safari, post-frame-callback deferral, Canopy content-filter VPN) all looked equally plausible. Switching to `--debug` on a tethered device captured the actual `*** Terminating app due to uncaught exception 'NSInternalInconsistencyException'` line, which named the exact failing identifier.
+
+| Phase | Status | Files |
+|---|---|---|
+| iOS Info.plist: remove `BGTaskSchedulerPermittedIdentifiers` array (replaced with explanatory comment so a future contributor doesn't re-add it) | ✅ | `app/ios/Runner/Info.plist` |
+| Hygiene fix retained: post-frame deferral of FCM permission init in `_CliquePixState.build()` and of `_connectRealtime()` + Friday-reminder schedule in `AuthNotifier._startLifecycle()`. NOT the bug, but correct Flutter idiom — leaves the post-auth UI tick uncluttered. | ✅ | `app/lib/app/app.dart`, `app/lib/features/auth/presentation/auth_providers.dart` |
+| `flutter analyze`: 54 issues (matches baseline; zero new errors/warnings introduced) | ✅ | — |
+| `flutter test`: 68/68 pass | ✅ | — |
+| Release build deployed to iPhone, sign-in repro path executed (Sign Out → close → relaunch → tap Get Started → MSAL Safari → return) — app stays open | ✅ Verified 2026-05-01 | — |
+| Docs: `ARCHITECTURE.md` §5 iOS Considerations, `ENTRA_REFRESH_TOKEN_WORKAROUND.md` Known unknowns, `CLAUDE.md` iOS Info.plist + Layer 4 sections, this entry | ✅ | as listed |
+| APK release build regression test (Android — confirms WorkManager Layer 4 still works for the same `com.cliquepix.tokenRefresh` identifier on its native platform) | ⏳ Pending | — |
+| Commit + push | ⏳ Pending | — |
+
+**Operational note for future maintainers:** the iOS `BGTaskScheduler` API is *not* used by Clique Pix v1. Layer 4 of the 5-layer Entra refresh-token defense is Android-only (WorkManager). On iOS, equivalent coverage comes from Layer 2 (silent FCM push) + Layer 3 (foreground-resume refresh) + Layer 5 (Welcome Back). If you ever genuinely need a native iOS background-refresh task, register the launch handler in `AppDelegate.swift` BEFORE adding the identifier to `Info.plist`. The plist entry without a registered handler is an immediate-SIGABRT trap.
+
+**Out-of-band finding:** `Firebase.initializeApp()` at `main.dart:135` logs `[core/not-initialized]` on iOS and `pushNotificationServiceProvider.initialize()` later logs `[core/no-app] No Firebase App '[DEFAULT]' has been created`. Both are caught and non-fatal (the app continues). firebase_core 4.x typically wants `Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform)` from a `lib/firebase_options.dart` generated by `flutterfire configure`. That file does not exist in the tree; FCM is effectively disabled on iOS as a result. Fix is one-line in `main.dart` plus a `flutterfire configure` run, but it is **separate from this incident** — push notifications were already working on Android and were not the post-auth crash trigger. Tracked as a follow-up.
+
+---
 
 ## Real-time event fan-out — `new_event` (2026-04-30)
 

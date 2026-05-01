@@ -660,6 +660,8 @@ Microsoft's documented mitigation for this exact scenario (Azure Communication S
 
 `UIBackgroundModes` must contain `remote-notification` for silent pushes to wake the app. Already set.
 
+**Do NOT declare `BGTaskSchedulerPermittedIdentifiers` in `app/ios/Runner/Info.plist`.** Layer 4 is Android-only — there is no iOS-native `BGTaskScheduler` path in this codebase. iOS 13+ requires every identifier in that array to have a corresponding `BGTaskScheduler.shared.register(forTaskWithIdentifier:using:launchHandler:)` call in `AppDelegate.swift`'s `application(_:didFinishLaunchingWithOptions:)`. A declaration without a registered handler causes `NSInternalInconsistencyException: 'No launch handler registered for task with identifier <ID>'` and SIGABRT — typically the moment the FlutterViewController re-attaches after `SFSafariViewController` dismisses, producing the symptom "app vanishes after MSAL/Safari sign-in." A `com.cliquepix.tokenRefresh` declaration was removed 2026-05-01; the constant of that name in `app/lib/features/auth/domain/background_token_service.dart:18` is the WorkManager (Android) task identifier and unrelated to iOS BGTaskScheduler.
+
 ### Token Storage
 
 - Auth tokens: `flutter_secure_storage` only — never `shared_preferences`

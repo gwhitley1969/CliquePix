@@ -83,11 +83,16 @@
 	<!-- Configure in Xcode: Signing & Capabilities → Associated Domains -->
 	<!-- Add: applinks:clique-pix.com -->
 
-	<!-- Background App Refresh for token refresh (Layer 2/4 on iOS) -->
-	<key>BGTaskSchedulerPermittedIdentifiers</key>
-	<array>
-		<string>com.cliquepix.tokenRefresh</string>
-	</array>
+	<!-- BGTaskSchedulerPermittedIdentifiers REMOVED 2026-05-01.
+	     The 5-layer Entra refresh-token defense uses Android WorkManager
+	     (Layer 4) and silent FCM push (Layer 2) — NO iOS BGTaskScheduler
+	     code path exists. Declaring com.cliquepix.tokenRefresh here without
+	     calling BGTaskScheduler.shared.register(forTaskWithIdentifier:...)
+	     in AppDelegate caused iOS to throw NSInternalInconsistencyException
+	     and SIGABRT immediately after the FlutterViewController re-attached
+	     post-Safari (MSAL auth callback). Symptom: app appeared to "vanish"
+	     after sign-in. -->
+
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>

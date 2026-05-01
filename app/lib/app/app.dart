@@ -29,10 +29,20 @@ class _CliquePixState extends ConsumerState<CliquePix> {
     final router = ref.watch(routerProvider);
     final authState = ref.watch(authStateProvider);
 
-    // Register FCM token once authenticated
+    // Defer push init by one frame so the FCM permission UIAlertController is
+    // presented after Safari (SFSafariViewController) has fully dismissed and
+    // Flutter's view controller has re-attached to the UIWindow. Calling
+    // initialize() synchronously inside build() right after Safari closes was
+    // observed to terminate the app on iOS first-install.
     if (authState is AuthAuthenticated && !_pushInitialized) {
       _pushInitialized = true;
-      ref.read(pushNotificationServiceProvider).initialize();
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        try {
+          await ref.read(pushNotificationServiceProvider).initialize();
+        } catch (e) {
+          debugPrint('[CliquePix] Push init failed (non-fatal): $e');
+        }
+      });
     }
 
     return MaterialApp.router(

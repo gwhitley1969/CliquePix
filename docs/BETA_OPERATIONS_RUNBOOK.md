@@ -221,6 +221,18 @@ customEvents
    ```
 3. For Android users: confirm battery-optimization exemption was granted (`battery_exempt_granted` event for that user). If not, ask the user to grant it in system Settings → Apps → Clique Pix → Battery → Unrestricted.
 
+### iOS user reports "app vanishes the second I sign in"
+
+**Symptoms:** "I tap Get Started, Safari opens, I sign in, Safari closes — and the app is just gone. I tap the icon again and I'm signed in fine, but it crashed once on the way in."
+
+**Resolution:** confirmed and fixed 2026-05-01. Root cause was `app/ios/Runner/Info.plist` declaring `BGTaskSchedulerPermittedIdentifiers = [com.cliquepix.tokenRefresh]` without a corresponding `BGTaskScheduler.shared.register(forTaskWithIdentifier:using:launchHandler:)` call in `AppDelegate.swift`. iOS 13+ raises `NSInternalInconsistencyException` and SIGABRTs the app the moment it inspects scheduling state for the unregistered identifier — typically when the FlutterViewController re-attaches after `SFSafariViewController` dismisses. Fix shipped: removed the `BGTaskSchedulerPermittedIdentifiers` array entirely (Layer 4 of the Entra refresh-token defense is Android-only — `com.cliquepix.tokenRefresh` is only used by `Workmanager`). See `DEPLOYMENT_STATUS.md` "BGTask SIGABRT iOS post-auth crash" for the full incident.
+
+**If this symptom recurs in a future build:**
+1. Reproduce on a tethered iPhone with `flutter run --debug` from `app/`. Watch the terminal for `*** Terminating app due to uncaught exception 'NSInternalInconsistencyException'`. Release builds silently SIGABRT — `--debug` is the only way to see the message in real time.
+2. If the message names a `BGTaskScheduler` identifier, verify `app/ios/Runner/Info.plist` does NOT declare `BGTaskSchedulerPermittedIdentifiers`. If a future contributor re-added it, remove or pair it with a registered handler in `AppDelegate.swift`.
+3. If the message names something else, capture the full backtrace via Xcode → Window → Devices and Simulators → select iPhone → View Device Logs → look for the most recent `Runner` crash. Attach to the incident.
+4. iOS 26.x debug builds suffer a launch-watchdog issue when LLDB cannot find the dyld shared cache (warning `libobjc.A.dylib is being read from process memory`). If the app SIGKILLs at startup with `flutter run --debug` but launches fine with `--release`, this is the cause — pivot to release-build + Xcode device logs for diagnostics. The watchdog kill is not a code bug.
+
 ### User reports stuck "Get Started" spinner on cold launch
 
 **Symptoms:** "When I open the app, the Get Started button just spins forever. Force-closing and reopening doesn't help."

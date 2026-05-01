@@ -166,6 +166,7 @@ If the app is cold-started after > 12h, `AuthNotifier.checkAuthStatus` → `sile
 3. **Force-killed iOS apps do not receive silent pushes.** iOS policy. Layer 5 is the only recourse.
 4. **Android SCHEDULE_EXACT_ALARM (API 31+).** We no longer use `exactAllowWhileIdle` scheduled notifications, so this permission is not on the critical path for Layer 2 anymore. The manifest still declares it for future use; revisit if anything else needs exact alarms.
 5. **Disabled Background App Refresh (iOS).** Background handler never runs; Layer 5 handles the re-login.
+6. **No iOS-native `BGTaskScheduler` Layer 4.** Layer 4 is Android-only (WorkManager). On iOS the equivalent windows are covered by Layers 2/3/5. **Do not** add `BGTaskSchedulerPermittedIdentifiers` to `app/ios/Runner/Info.plist` unless you also register a launch handler via `BGTaskScheduler.shared.register(forTaskWithIdentifier:using:launchHandler:)` in `AppDelegate.swift`. iOS raises `NSInternalInconsistencyException: 'No launch handler registered for task with identifier <ID>'` and SIGABRTs the app the moment it checks scheduling state for an unregistered identifier — typically when the FlutterViewController re-attaches after `SFSafariViewController` dismisses, producing the symptom "app vanishes after MSAL/Safari sign-in." Removed 2026-05-01 — see `DEPLOYMENT_STATUS.md` "BGTask SIGABRT iOS post-auth crash."
 
 ---
 

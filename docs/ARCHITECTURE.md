@@ -228,7 +228,7 @@ Full implementation details, Kusto queries, and per-layer event names are in `EN
 
 ### iOS Considerations
 
-- `BGAppRefreshTask` via BGTaskScheduler — request 6-hour intervals, but iOS controls actual timing
+- **No `BGTaskScheduler` is used on iOS.** Layer 4 (WorkManager) is Android-only; on iOS, the layer is intentionally absent — Layer 2 silent push + Layer 3 foreground refresh + Layer 5 Welcome Back cover the same ground. Do NOT add `BGTaskSchedulerPermittedIdentifiers` to `app/ios/Runner/Info.plist` unless you also call `BGTaskScheduler.shared.register(forTaskWithIdentifier:using:launchHandler:)` in `AppDelegate.swift`'s `application(_:didFinishLaunchingWithOptions:)`. iOS 13+ raises `NSInternalInconsistencyException` (SIGABRT) the moment it checks scheduling state for an unregistered identifier — typically when the FlutterViewController re-attaches after `SFSafariViewController` dismisses, producing the symptom "app vanishes after MSAL/Safari sign-in." See incident `BGTask SIGABRT 2026-05-01` in `DEPLOYMENT_STATUS.md`.
 - Foreground refresh (Layer 3) is the most reliable mechanism on iOS
 - Users who disable Background App Refresh will need to re-login after 12 hours — Layer 5 handles this gracefully
 

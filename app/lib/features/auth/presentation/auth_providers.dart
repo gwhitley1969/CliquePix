@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/user_model.dart';
 import '../../../services/api_client.dart';
@@ -273,16 +273,26 @@ class AuthNotifier extends StateNotifier<AuthState> {
       onResumed: _onAppResumedTasks,
     );
     _lifecycle!.start();
-    // Initial schedule for users who never resume (cold-start sign-in,
-    // immediate use). Idempotent — the resume hook reuses the same path.
-    unawaited(
-      FridayReminderService.scheduleOrReschedule(
-          telemetry: _telemetryRecord),
-    );
-    // Initial realtime connect — gives the user instant fan-out for
-    // `new_event`, `video_ready`, and DM messages regardless of which
-    // screen they're on.
-    unawaited(_connectRealtime());
+
+    // Defer the unawaited side effects by one frame so they don't pile onto
+    // the same UI tick as the auth-state rebuild + GoRouter redirect +
+    // HomeScreen first build. On iOS first sign-in this matters because the
+    // FlutterViewController is also re-attaching from SFSafariViewController.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Initial schedule for users who never resume (cold-start sign-in,
+      // immediate use). Idempotent — the resume hook reuses the same path.
+      unawaited(
+        FridayReminderService.scheduleOrReschedule(
+                telemetry: _telemetryRecord)
+            .catchError((Object e) {
+          debugPrint('[AUTH] Friday reminder schedule failed: $e');
+        }),
+      );
+      // Initial realtime connect — gives the user instant fan-out for
+      // `new_event`, `video_ready`, and DM messages regardless of which
+      // screen they're on.
+      unawaited(_connectRealtime());
+    });
   }
 
   /// Auth-independent tasks that must run on every `AppLifecycleState.resumed`.
