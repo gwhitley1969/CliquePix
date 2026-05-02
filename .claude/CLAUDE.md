@@ -361,8 +361,10 @@ POST   /api/internal/video-processing-complete     # Container Apps Job callback
 
 POST   /api/photos/{photoId}/reactions
 DELETE /api/photos/{photoId}/reactions/{reactionId}
+GET    /api/photos/{photoId}/reactions      # who-reacted list (Facebook-style sheet)
 POST   /api/videos/{videoId}/reactions
 DELETE /api/videos/{videoId}/reactions/{reactionId}
+GET    /api/videos/{videoId}/reactions      # who-reacted list (Facebook-style sheet)
 
 GET    /api/notifications
 PATCH  /api/notifications/{notificationId}/read

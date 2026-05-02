@@ -80,6 +80,10 @@ export interface PhotoWithUrls extends Photo {
   thumbnail_url: string | null;
   reaction_counts: Record<string, number>;
   user_reactions: string[];
+  // Up to 3 distinct most-recent reactor avatars (de-duped by user_id) for
+  // the "who reacted?" strip rendered above the reaction pill row in the
+  // mobile + web clients. Empty array when there are no reactions.
+  top_reactors: import('./reaction').ReactorAvatar[];
   // Uploader denormalization. null when the uploader has been deleted
   // (photos.uploaded_by_user_id FK is ON DELETE SET NULL) — callers
   // must handle nulls rather than undefineds.
@@ -103,6 +107,9 @@ export interface VideoWithUrls extends Photo {
   hls_manifest?: string;
   reaction_counts: Record<string, number>;
   user_reactions: string[];
+  // Up to 3 distinct most-recent reactor avatars (de-duped by user_id). See
+  // PhotoWithUrls.top_reactors above — same semantics for video cards.
+  top_reactors: import('./reaction').ReactorAvatar[];
   // Uploader denormalization. null when the uploader has been deleted
   // (photos.uploaded_by_user_id FK is ON DELETE SET NULL).
   uploaded_by_name: string | null;

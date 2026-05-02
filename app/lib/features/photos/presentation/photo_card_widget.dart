@@ -9,6 +9,8 @@ import '../../../models/photo_model.dart';
 import '../../../widgets/avatar_widget.dart';
 import '../../../widgets/loading_shimmer.dart';
 import '../../../widgets/media_owner_menu.dart';
+import '../../../widgets/reactor_list_sheet.dart';
+import '../../../widgets/reactor_strip.dart';
 import '../../auth/domain/auth_state.dart';
 import '../../auth/presentation/auth_providers.dart';
 import 'photos_providers.dart';
@@ -163,6 +165,21 @@ class PhotoCardWidget extends ConsumerWidget {
                     ),
                 ],
               ),
+              // "Who reacted?" strip — only visible when total > 0; tap
+              // opens the reactor sheet on the All tab.
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+                child: ReactorStrip(
+                  totalReactions: photo.totalReactions,
+                  topReactors: photo.topReactors,
+                  onTap: () => ReactorListSheet.show(
+                    context,
+                    fetchReactors: () => ref
+                        .read(photosRepositoryProvider)
+                        .listReactors(photo.id),
+                  ),
+                ),
+              ),
               // Reactions
               Padding(
                 padding: const EdgeInsets.all(12),
@@ -175,6 +192,15 @@ class PhotoCardWidget extends ConsumerWidget {
                   onRemove: (reactionId) => ref
                       .read(photosRepositoryProvider)
                       .removeReaction(photo.id, reactionId),
+                  // Long-press a pill with count > 0 → sheet pre-filtered to
+                  // that reaction type.
+                  onShowReactors: (reactionType) => ReactorListSheet.show(
+                    context,
+                    fetchReactors: () => ref
+                        .read(photosRepositoryProvider)
+                        .listReactors(photo.id),
+                    initialFilter: reactionType,
+                  ),
                 ),
               ),
             ],

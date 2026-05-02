@@ -138,6 +138,7 @@ A persistent group of people (e.g., “Girls Night Out” or bachelor party)
 ### 5.8 Reactions
 - Lightweight emoji reactions:
   - ❤️ 😂 🔥 😮
+- **"Who reacted?" affordance** — a compact strip above the reaction pills shows the most-recent reactor avatars (up to 3) plus "N reactions" text. Tap → opens a sheet/dialog listing every reactor with their avatar + name + the reaction they left, filterable by reaction type. Long-press a pill on mobile → opens the sheet pre-filtered to that reaction type. Web users tap the strip and use Radix tabs to filter. Tap-to-toggle on the pills themselves is unchanged.
 
 ---
 

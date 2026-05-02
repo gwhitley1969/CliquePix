@@ -1,5 +1,5 @@
 import { api } from '../client';
-import type { Photo, ReactionRecord, ReactionType } from '../../models';
+import type { Photo, ReactionRecord, ReactionType, ReactorList } from '../../models';
 
 export async function listEventPhotos(eventId: string): Promise<Photo[]> {
   // Backend envelope: { data: { photos: [...], nextCursor: string|null } }
@@ -65,4 +65,15 @@ export async function addPhotoReaction(
 
 export async function removePhotoReaction(photoId: string, reactionId: string): Promise<void> {
   await api.delete(`/api/photos/${photoId}/reactions/${reactionId}`);
+}
+
+/**
+ * GET /api/photos/{id}/reactions — full reactor list for the
+ * "who reacted?" dialog. Refetched on every dialog open via
+ * react-query (`enabled: open`) — no long-lived cache to invalidate
+ * when the user reacts via the pill.
+ */
+export async function listPhotoReactions(photoId: string): Promise<ReactorList> {
+  const res = await api.get<{ data: ReactorList }>(`/api/photos/${photoId}/reactions`);
+  return res.data.data;
 }

@@ -83,6 +83,50 @@ export interface MediaBase {
   // a POST completes (mirroring the mobile app's reaction_bar_widget).
   reactionCounts?: Record<string, number>;
   userReactions?: string[];
+  /**
+   * Up to 3 distinct most-recent reactor avatars (de-duped by user_id).
+   * Drives the avatar stack on the "who reacted?" strip rendered above
+   * the reaction pills. Empty/absent when there are no reactions.
+   */
+  topReactors?: ReactorAvatar[];
+}
+
+/**
+ * Compact avatar reference for the strip's avatar stack. Mirrors the
+ * backend's ReactorAvatar interface (post-camelize).
+ */
+export interface ReactorAvatar {
+  userId: string;
+  displayName: string;
+  avatarUrl?: string | null;
+  avatarThumbUrl?: string | null;
+  avatarUpdatedAt?: string | null;
+  avatarFramePreset?: number;
+}
+
+/**
+ * One reactor row returned by GET /api/photos/:id/reactions and the
+ * video equivalent. The same user appears once per reaction they left
+ * (heart + fire = two entries) — the client groups for the All tab.
+ */
+export interface ReactorEntry {
+  id: string;
+  userId: string;
+  displayName: string;
+  reactionType: ReactionType;
+  createdAt: string;
+  avatarUrl?: string | null;
+  avatarThumbUrl?: string | null;
+  avatarUpdatedAt?: string | null;
+  avatarFramePreset?: number;
+}
+
+export interface ReactorList {
+  mediaId: string;
+  totalReactions: number;
+  /** Per-reaction-type counts. Always includes all 4 keys (zeros for missing). */
+  byType: Partial<Record<ReactionType, number>>;
+  reactors: ReactorEntry[];
 }
 
 export interface Photo extends MediaBase {

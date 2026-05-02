@@ -1,5 +1,6 @@
 import 'dart:io';
 import '../../../models/video_model.dart';
+import '../../../models/reactor_model.dart';
 import '../data/videos_api.dart';
 import '../data/video_block_upload_service.dart';
 
@@ -111,5 +112,12 @@ class VideosRepository {
 
   Future<void> removeReaction(String videoId, String reactionId) async {
     await api.removeReaction(videoId, reactionId);
+  }
+
+  /// Powers the "who reacted?" sheet on video cards. Refetched on every
+  /// sheet open.
+  Future<ReactorList> listReactors(String videoId) async {
+    final data = await api.listReactions(videoId);
+    return ReactorList.fromJson(data);
   }
 }

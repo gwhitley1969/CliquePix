@@ -7,18 +7,22 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { Avatar } from '../../components/Avatar';
 import { ConfirmDestructive } from '../../components/ConfirmDestructive';
 import { ReactionBar } from './ReactionBar';
+import { ReactorStrip } from './ReactorStrip';
+import { ReactorListDialog } from './ReactorListDialog';
 import type { Media, Photo, ReactionType, Video } from '../../models';
 import { formatRelative } from '../../lib/formatDate';
 import { downloadBlob } from '../../lib/downloadBlob';
 import {
   addPhotoReaction,
   deletePhoto,
+  listPhotoReactions,
   removePhotoReaction,
 } from '../../api/endpoints/photos';
 import {
   addVideoReaction,
   deleteVideo,
   getVideoPlayback,
+  listVideoReactions,
   removeVideoReaction,
 } from '../../api/endpoints/videos';
 
@@ -51,6 +55,17 @@ export function MediaCard({
 
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [reactorsOpen, setReactorsOpen] = useState(false);
+
+  const totalReactions = Object.values(item.reactionCounts ?? {}).reduce<number>(
+    (sum, count) => sum + (count ?? 0),
+    0,
+  );
+
+  const fetchReactors = () =>
+    item.mediaType === 'photo'
+      ? listPhotoReactions(item.id)
+      : listVideoReactions(item.id);
 
   const deleteMut = useMutation({
     mutationFn: () =>
@@ -178,25 +193,40 @@ export function MediaCard({
         )}
       </button>
 
-      {/* Footer: reactions + download */}
-      <footer className="flex items-center justify-between px-4 py-3 gap-3">
-        <ReactionBar
-          reactionCounts={item.reactionCounts}
-          userReactions={item.userReactions}
-          onAdd={onReactAdd}
-          onRemove={onReactRemove}
+      {/* Footer: who-reacted strip, reactions + download */}
+      <footer className="flex flex-col gap-1 px-4 py-3">
+        <ReactorStrip
+          totalReactions={totalReactions}
+          topReactors={item.topReactors}
+          onClick={() => setReactorsOpen(true)}
         />
-        <button
-          type="button"
-          onClick={onDownload}
-          disabled={downloading}
-          className="p-2 rounded text-white/60 hover:text-white hover:bg-white/5 disabled:opacity-40 focus:outline-none focus:ring-2 focus:ring-aqua/50"
-          aria-label="Download"
-          title="Download"
-        >
-          <Download size={18} />
-        </button>
+        <div className="flex items-center justify-between gap-3">
+          <ReactionBar
+            reactionCounts={item.reactionCounts}
+            userReactions={item.userReactions}
+            onAdd={onReactAdd}
+            onRemove={onReactRemove}
+          />
+          <button
+            type="button"
+            onClick={onDownload}
+            disabled={downloading}
+            className="p-2 rounded text-white/60 hover:text-white hover:bg-white/5 disabled:opacity-40 focus:outline-none focus:ring-2 focus:ring-aqua/50"
+            aria-label="Download"
+            title="Download"
+          >
+            <Download size={18} />
+          </button>
+        </div>
       </footer>
+
+      <ReactorListDialog
+        open={reactorsOpen}
+        onOpenChange={setReactorsOpen}
+        mediaId={item.id}
+        mediaType={item.mediaType}
+        fetchReactors={fetchReactors}
+      />
 
       <ConfirmDestructive
         open={confirmDelete}

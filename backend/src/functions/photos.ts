@@ -14,6 +14,7 @@ import { canDeleteMedia } from '../shared/utils/permissions';
 import { Photo, PhotoWithUrls } from '../shared/models/photo';
 import { Event } from '../shared/models/event';
 import { enrichUserAvatar } from '../shared/services/avatarEnricher';
+import { fetchTopReactors } from '../shared/db/topReactors';
 import { deleteNotificationsForPhoto } from '../shared/db/notificationCleanup';
 
 /**
@@ -67,7 +68,7 @@ async function enrichPhotoWithUrls(
   photo: PhotoRowWithUploader,
   userId: string,
 ): Promise<PhotoWithUrls> {
-  const [originalUrl, thumbnailUrl, reactionRows, userReactionRows, uploaderAvatar] = await Promise.all([
+  const [originalUrl, thumbnailUrl, reactionRows, userReactionRows, uploaderAvatar, topReactors] = await Promise.all([
     generateViewSas(photo.blob_path),
     photo.thumbnail_blob_path ? generateViewSas(photo.thumbnail_blob_path) : Promise.resolve(null),
     query<{ reaction_type: string; count: number }>(
@@ -87,6 +88,11 @@ async function enrichPhotoWithUrls(
       avatar_updated_at: photo.uploaded_by_avatar_updated_at,
       avatar_frame_preset: photo.uploaded_by_avatar_frame_preset,
     }),
+    // Powers the "who reacted?" strip's avatar stack on the feed card. Cheap
+    // enough at beta scale (1 indexed query + ≤3 SAS signs per media) and
+    // keeps the strip pre-populated without a second round-trip when the
+    // user hasn't tapped to open the sheet yet.
+    fetchTopReactors(photo.id),
   ]);
 
   const reactionCounts: Record<string, number> = {};
@@ -100,6 +106,7 @@ async function enrichPhotoWithUrls(
     thumbnail_url: thumbnailUrl,
     reaction_counts: reactionCounts,
     user_reactions: userReactionRows.map(r => r.reaction_type),
+    top_reactors: topReactors,
     uploaded_by_avatar_url: uploaderAvatar.avatar_url,
     uploaded_by_avatar_thumb_url: uploaderAvatar.avatar_thumb_url,
     uploaded_by_avatar_updated_at: uploaderAvatar.avatar_updated_at,

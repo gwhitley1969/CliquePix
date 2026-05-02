@@ -1,6 +1,8 @@
 // VideoModel mirrors PhotoModel but with video-specific fields.
 // Backed by the same `photos` table on the backend (media_type='video').
 
+import 'reactor_model.dart';
+
 class VideoModel {
   final String id;
   final String eventId;
@@ -28,6 +30,9 @@ class VideoModel {
   final String? processingError;
   final Map<String, int> reactionCounts;
   final List<({String id, String type})> userReactions;
+  /// Up to 3 distinct most-recent reactors. Drives the avatar stack on the
+  /// "who reacted?" strip — same semantics as PhotoModel.topReactors.
+  final List<ReactorAvatar> topReactors;
   final DateTime createdAt;
   final DateTime expiresAt;
 
@@ -53,9 +58,15 @@ class VideoModel {
     this.processingError,
     this.reactionCounts = const {},
     this.userReactions = const [],
+    this.topReactors = const [],
     required this.createdAt,
     required this.expiresAt,
   });
+
+  /// Total reactions across all types — used by the strip's "N reactions"
+  /// label. Matches what the existing pill row sums to.
+  int get totalReactions =>
+      reactionCounts.values.fold<int>(0, (sum, count) => sum + count);
 
   /// Stable cache key for the uploader's avatar.
   String? get uploadedByAvatarCacheKey {
@@ -105,6 +116,11 @@ class VideoModel {
               })
               .toList() ??
           [],
+      topReactors: (json['top_reactors'] as List<dynamic>?)
+              ?.map((e) =>
+                  ReactorAvatar.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          const [],
       createdAt: DateTime.parse(json['created_at'] as String),
       expiresAt: json['expires_at'] != null
           ? DateTime.parse(json['expires_at'] as String)

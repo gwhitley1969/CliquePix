@@ -57,4 +57,12 @@ class PhotosApi {
   Future<void> removeReaction(String photoId, String reactionId) async {
     await dio.delete(ApiEndpoints.reaction(photoId, reactionId));
   }
+
+  /// GET /api/photos/{photoId}/reactions — full reactor list for the
+  /// "who reacted?" sheet. Returns the raw envelope payload; the repo
+  /// layer parses into a [ReactorList].
+  Future<Map<String, dynamic>> listReactions(String photoId) async {
+    final response = await dio.get(ApiEndpoints.photoReactions(photoId));
+    return response.data['data'] as Map<String, dynamic>;
+  }
 }

@@ -80,6 +80,17 @@ This is a manual smoke test checklist to run before each beta release. Every ite
 - [ ] **Batch download label** — photos only → "Download N Photos"; videos only → "Download N Videos"; mixed → "Download N Items"
 - [ ] **Share externally** — share sheet opens, can send via Messages/WhatsApp/etc.
 - [ ] **React** — tap heart/laugh/fire/wow, reaction appears, other device sees it
+- [ ] **Reactor strip hidden when total = 0** — fresh photo with no reactions: above the reaction pill row, NOTHING is rendered (no empty avatar stack, no "0 reactions" text)
+- [ ] **Reactor strip appears on first reaction** — Device B reacts ❤️ on Device A's photo. Within 30 sec (next feed poll), Device A's card shows `[B's avatar] 1 reaction` immediately above the pill row
+- [ ] **Strip text agrees with pill totals** — Device B reacts ❤️ AND 🔥 on the same photo. Strip text reads `2 reactions`. Pills show `❤️ 1 🔥 1` (sum = 2). Total is total reactions, not distinct people — matches Facebook
+- [ ] **Tap strip opens "All" tab** — tap the strip → bottom sheet slides up, "All N" tab pre-selected, list shows every reactor with avatar + name + reaction emoji on the right
+- [ ] **Per-type tabs only show non-empty types** — sheet has tabs `All / ❤️ / 🔥` when only heart and fire have reactions. NO `😂` or `😮` tabs visible
+- [ ] **Tab order is fixed (heart / laugh / fire / wow)** — even when fire was added first, the ❤️ tab appears before the 🔥 tab (matches `AppConstants.reactionTypes`)
+- [ ] **Long-press a pill with count > 0 opens filtered sheet** — long-press the 🔥 pill on any photo with at least one fire reaction → sheet opens already on the 🔥 tab
+- [ ] **Long-press a pill with count = 0 = no-op** — long-press the 😮 pill on a photo with zero wow reactions → nothing happens (no haptic, no sheet)
+- [ ] **Same user with two reactions = two rows on All tab** — Device A reacts ❤️ AND 🔥 on their own photo. Open the sheet → All tab shows TWO rows for Device A (one with ❤️, one with 🔥), newest first
+- [ ] **Sheet refetches on reopen** — open sheet, close, react via the pill, reopen → sheet shows updated counts (no stale data)
+- [ ] **Empty state copy** — manually create a photo, react then unreact (so reaction_counts is empty) — the strip disappears entirely; there is no "no reactions yet" empty UI on the card itself. (Only the All tab inside an open sheet shows the "No one's reacted with this yet." copy when total is 0, but practically that path is unreachable since the strip hides itself.)
 - [ ] **Delete own photo** — uploader deletes, photo disappears from both feeds
 - [ ] **Upload error — friendly message + diagnostic panel** — if the upload fails, the Share Photo screen shows a user-facing message that includes the failed stage (e.g., "Upload failed at 'Getting upload URL...'", "Network timed out at 'Confirming...'") with a **Show details** link. Tapping it expands a `SelectableText` panel with stage / Dio type / HTTP status / response body for copy-paste diagnosis. NOT a raw stack-trace dump. The retry button re-runs the full flow from a fresh SAS.
 - [ ] **Upload 429 cooldown UX (regression — should not normally fire post-2026-04-27)** — if APIM ever returns 429, the error message reads "Too many requests. Please wait Ns and retry." with seconds parsed from `Retry-After`. Both the inline "Tap to Retry" link AND the big "Upload to Event" button become disabled with a live `Wait Ns` countdown that ticks down each second. Re-enables automatically when the window expires. Per DEPLOYMENT_STATUS.md / `apim_policy.xml` this should never fire from APIM; if it does, root-cause via BETA_OPERATIONS_RUNBOOK §2.
@@ -127,6 +138,7 @@ This is a manual smoke test checklist to run before each beta release. Every ite
 - [ ] **Delete video** — player menu → "Delete" → confirmation → video removed from feed
 - [ ] **Delete during processing** — delete a video that's still processing, card disappears cleanly
 - [ ] **React to video** — on a ready video card in the feed, tap each of ❤️ 😂 🔥 😮 below the poster; pill highlights immediately and count increments. Tap again to unlike — count decrements and pill de-highlights. Pull-to-refresh: counts match server state. Bar should NOT appear on processing / failed / local-pending video cards.
+- [ ] **Video reactor strip + sheet** — same flow as photos. Strip hidden until first reaction. Tap → sheet with All + per-type tabs. Long-press a pill → sheet pre-filtered. Strip + bar are gated on `video.isReady`, so processing/failed/local-pending cards never show either.
 - [ ] **Same-session add+remove on a fresh reaction** — like a photo OR video that you haven't reacted to before, then immediately unlike it without refreshing the feed. 30s later (after the feed polls), the reaction must stay removed — regression check for the pre-2026-04-17 bug where the DELETE silently no-op'd and the reaction re-appeared.
 
 ### Error handling
@@ -313,6 +325,9 @@ Run in a fresh browser window per test where possible; for cross-browser coverag
 - [ ] **Video validation** — try a file > 500 MB OR > 5 min → rejected client-side before any network call
 - [ ] **Media card** — each card shows uploader avatar (initials + gradient) + name + relative time + photo + reaction pills + download icon
 - [ ] **Reactions** — tap ❤️ on a photo → counter increments optimistically → persists after page refresh
+- [ ] **Web reactor strip + dialog** — once a card has at least one reaction, a "[avatars] N reactions" strip appears above the pills inside the card footer. Click → Radix dialog opens with `All N` tab pre-selected and tabs for each non-empty reaction type. Each row shows uploader avatar + name + the emoji. Click ❤️ tab → list filters. Close X works. App Insights `web_reactor_list_viewed` event present. Test on photos AND videos
+- [ ] **Web — strip hidden at 0 reactions** — a fresh photo with no reactions does NOT render the strip
+- [ ] **Web — strip text matches pill totals** — verify `N reactions` text equals the sum of pill counts when one user has reacted with multiple types
 - [ ] **Delete own media** — 3-dot menu visible only on your own cards → Delete → confirm dialog → card disappears
 - [ ] **Organizer can remove others' media on web** — sign in (browser 2) as the event organizer who is NOT the uploader → 3-dot is visible on the uploader's photo + video cards → label reads "Remove" → confirm dialog title is "Remove this photo?" / "Remove this video?" with body about permanent deletion for everyone → confirm → toast "Photo removed" / "Video removed" → card vanishes. Test in BOTH Chrome AND Safari (HLS path differs)
 - [ ] **Non-organizer non-uploader on web** — sign in as a third clique member who is neither uploader nor organizer → no 3-dot icon visible on others' cards in the feed

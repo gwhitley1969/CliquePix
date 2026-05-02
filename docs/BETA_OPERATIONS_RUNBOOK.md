@@ -687,6 +687,31 @@ customEvents
 | project timestamp, name, customDimensions
 ```
 
+**"Who reacted?" sheet usage (added 2026-05-02 — engagement signal):**
+```kql
+// Server-side fires on every successful GET /api/{photos|videos}/:id/reactions.
+// Photos vs videos split + per-day volume.
+customEvents
+| where name == "reactor_list_fetched"
+| where timestamp > ago(7d)
+| extend mediaType = tostring(customDimensions.mediaType),
+         total = toint(customDimensions.totalReactions)
+| summarize opens = count(),
+            avg_total_reactions = avg(total)
+            by mediaType, bin(timestamp, 1d)
+| render timechart
+```
+
+```kql
+// Web-only: open count + filter usage. Useful for splitting "tap strip"
+// (reactionFilter == 'all') vs no current path; reserved if a desktop
+// long-press / right-click filter is ever added.
+customEvents
+| where name == "web_reactor_list_viewed"
+| where timestamp > ago(7d)
+| summarize count() by tostring(customDimensions.reactionFilter)
+```
+
 **Avatar upload health (added 2026-04-24):**
 ```kql
 customEvents

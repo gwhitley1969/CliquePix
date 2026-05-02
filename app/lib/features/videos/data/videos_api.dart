@@ -84,6 +84,14 @@ class VideosApi {
     await dio.delete(ApiEndpoints.videoReaction(videoId, reactionId));
   }
 
+  /// GET /api/videos/{videoId}/reactions — full reactor list for the
+  /// "who reacted?" sheet. Returns the raw envelope payload; the repo
+  /// layer parses into a [ReactorList].
+  Future<Map<String, dynamic>> listReactions(String videoId) async {
+    final response = await dio.get(ApiEndpoints.videoReactions(videoId));
+    return response.data['data'] as Map<String, dynamic>;
+  }
+
   /// GET /api/events/{eventId}/media — unified mixed-media feed (photos + videos)
   Future<Map<String, dynamic>> listMedia(String eventId) async {
     final response = await dio.get(ApiEndpoints.eventMedia(eventId));

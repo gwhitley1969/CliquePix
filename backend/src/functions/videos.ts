@@ -27,6 +27,7 @@ import { canDeleteMedia } from '../shared/utils/permissions';
 import { Photo, VideoWithUrls } from '../shared/models/photo';
 import { Event } from '../shared/models/event';
 import { enrichUserAvatar } from '../shared/services/avatarEnricher';
+import { fetchTopReactors } from '../shared/db/topReactors';
 import { deleteNotificationsForVideo } from '../shared/db/notificationCleanup';
 
 // ====================================================================================
@@ -220,7 +221,7 @@ async function enrichVideoWithUrls(
   const isNotYetActive = video.status === 'processing' || video.status === 'pending';
   const shouldGeneratePreview = isUploader && isNotYetActive && Boolean(video.blob_path);
 
-  const [posterUrl, mp4FallbackUrl, previewUrl, reactionRows, userReactionRows, uploaderAvatar] = await Promise.all([
+  const [posterUrl, mp4FallbackUrl, previewUrl, reactionRows, userReactionRows, uploaderAvatar, topReactors] = await Promise.all([
     video.poster_blob_path
       ? generateViewSas(video.poster_blob_path, VIDEO_PLAYBACK_SAS_EXPIRY_SECONDS)
       : Promise.resolve(null),
@@ -250,6 +251,10 @@ async function enrichVideoWithUrls(
       avatar_updated_at: video.uploaded_by_avatar_updated_at,
       avatar_frame_preset: video.uploaded_by_avatar_frame_preset,
     }),
+    // Powers the "who reacted?" strip's avatar stack on video cards. Only
+    // shows up on `isReady` cards on the client (gated there), but cheap
+    // enough server-side to always populate.
+    fetchTopReactors(video.id),
   ]);
 
   const reactionCounts: Record<string, number> = {};
@@ -264,6 +269,7 @@ async function enrichVideoWithUrls(
     preview_url: previewUrl,
     reaction_counts: reactionCounts,
     user_reactions: userReactionRows.map((r) => r.reaction_type),
+    top_reactors: topReactors,
     uploaded_by_avatar_url: uploaderAvatar.avatar_url,
     uploaded_by_avatar_thumb_url: uploaderAvatar.avatar_thumb_url,
     uploaded_by_avatar_updated_at: uploaderAvatar.avatar_updated_at,

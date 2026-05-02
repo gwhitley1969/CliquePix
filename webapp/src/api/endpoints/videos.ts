@@ -1,5 +1,5 @@
 import { api } from '../client';
-import type { ReactionRecord, ReactionType, Video } from '../../models';
+import type { ReactionRecord, ReactionType, ReactorList, Video } from '../../models';
 
 export async function listEventVideos(eventId: string): Promise<Video[]> {
   // Backend envelope: { data: { videos: [...] } }
@@ -95,4 +95,13 @@ export async function addVideoReaction(
 
 export async function removeVideoReaction(videoId: string, reactionId: string): Promise<void> {
   await api.delete(`/api/videos/${videoId}/reactions/${reactionId}`);
+}
+
+/**
+ * GET /api/videos/{id}/reactions — full reactor list for the
+ * "who reacted?" dialog. Same shape as photos.
+ */
+export async function listVideoReactions(videoId: string): Promise<ReactorList> {
+  const res = await api.get<{ data: ReactorList }>(`/api/videos/${videoId}/reactions`);
+  return res.data.data;
 }

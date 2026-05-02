@@ -1,4 +1,5 @@
 import '../../../models/photo_model.dart';
+import '../../../models/reactor_model.dart';
 import '../data/photos_api.dart';
 
 class PhotosRepository {
@@ -63,5 +64,13 @@ class PhotosRepository {
 
   Future<void> removeReaction(String photoId, String reactionId) async {
     await api.removeReaction(photoId, reactionId);
+  }
+
+  /// Powers the "who reacted?" sheet. Refetched on every sheet open —
+  /// no long-lived cache, no cross-screen invalidation needed when the
+  /// user reacts via the pill.
+  Future<ReactorList> listReactors(String photoId) async {
+    final data = await api.listReactions(photoId);
+    return ReactorList.fromJson(data);
   }
 }

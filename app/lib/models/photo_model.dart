@@ -1,3 +1,5 @@
+import 'reactor_model.dart';
+
 class PhotoModel {
   final String id;
   final String eventId;
@@ -16,6 +18,9 @@ class PhotoModel {
   final String status;
   final Map<String, int> reactionCounts;
   final List<({String id, String type})> userReactions;
+  /// Up to 3 distinct most-recent reactors. Drives the avatar stack on the
+  /// "who reacted?" strip rendered above the reaction pill row.
+  final List<ReactorAvatar> topReactors;
   final DateTime createdAt;
   final DateTime expiresAt;
 
@@ -37,9 +42,15 @@ class PhotoModel {
     required this.status,
     this.reactionCounts = const {},
     this.userReactions = const [],
+    this.topReactors = const [],
     required this.createdAt,
     required this.expiresAt,
   });
+
+  /// Total reactions across all types — used by the strip's "N reactions"
+  /// label. Matches what the existing pill row sums to.
+  int get totalReactions =>
+      reactionCounts.values.fold<int>(0, (sum, count) => sum + count);
 
   /// Stable cache key for the uploader's avatar. Shared pattern across all
   /// models that carry a denormalized uploader/sender/creator avatar.
@@ -83,6 +94,11 @@ class PhotoModel {
             final m = e as Map<String, dynamic>;
             return (id: m['id'] as String? ?? '', type: m['reaction_type'] as String);
           }).toList() ?? [],
+      topReactors: (json['top_reactors'] as List<dynamic>?)
+              ?.map((e) =>
+                  ReactorAvatar.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          const [],
       createdAt: DateTime.parse(json['created_at'] as String),
       expiresAt: DateTime.parse(json['expires_at'] as String),
     );

@@ -9,6 +9,8 @@ import '../../../models/video_model.dart';
 import '../../../widgets/avatar_widget.dart';
 import '../../../widgets/loading_shimmer.dart';
 import '../../../widgets/media_owner_menu.dart';
+import '../../../widgets/reactor_list_sheet.dart';
+import '../../../widgets/reactor_strip.dart';
 import '../../auth/domain/auth_state.dart';
 import '../../auth/presentation/auth_providers.dart';
 import '../../photos/presentation/reaction_bar_widget.dart';
@@ -135,6 +137,25 @@ class VideoCardWidget extends ConsumerWidget {
               ),
               // Body — switches based on processing state
               _buildBody(context),
+              // "Who reacted?" strip — only renders when total > 0 AND
+              // the video is ready (backend rejects reactions on
+              // processing/failed videos so totals stay 0 for those).
+              if (video.isReady)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+                  child: ReactorStrip(
+                    totalReactions: video.totalReactions,
+                    topReactors: video.topReactors,
+                    onTap: () async {
+                      final repo = await ref.read(videosRepositoryProvider.future);
+                      if (!context.mounted) return;
+                      ReactorListSheet.show(
+                        context,
+                        fetchReactors: () => repo.listReactors(video.id),
+                      );
+                    },
+                  ),
+                ),
               // Reactions (only for ready videos — backend rejects reactions on non-active media)
               if (video.isReady)
                 Padding(
@@ -150,6 +171,15 @@ class VideoCardWidget extends ConsumerWidget {
                     onRemove: (reactionId) async {
                       final repo = await ref.read(videosRepositoryProvider.future);
                       await repo.removeReaction(video.id, reactionId);
+                    },
+                    onShowReactors: (reactionType) async {
+                      final repo = await ref.read(videosRepositoryProvider.future);
+                      if (!context.mounted) return;
+                      ReactorListSheet.show(
+                        context,
+                        fetchReactors: () => repo.listReactors(video.id),
+                        initialFilter: reactionType,
+                      );
                     },
                   ),
                 ),

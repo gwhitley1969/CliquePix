@@ -297,7 +297,15 @@ DELETE /api/photos/{photoId}
 ```
 POST   /api/photos/{photoId}/reactions
 DELETE /api/photos/{photoId}/reactions/{reactionId}
+GET    /api/photos/{photoId}/reactions
+POST   /api/videos/{videoId}/reactions
+DELETE /api/videos/{videoId}/reactions/{reactionId}
+GET    /api/videos/{videoId}/reactions
 ```
+
+The two GET endpoints power the "who reacted?" sheet on photo and video cards (mobile + web). Returns `{ media_id, total_reactions, by_type, reactors[] }` — one row per reaction (the same user appears once per reaction type they left), sorted DESC by `created_at`, capped at 200. Each reactor row carries an enriched 1-hour avatar SAS via `enrichUserAvatar`. Authorization mirrors the POST/DELETE on the same path: caller must be a member of the event's clique; non-members get 404 to avoid leaking media existence. Telemetry: `reactor_list_fetched { mediaId, mediaType, totalReactions }`.
+
+`PhotoWithUrls` and `VideoWithUrls` carry an additional `top_reactors: ReactorAvatar[]` field (up to 3 distinct most-recent reactor avatars, de-duped by user_id) so the strip can render real reactor avatars without an extra round-trip when the count is non-zero.
 
 ### Direct Messages (Event-Centric DMs)
 ```

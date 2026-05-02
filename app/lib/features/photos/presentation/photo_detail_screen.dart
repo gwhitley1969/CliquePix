@@ -10,6 +10,8 @@ import '../../../core/utils/date_utils.dart';
 import '../../../services/storage_service.dart';
 import '../../../widgets/confirm_destructive_dialog.dart';
 import '../../../widgets/error_widget.dart';
+import '../../../widgets/reactor_list_sheet.dart';
+import '../../../widgets/reactor_strip.dart';
 import '../../auth/domain/auth_state.dart';
 import '../../auth/presentation/auth_providers.dart';
 import '../../events/presentation/events_providers.dart';
@@ -208,7 +210,19 @@ class PhotoDetailScreen extends ConsumerWidget {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 8),
+                  // "Who reacted?" strip — only renders when total > 0.
+                  ReactorStrip(
+                    totalReactions: photo.totalReactions,
+                    topReactors: photo.topReactors,
+                    onTap: () => ReactorListSheet.show(
+                      context,
+                      fetchReactors: () => ref
+                          .read(photosRepositoryProvider)
+                          .listReactors(photo.id),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
                   ReactionBarWidget(
                     mediaId: photo.id,
                     reactionCounts: photo.reactionCounts,
@@ -218,6 +232,13 @@ class PhotoDetailScreen extends ConsumerWidget {
                     onRemove: (reactionId) => ref
                         .read(photosRepositoryProvider)
                         .removeReaction(photo.id, reactionId),
+                    onShowReactors: (reactionType) => ReactorListSheet.show(
+                      context,
+                      fetchReactors: () => ref
+                          .read(photosRepositoryProvider)
+                          .listReactors(photo.id),
+                      initialFilter: reactionType,
+                    ),
                   ),
                 ],
               ),

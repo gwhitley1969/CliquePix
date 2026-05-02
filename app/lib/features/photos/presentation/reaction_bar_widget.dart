@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -6,12 +7,19 @@ import '../../../core/theme/app_text_styles.dart';
 /// Media-agnostic reaction row. Receives two async callbacks so the same
 /// widget can drive photo reactions and video reactions without coupling
 /// to either repository.
+///
+/// Tap a pill = toggle the user's reaction (existing behavior, unchanged).
+/// Long-press a pill with count > 0 = call [onShowReactors] with that
+/// reaction type. Used by photo/video cards to open the "who reacted?"
+/// sheet pre-filtered to that reaction. Default null = long-press is a
+/// no-op (backwards compatible with screens that don't surface the sheet).
 class ReactionBarWidget extends StatefulWidget {
   final String mediaId;
   final Map<String, int> reactionCounts;
   final List<({String id, String type})> userReactions;
   final Future<({String id, String type})> Function(String reactionType) onAdd;
   final Future<void> Function(String reactionId) onRemove;
+  final void Function(String reactionType)? onShowReactors;
 
   const ReactionBarWidget({
     super.key,
@@ -20,6 +28,7 @@ class ReactionBarWidget extends StatefulWidget {
     required this.userReactions,
     required this.onAdd,
     required this.onRemove,
+    this.onShowReactors,
   });
 
   @override
@@ -100,6 +109,16 @@ class _ReactionBarWidgetState extends State<ReactionBarWidget> {
           padding: const EdgeInsets.only(right: 8),
           child: GestureDetector(
             onTap: () => _toggleReaction(type),
+            // Long-press only fires when the pill has at least one
+            // reaction AND the host screen wired a sheet handler. Empty
+            // pills + screens without onShowReactors fall through to a
+            // no-op so existing callsites keep working unchanged.
+            onLongPress: (widget.onShowReactors != null && (_counts[type] ?? 0) > 0)
+                ? () {
+                    HapticFeedback.mediumImpact();
+                    widget.onShowReactors!(type);
+                  }
+                : null,
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),

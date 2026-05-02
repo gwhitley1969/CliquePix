@@ -1,6 +1,50 @@
 # DEPLOYMENT_STATUS.md — Clique Pix v1
 
-Last updated: 2026-05-01 (BGTask SIGABRT iOS post-auth crash fixed — Info.plist `BGTaskSchedulerPermittedIdentifiers` removed)
+Last updated: 2026-05-02 (Who-reacted reactor list shipped — backend + mobile + web)
+
+## "Who reacted?" reactor list (2026-05-02)
+
+**Status:** ✅ code complete, ✅ backend tsc + jest 164/164 green, ✅ flutter analyze 54-issue baseline preserved, ✅ flutter test 70/70 green, ✅ web `vite build` green (2168 modules, 433.97 KB initial JS / 140.58 KB gzip — within budget). **Pending:** backend deploy → APK + web ship → on-device verification per `BETA_TEST_PLAN.md` §4 / §5 / §12.
+
+**What's the user-visible change.** Tapping the new "N reactions" strip above the reaction pills (or long-pressing any reaction pill on mobile) opens a Facebook-style sheet listing exactly who reacted, with tabs filtering by reaction type. Photos and videos both supported on iOS, Android, and web. Existing tap-to-toggle on the pills is unchanged. Strip stays hidden until at least one reaction exists, so cards with no reactions look identical to before.
+
+**Architecture.** Two new additive GET endpoints (`GET /api/photos/{id}/reactions`, `GET /api/videos/{id}/reactions`) backed by a shared `listReactionsForMedia` helper next to the existing add/remove handlers. Authorization reuses the existing membership-gate SELECT (non-members get 404, identical to POST/DELETE). The feed enrichers (`enrichPhotoWithUrls`, `enrichVideoWithUrls`) now also return `top_reactors: ReactorAvatar[]` (up to 3 distinct most-recent reactor avatars, de-duped by user_id) via a new shared `fetchTopReactors` helper in `backend/src/shared/db/topReactors.ts` — powers the strip's avatar stack without a second round-trip. No DB migration. No infra change. No APIM policy edit.
+
+| Phase | Status | Files |
+|---|---|---|
+| Backend: `ReactorEntry`, `ReactorAvatar`, `ReactorListResponse` types + `top_reactors` on `PhotoWithUrls`/`VideoWithUrls` | ✅ | `backend/src/shared/models/reaction.ts`, `backend/src/shared/models/photo.ts` |
+| Backend: `getPhotoReactions` + `getVideoReactions` handlers + shared `listReactionsForMedia` | ✅ | `backend/src/functions/reactions.ts` |
+| Backend: `fetchTopReactors` helper + wiring into `enrichPhotoWithUrls` + `enrichVideoWithUrls` | ✅ | `backend/src/shared/db/topReactors.ts` (new), `backend/src/functions/photos.ts`, `backend/src/functions/videos.ts` |
+| Backend: 7 new jest cases (happy paths, non-member 404, empty, same-user-multi-type, avatar enrichment, null-avatar) | ✅ | `backend/src/__tests__/reactions.test.ts` (new) |
+| Backend: tsc + jest 164/164 (was 157, +7 new) | ✅ | — |
+| Mobile: `ReactorAvatar`, `ReactorEntry`, `ReactorList` Dart models + `topReactors` on PhotoModel/VideoModel | ✅ | `app/lib/models/reactor_model.dart` (new), `app/lib/models/photo_model.dart`, `app/lib/models/video_model.dart` |
+| Mobile: `listReactions` API + `listReactors` repository on photos AND videos | ✅ | `app/lib/features/photos/data/photos_api.dart`, `app/lib/features/photos/domain/photos_repository.dart`, `app/lib/features/videos/data/videos_api.dart`, `app/lib/features/videos/domain/videos_repository.dart` |
+| Mobile: `ReactorStrip` widget (avatar stack + count text, gated on totalReactions > 0) | ✅ | `app/lib/widgets/reactor_strip.dart` (new) |
+| Mobile: `ReactorListSheet` (DraggableScrollableSheet + TabBar + FutureBuilder + skeleton/error/empty states) | ✅ | `app/lib/widgets/reactor_list_sheet.dart` (new) |
+| Mobile: `ReactionBarWidget.onShowReactors` long-press hook (no-op when count = 0 OR callback null) | ✅ | `app/lib/features/photos/presentation/reaction_bar_widget.dart` |
+| Mobile: thread strip + onShowReactors into 3 surfaces (photo card, photo detail, video card) | ✅ | `app/lib/features/photos/presentation/photo_card_widget.dart`, `app/lib/features/photos/presentation/photo_detail_screen.dart`, `app/lib/features/videos/presentation/video_card_widget.dart` |
+| Mobile: 2 widget tests + flutter analyze 54-issue baseline + flutter test 70/70 | ✅ | `app/test/reactor_list_sheet_test.dart` (new) |
+| Web: `ReactorAvatar`, `ReactorEntry`, `ReactorList` types + `topReactors` on `MediaBase` | ✅ | `webapp/src/models/index.ts` |
+| Web: `listPhotoReactions` + `listVideoReactions` API methods | ✅ | `webapp/src/api/endpoints/photos.ts`, `webapp/src/api/endpoints/videos.ts` |
+| Web: `ReactorStrip` + `ReactorListDialog` (Radix Dialog + first use of @radix-ui/react-tabs in the app) + telemetry | ✅ | `webapp/src/features/photos/ReactorStrip.tsx` (new), `webapp/src/features/photos/ReactorListDialog.tsx` (new) |
+| Web: thread strip + dialog into MediaCard footer | ✅ | `webapp/src/features/photos/MediaCard.tsx` |
+| Web: vite build green (2168 modules, no TS errors) | ✅ | — |
+| Docs: PRD §5.8, ARCHITECTURE §6, CLAUDE.md API list, BETA_TEST_PLAN.md, this entry | ✅ | as listed |
+| Backend deploy (`func azure functionapp publish func-cliquepix-fresh`) | ⏳ Pending | — |
+| Web SWA deploy (auto via GH Actions on merge to `main`) | ⏳ Pending | — |
+| Mobile APK build + on-device verification per BETA_TEST_PLAN §4 / §5 | ⏳ Pending | — |
+
+**Telemetry events** (App Insights `customEvents`):
+- Server: `reactor_list_fetched { mediaId, mediaType, totalReactions }` — fires on every successful GET. Replaces the need for separate client-side "viewed" events.
+- Web: `web_reactor_list_viewed { mediaId, mediaType, reactionFilter, totalReactions }` — fires once per dialog open via `useEffect`. Useful for desktop-vs-mobile split.
+
+**Deploy order:** backend (additive — old clients ignore the new endpoints and the new `top_reactors` field) → mobile + web in parallel. Old clients keep working unchanged.
+
+**Rollback plan:** revert client commits (legacy build still works for everything except the strip). Backend endpoint can stay as harmless dead code, or be reverted independently.
+
+**Out of scope (tracked for future):** push notifications when someone reacts to your post (would need a migration to widen `notifications.type` CHECK + FCM batching to avoid push storms during a hot event); reactor list pagination beyond 200 (sufficient at beta scale); video player screen reaction bar + strip (separate parity follow-up); reactions on DM messages (forbidden by `EVENT_DM_CHAT_ARCHITECTURE.md`).
+
+---
 
 ## BGTask SIGABRT iOS post-auth crash — fixed (2026-05-01)
 
