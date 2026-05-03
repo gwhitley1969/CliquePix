@@ -10,6 +10,8 @@ import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tzlocal;
 import 'package:workmanager/workmanager.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'core/cache/list_bootstrap_providers.dart';
+import 'core/cache/list_cache_service.dart';
 import 'core/constants/msal_constants.dart';
 import 'features/auth/domain/app_lifecycle_service.dart'
     show pendingRefreshFlagKey;
@@ -17,6 +19,8 @@ import 'features/auth/domain/auth_state.dart';
 import 'features/auth/domain/background_token_service.dart';
 import 'features/auth/presentation/auth_providers.dart'
     show authBootstrapStateProvider;
+import 'models/clique_model.dart';
+import 'models/event_model.dart';
 import 'services/push_notification_service.dart';
 import 'services/token_storage_service.dart';
 import 'app/app.dart';
@@ -140,13 +144,66 @@ void main() async {
   // Register background message handler (must be before runApp)
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
+  // Optimistic authentication bootstrap. Read storage once before building
+  // the widget tree so the router resolves to `/events` on the first frame
+  // for returning users — no splash, no "checking auth" spinner ever.
+  // Background verification runs after runApp and either silently refreshes
+  // the cached session or routes to the Welcome Back dialog on failure.
+  final AuthState bootstrapState = await _computeBootstrapAuthState();
+
+  // Stale-while-revalidate cache hydration for events + cliques. Same
+  // optimistic philosophy: render last-known data on the first frame; the
+  // notifiers fire a background refresh and update state when fresh data
+  // lands. Capped at 250 ms so a slow / corrupt prefs store can't extend
+  // cold start — on timeout we fall through to skeleton on first paint.
+  List<EventModel>? eventsBootstrap;
+  List<CliqueModel>? cliquesBootstrap;
+  if (bootstrapState is AuthAuthenticated) {
+    final userId = bootstrapState.user.id;
+    final svc = ListCacheService();
+    try {
+      final results = await Future.wait([
+        svc.readEvents(userId),
+        svc.readCliques(userId),
+      ]).timeout(const Duration(milliseconds: 250));
+      eventsBootstrap = results[0] as List<EventModel>?;
+      cliquesBootstrap = results[1] as List<CliqueModel>?;
+    } catch (e) {
+      debugPrint('[CliquePix] list cache hydrate skipped: $e');
+    }
+  }
+
+  // The Friday reminder, FCM foreground display, and WorkManager Layer 4
+  // depend on three pieces of init that DO NOT have to block first paint
+  // (notification channels, tz seeding, WorkManager registration). Defer
+  // them to the root widget's post-frame callback — see `_DeferredInit` in
+  // `app/app.dart`.
+
+  runApp(
+    ProviderScope(
+      overrides: [
+        authBootstrapStateProvider.overrideWithValue(bootstrapState),
+        eventsBootstrapProvider.overrideWithValue(eventsBootstrap),
+        cliquesBootstrapProvider.overrideWithValue(cliquesBootstrap),
+      ],
+      child: const CliquePix(),
+    ),
+  );
+}
+
+/// Notification + tz + WorkManager init that does not need to block the
+/// first paint of the Home screen. Called from `_CliquePixState.initState`
+/// via a post-frame callback. Idempotent — guarded by a top-level flag.
+bool _deferredInitDone = false;
+Future<void> performDeferredInit() async {
+  if (_deferredInitDone) return;
+  _deferredInitDone = true;
+
   tz.initializeTimeZones();
 
   // Best-effort: read the device's IANA timezone and seed `tz.local` so
   // `flutter_local_notifications` `zonedSchedule` calls fire at the correct
   // wall-clock time across DST. Used by FridayReminderService.
-  // If the platform-channel call fails, leaves tz.local at its default
-  // (UTC) — degraded but non-crashing.
   try {
     final iana = await FlutterTimezone.getLocalTimezone();
     if (iana.isNotEmpty) {
@@ -209,26 +266,14 @@ void main() async {
     debugPrint('Notifications init failed: $e');
   }
 
-  // Listen for foreground FCM messages — set up HERE, right after plugin init,
-  // so the plugin is guaranteed to be ready when show() is called.
+  // Foreground FCM listener — registered AFTER plugin init so `show()` has
+  // a ready-to-go plugin instance. Foreground pushes that arrive in the
+  // ~one frame between runApp and this callback are not displayed (a tiny
+  // window only hit after a 5–10 s deferral was eliminated); the
+  // notification record is still written by the backend so it appears in
+  // the in-app list.
   FirebaseMessaging.onMessage.listen(_handleForegroundFcmMessage);
   debugPrint('[CliquePix] FCM onMessage listener registered');
-
-  // Optimistic authentication bootstrap. Read storage once before building
-  // the widget tree so the router resolves to `/events` on the first frame
-  // for returning users — no splash, no "checking auth" spinner ever.
-  // Background verification runs after runApp and either silently refreshes
-  // the cached session or routes to the Welcome Back dialog on failure.
-  final AuthState bootstrapState = await _computeBootstrapAuthState();
-
-  runApp(
-    ProviderScope(
-      overrides: [
-        authBootstrapStateProvider.overrideWithValue(bootstrapState),
-      ],
-      child: const CliquePix(),
-    ),
-  );
 }
 
 /// Read tokens + cached user from secure storage and decide the initial

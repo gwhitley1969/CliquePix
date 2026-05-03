@@ -687,6 +687,37 @@ customEvents
 | project timestamp, name, customDimensions
 ```
 
+**Cold-start render performance (added 2026-05-03 — Tier 1 stale-while-revalidate cache rollout):**
+```kql
+// `home_first_render_ms` fires the first time HomeScreen returns non-skeleton
+// content (cached or fresh). `hadCache=true` indicates a returning user hit
+// the optimistic-data path; this should be a SUB-SECOND p95 if Tier 1 is
+// working correctly. `hadCache=false` is true first-launch and is bounded by
+// backend cold-start (Tier 2 territory).
+customEvents
+| where name == "home_first_render_ms"
+| where timestamp > ago(7d)
+| extend ms = toint(customDimensions.ms),
+         hadCache = tostring(customDimensions.hadCache)
+| summarize p50 = percentile(ms, 50), p95 = percentile(ms, 95), n = count()
+            by hadCache, bin(timestamp, 1d)
+| render timechart
+```
+
+```kql
+// `home_first_fresh_data_ms` fires when the silent refresh actually lands.
+// This is the gate for considering Tier 2 (backend cold-start fixes —
+// pg-pool warmup, Function App plan migration). Trigger Tier 2 if p95 stays
+// > 5 s for ≥ 2 days after Tier 1 ships.
+customEvents
+| where name == "home_first_fresh_data_ms"
+| where timestamp > ago(7d)
+| extend ms = toint(customDimensions.ms)
+| summarize p50 = percentile(ms, 50), p95 = percentile(ms, 95), n = count()
+            by bin(timestamp, 1d)
+| render timechart
+```
+
 **"Who reacted?" sheet usage (added 2026-05-02 — engagement signal):**
 ```kql
 // Server-side fires on every successful GET /api/{photos|videos}/:id/reactions.

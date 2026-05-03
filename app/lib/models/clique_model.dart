@@ -25,6 +25,15 @@ class CliqueModel {
       createdAt: DateTime.parse(json['created_at'] as String),
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'invite_code': inviteCode,
+        'created_by_user_id': createdByUserId,
+        'member_count': memberCount,
+        'created_at': createdAt.toIso8601String(),
+      };
 }
 
 class CliqueMemberModel {

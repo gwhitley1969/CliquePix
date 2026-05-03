@@ -263,6 +263,10 @@ Client-only, scheduled via `flutter_local_notifications.zonedSchedule`. No FCM, 
 - [ ] **Photo upload speed** — capture to visible in feed: < 5 seconds on WiFi
 - [ ] **Video transcoding** — compatible source (H.264 SDR): ready within ~25 seconds total
 - [ ] **Feed scroll** — 60fps, no jank with 20+ items
+- [ ] **App cold start (returning user, cached)** — sign in, populate Home with at least 2 events + 1 clique, force-stop. Re-launch. **Events list must be visible within < 1 s of first frame.** A small "Refreshing…" pill should appear above the list while the background fetch runs; pill disappears when fresh data lands. NO full-screen blocking spinner. (`home_first_render_ms` p95 < 1 s in App Insights — `hadCache=true`.)
+- [ ] **App cold start (returning user, airplane mode)** — repeat above with airplane mode toggled on after force-stop. Events still render from cache. The pill swaps to "Couldn't refresh — tap to retry" (red icon). Tapping triggers a refresh attempt (still fails), pill stays. Disable airplane mode → pull-to-refresh → pill returns to "Refreshing…" → list updates.
+- [ ] **App first-ever launch (no cache)** — fresh install, sign up. After auth resolves, Home shows **3-card shimmer placeholder** (NOT a full-screen `CircularProgressIndicator`) until the first `GET /api/cliques` + `GET /api/events` complete. Once data lands, brand-new empty state copy appears.
+- [ ] **Multi-account cache isolation** — sign in as user A, populate cache, sign out (verify cache cleared in logs), sign in as user B. B sees skeleton, then B's events. NEVER A's. (Tests `ListCacheService().clearAll()` in `auth_repository.dart` `signOut`.)
 - [ ] **App cold start** — splash to usable: < 3 seconds
 - [ ] **Thumbnail load** — feed thumbnails load within 500ms on 4G
 - [ ] **`deleterRole` telemetry recorded** — after running the organizer-delete tests above, query App Insights:

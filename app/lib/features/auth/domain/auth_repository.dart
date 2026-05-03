@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:msal_auth/msal_auth.dart';
+import '../../../core/cache/list_cache_service.dart';
 import '../../../core/constants/msal_constants.dart';
 import '../../../models/user_model.dart';
 import '../../../services/token_storage_service.dart';
@@ -121,6 +122,7 @@ class AuthRepository {
     _pca = null; // Force fresh PCA on next sign-in
     try { await backgroundTokenService.cancel(); } catch (_) {}
     try { await tokenStorage.clearAll(); } catch (_) {}
+    try { await ListCacheService().clearAll(); } catch (_) {}
   }
 
   Future<void> deleteAccount() async {
@@ -132,6 +134,7 @@ class AuthRepository {
     _pca = null;
     try { await backgroundTokenService.cancel(); } catch (_) {}
     try { await tokenStorage.clearAll(); } catch (_) {}
+    try { await ListCacheService().clearAll(); } catch (_) {}
   }
 
   /// Clear MSAL cached account and force fresh PCA on next attempt.
@@ -143,6 +146,7 @@ class AuthRepository {
     } catch (_) {}
     _pca = null;
     await tokenStorage.clearAll();
+    try { await ListCacheService().clearAll(); } catch (_) {}
   }
 
   /// Attempt silent token refresh via MSAL. Returns true on success, false

@@ -1,6 +1,47 @@
 # DEPLOYMENT_STATUS.md — Clique Pix v1
 
-Last updated: 2026-05-02 (Who-reacted reactor list shipped — backend + mobile + web)
+Last updated: 2026-05-03 (Cold-start spinner eliminated — stale-while-revalidate + deferred main() init)
+
+## Cold-start Home spinner eliminated — stale-while-revalidate cache (2026-05-03)
+
+**Status:** ✅ code complete, ✅ flutter analyze 54-issue baseline preserved, ✅ flutter test 82/82 green (was 70 + 12 new). **Pending:** APK build → on-device verification per `BETA_TEST_PLAN.md` §11 → commit + push.
+
+**The user complaint.** *"When I start the application it spins for about 15 seconds to 30 seconds before it shows the Events listed."* CLAUDE.md's existing rule prohibits exactly this — the optimistic-auth bootstrap was supposed to land users on Events as the first frame. But once the router resolved to `/events`, `home_screen.dart` rendered a full-screen `CircularProgressIndicator` until BOTH `allEventsListProvider` AND `cliquesListProvider` returned AND a `SharedPreferences` read for the "How it works" banner completed. On a cold backend (Functions Consumption cold-start + cold pg pool + first User Delegation Key fetch + per-event creator-avatar SAS signs) that was 10–15 s of API time on top of 5–10 s of `main()` awaits for Workmanager + notifications + tz init.
+
+**The fix.** Two parallel changes:
+
+1. **Tier 1a — Stale-while-revalidate.** Persist last-known events + cliques to `SharedPreferences` (versioned, user-scoped JSON). On cold start, `main()` reads both with a 250 ms timeout and overrides two new bootstrap providers in `ProviderScope`. The `AsyncNotifier`s seed from those overrides during `build()` and return cached data synchronously, then `Future.microtask(_refreshSilently)` in the background. **Hard rule: refresh failures must NOT push `AsyncError` over cached `AsyncData`** — they go to a dedicated `eventsRefreshErrorProvider` / `cliquesRefreshErrorProvider` that drives an inline "Couldn't refresh — tap to retry" pill. Cache writes are isolated in their own try/catch so a write failure can't promote to a refresh error.
+2. **Tier 1c — Deferred non-critical `main()` init.** `Workmanager.initialize`, `flutter_local_notifications.initialize` + 2× `createNotificationChannel` + `requestNotificationsPermission`, `tz.initializeTimeZones` + `FlutterTimezone.getLocalTimezone`, and `FirebaseMessaging.onMessage.listen` registration moved out of `main()` into `performDeferredInit()`, called from `_CliquePixState.initState` via post-frame callback. `Firebase.initializeApp()` and `FirebaseMessaging.onBackgroundMessage(...)` MUST stay before `runApp()`.
+
+**Tier 2 (backend pool warmup, Function App plan migration) is deferred until telemetry confirms it's needed.** The new `home_first_render_ms` and `home_first_fresh_data_ms` events let us measure: returning-user p95 should hit < 1 s (Tier 1 win); first-fresh-data p95 > 5 s would be the trigger for Tier 2.
+
+| Phase | Status | Files |
+|---|---|---|
+| Cache infrastructure (3 new files) | ✅ | `app/lib/core/cache/list_cache_service.dart`, `app/lib/core/cache/list_bootstrap_providers.dart`, `app/lib/core/cache/last_refresh_error_provider.dart` |
+| Add `toJson()` to `EventModel` + `CliqueModel` for cache serialization | ✅ | `app/lib/models/event_model.dart`, `app/lib/models/clique_model.dart` |
+| Refactor events + cliques providers to seed-from-cache + silent refresh + isolated cache writes | ✅ | `app/lib/features/events/presentation/events_providers.dart`, `app/lib/features/cliques/presentation/cliques_providers.dart` |
+| List skeleton (3 shimmer cards) for true first-launch | ✅ | `app/lib/widgets/list_skeleton.dart` (new, uses existing `LoadingShimmer`) |
+| Drop blocking spinner gate from HomeScreen + inline refresh/error pill + telemetry hooks | ✅ | `app/lib/features/home/presentation/home_screen.dart` |
+| Defer Workmanager + notifications + tz to post-frame; seed cache providers in `runApp` | ✅ | `app/lib/main.dart`, `app/lib/app/app.dart` |
+| Clear list caches on `signOut` / `deleteAccount` / `resetSession` | ✅ | `app/lib/features/auth/domain/auth_repository.dart` |
+| Tests: cache round-trip, corrupt-prefs clears, 50/30 truncation, per-user isolation, optimistic seed, refresh-failure preserves cached state, refresh-success clears error | ✅ | `app/test/list_cache_service_test.dart` (new, 9 tests), `app/test/events_provider_optimistic_test.dart` (new, 3 tests) |
+| `flutter analyze` 54-issue baseline | ✅ | — |
+| `flutter test` 82/82 (was 70 + 12 new) | ✅ | — |
+| Docs: PRD §5.1, ARCHITECTURE §12, CLAUDE.md Real-Time, BETA_TEST_PLAN §11, BETA_OPERATIONS_RUNBOOK §7, this entry | ✅ | as listed |
+| APK build + on-device verification (cached / airplane / first-install / multi-account) | ⏳ Pending | — |
+| Commit + push | ⏳ Pending | — |
+
+**Telemetry events** (App Insights `customEvents`, fired by `home_screen.dart`):
+- `home_first_render_ms { ms, hadCache }` — fires the first time HomeScreen returns non-skeleton content. Tier 1 success metric. **Target: p95 < 1 s when `hadCache=true`.**
+- `home_first_fresh_data_ms { ms }` — fires when the silent refresh actually lands. Tier 2 trigger. **Target: p95 < 5 s; if higher for 2+ days, ship Tier 2 pool warmup.**
+
+**Deploy order:** mobile-only change. APK build → manual smoke per BETA_TEST_PLAN §11 → commit (docs first) → push to main.
+
+**Rollback plan:** revert the commit. The cache files self-clean on next sign-out (`ListCacheService().clearAll()` in `auth_repository.dart`). No backend, no migration, no infra to roll back.
+
+**Out of scope (tracked for follow-up):** Function App plan migration to Premium / Flex Consumption (~$50–100/mo, eliminates cold start); pg pool warmup at top of `authVerify`/`listAllEvents`/`listCliques` handlers; eliminating the 8 s 401-refresh penalty in `AuthInterceptor` (defer-and-retry pattern); persisting `getUserDelegationKey` across Function App restarts; web client cold-start parity (different runtime + cache primitives).
+
+---
 
 ## "Who reacted?" reactor list (2026-05-02)
 

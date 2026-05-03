@@ -785,6 +785,7 @@ Separate scheduled check for orphaned uploads:
 
 Do not overbuild live infrastructure. The following is sufficient to feel responsive:
 
+- **Stale-while-revalidate cache for events + cliques (since 2026-05-03):** the last successful `listAllEvents()` and `listCliques()` responses are persisted to `SharedPreferences` (versioned + user-scoped keys via `app/lib/core/cache/list_cache_service.dart`). On cold start, `main()` hydrates two `Provider`s before `runApp` (`eventsBootstrapProvider`, `cliquesBootstrapProvider` in `app/lib/core/cache/list_bootstrap_providers.dart`); the events/cliques `AsyncNotifier`s read those overrides during `build()` and return cached data synchronously, then schedule a `Future.microtask` background refresh. Refresh failures are NEVER pushed as `AsyncError` (which would blank the user-visible list) — they go to a dedicated `eventsRefreshErrorProvider` / `cliquesRefreshErrorProvider` that drives an inline "Couldn't refresh — tap to retry" pill on Home. The cache is cleared in `auth_repository.dart` `signOut` / `deleteAccount` / `resetSession`. Eliminates the 15–30 s blocking spinner that returning users saw on cold start while the Function App cold-started its pg pool + signed delegation keys + ran the events query.
 - Push notification on new photo / clique join → user taps to open relevant screen
 - Refresh on app resume via `WidgetsBindingObserver` (`didChangeAppLifecycleState`)
 - Pull-to-refresh via `RefreshIndicator` on list and detail screens

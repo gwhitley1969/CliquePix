@@ -74,4 +74,25 @@ class EventModel {
       expiresAt: DateTime.parse(json['expires_at'] as String),
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'clique_id': cliqueId,
+        'name': name,
+        'description': description,
+        'created_by_user_id': createdByUserId,
+        'created_by_name': createdByName,
+        'created_by_avatar_url': createdByAvatarUrl,
+        'created_by_avatar_thumb_url': createdByAvatarThumbUrl,
+        'created_by_avatar_updated_at': createdByAvatarUpdatedAt?.toIso8601String(),
+        'created_by_avatar_frame_preset': createdByAvatarFramePreset,
+        'retention_hours': retentionHours,
+        'status': status,
+        'photo_count': photoCount,
+        'video_count': videoCount,
+        'clique_name': cliqueName,
+        'member_count': memberCount,
+        'created_at': createdAt.toIso8601String(),
+        'expires_at': expiresAt.toIso8601String(),
+      };
 }

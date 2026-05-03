@@ -8,8 +8,10 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_gradients.dart';
 import '../../../models/event_model.dart';
 import '../../../models/clique_model.dart';
+import '../../../core/cache/last_refresh_error_provider.dart';
 import '../../../widgets/branded_sliver_app_bar.dart';
 import '../../../widgets/error_widget.dart';
+import '../../../widgets/list_skeleton.dart';
 import '../../auth/domain/auth_state.dart';
 import '../../auth/domain/battery_optimization_service.dart';
 import '../../auth/presentation/auth_providers.dart';
@@ -36,12 +38,19 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   Timer? _countdownTimer;
-  bool _howItWorksDismissed = false;
-  bool _prefsLoaded = false;
+  // Default to dismissed=true so users who already cleared the banner never
+  // see it flash on cold start while `_loadPrefs` resolves. The banner only
+  // appears once the pref read confirms `has_dismissed_how_it_works == false`.
+  bool _howItWorksDismissed = true;
   // Session-local guard — backend's `should_prompt_for_avatar` is the
   // persistent gate; this prevents re-showing the prompt if the user
   // navigates away from Home and back during the same session.
   bool _avatarPromptShown = false;
+  // First-render telemetry: fired once when the screen returns non-skeleton
+  // content (cached or fresh) and once when the first fresh refresh lands.
+  bool _firstRenderRecorded = false;
+  bool _firstFreshDataRecorded = false;
+  final Stopwatch _renderClock = Stopwatch()..start();
 
   @override
   void initState() {
@@ -141,7 +150,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     if (mounted) {
       setState(() {
         _howItWorksDismissed = prefs.getBool('has_dismissed_how_it_works') ?? false;
-        _prefsLoaded = true;
       });
     }
   }
@@ -186,9 +194,83 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             screenTitle: 'Home',
           ),
 
+          // Inline refresh / refresh-error pill — only renders when relevant.
+          _buildRefreshPill(eventsAsync, cliquesAsync),
+
           // Content — handle loading/error from both providers
           _buildContent(eventsAsync, cliquesAsync, userName),
         ],
+      ),
+    );
+  }
+
+  Widget _buildRefreshPill(
+    AsyncValue<List<EventModel>> eventsAsync,
+    AsyncValue<List<CliqueModel>> cliquesAsync,
+  ) {
+    // Only show pills when we have data to display below them — pills above
+    // a skeleton are noise.
+    if (!eventsAsync.hasValue && !cliquesAsync.hasValue) {
+      return const SliverToBoxAdapter(child: SizedBox.shrink());
+    }
+    final refreshError = ref.watch(eventsRefreshErrorProvider) ??
+        ref.watch(cliquesRefreshErrorProvider);
+    final reloading = eventsAsync.isReloading || cliquesAsync.isReloading;
+    if (!reloading && refreshError == null) {
+      return const SliverToBoxAdapter(child: SizedBox.shrink());
+    }
+    final isError = refreshError != null && !reloading;
+    return SliverToBoxAdapter(
+      child: GestureDetector(
+        onTap: isError
+            ? () {
+                ref.read(eventsRefreshErrorProvider.notifier).state = null;
+                ref.read(cliquesRefreshErrorProvider.notifier).state = null;
+                ref.read(allEventsListProvider.notifier).refresh();
+                ref.read(cliquesListProvider.notifier).refresh();
+              }
+            : null,
+        child: Container(
+          margin: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: isError
+                ? const Color(0xFF7F1D1D).withValues(alpha: 0.35)
+                : AppColors.electricAqua.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (!isError)
+                const SizedBox(
+                  width: 12,
+                  height: 12,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 1.5,
+                    color: AppColors.electricAqua,
+                  ),
+                )
+              else
+                const Icon(
+                  Icons.cloud_off_rounded,
+                  size: 14,
+                  color: Color(0xFFFCA5A5),
+                ),
+              const SizedBox(width: 8),
+              Text(
+                isError ? 'Couldn\'t refresh — tap to retry' : 'Refreshing…',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: isError
+                      ? const Color(0xFFFCA5A5)
+                      : Colors.white.withValues(alpha: 0.7),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -198,29 +280,57 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     AsyncValue<List<CliqueModel>> cliquesAsync,
     String userName,
   ) {
-    // If either is loading, show loading
-    if (eventsAsync is AsyncLoading || cliquesAsync is AsyncLoading || !_prefsLoaded) {
-      return const SliverFillRemaining(
-        child: Center(child: CircularProgressIndicator(color: AppColors.electricAqua)),
-      );
+    // True first-launch path: no cache, no fresh data yet. Show a skeleton
+    // instead of a full-screen blocking spinner. Returning users who have
+    // cached data hit the render path below on the very first frame.
+    if (!eventsAsync.hasValue && !cliquesAsync.hasValue) {
+      // Only fall through to full-screen error if both providers failed AND
+      // we have no cached data to render.
+      if (eventsAsync.hasError) {
+        return SliverFillRemaining(
+          child: AppErrorWidget(
+            message: eventsAsync.error.toString(),
+            onRetry: () => ref.read(allEventsListProvider.notifier).refresh(),
+          ),
+        );
+      }
+      if (cliquesAsync.hasError) {
+        return SliverFillRemaining(
+          child: AppErrorWidget(
+            message: cliquesAsync.error.toString(),
+            onRetry: () => ref.read(cliquesListProvider.notifier).refresh(),
+          ),
+        );
+      }
+      return const ListSkeleton();
     }
 
-    // If either has error, show error
-    if (eventsAsync is AsyncError) {
-      return SliverFillRemaining(
-        child: AppErrorWidget(
-          message: eventsAsync.error.toString(),
-          onRetry: () => ref.read(allEventsListProvider.notifier).refresh(),
-        ),
-      );
+    // Returning user (cached) OR fresh data has landed. Telemetry: fire the
+    // first-render and first-fresh-data events at most once per HomeScreen
+    // lifetime.
+    if (!_firstRenderRecorded) {
+      _firstRenderRecorded = true;
+      final hadCache = eventsAsync.hasValue && eventsAsync is! AsyncLoading;
+      final ms = _renderClock.elapsedMilliseconds;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref.read(telemetryServiceProvider).record(
+          'home_first_render_ms',
+          extra: {'ms': '$ms', 'hadCache': hadCache.toString()},
+        );
+      });
     }
-    if (cliquesAsync is AsyncError) {
-      return SliverFillRemaining(
-        child: AppErrorWidget(
-          message: cliquesAsync.error.toString(),
-          onRetry: () => ref.read(cliquesListProvider.notifier).refresh(),
-        ),
-      );
+    if (!_firstFreshDataRecorded &&
+        eventsAsync.hasValue &&
+        !eventsAsync.isLoading &&
+        !eventsAsync.isReloading) {
+      _firstFreshDataRecorded = true;
+      final ms = _renderClock.elapsedMilliseconds;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref.read(telemetryServiceProvider).record(
+          'home_first_fresh_data_ms',
+          extra: {'ms': '$ms'},
+        );
+      });
     }
 
     final events = eventsAsync.value ?? [];
