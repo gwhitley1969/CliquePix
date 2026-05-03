@@ -6,6 +6,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_gradients.dart';
+import '../../../core/utils/api_error_messages.dart';
 import '../../../models/event_model.dart';
 import '../../../models/clique_model.dart';
 import '../../../core/cache/last_refresh_error_provider.dart';
@@ -287,9 +288,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       // Only fall through to full-screen error if both providers failed AND
       // we have no cached data to render.
       if (eventsAsync.hasError) {
+        // NEVER render `error.toString()` directly — DioException's toString
+        // produces "DioException [bad response]: This exception was thrown
+        // because the response has a status code of 401..." which leaked
+        // verbatim to the user when the cached MSAL token expired between
+        // sessions (Entra 12-h inactivity timeout). The friendly mapper
+        // handles 401/403/timeout/5xx with human-readable messaging.
+        // For 401 specifically, the AuthInterceptor → AuthNotifier
+        // session-expired callback should already be transitioning state to
+        // AuthReloginRequired and the GoRouter redirect will replace this
+        // screen with WelcomeBackDialog within a frame or two — but the
+        // friendly message is what the user sees if there's any UI lag.
         return SliverFillRemaining(
           child: AppErrorWidget(
-            message: eventsAsync.error.toString(),
+            message: friendlyApiErrorMessage(
+              eventsAsync.error!,
+              resourceLabel: 'events',
+            ),
             onRetry: () => ref.read(allEventsListProvider.notifier).refresh(),
           ),
         );
@@ -297,7 +312,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       if (cliquesAsync.hasError) {
         return SliverFillRemaining(
           child: AppErrorWidget(
-            message: cliquesAsync.error.toString(),
+            message: friendlyApiErrorMessage(
+              cliquesAsync.error!,
+              resourceLabel: 'cliques',
+            ),
             onRetry: () => ref.read(cliquesListProvider.notifier).refresh(),
           ),
         );

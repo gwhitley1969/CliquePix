@@ -248,14 +248,45 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   /// Entry into Layer 5. Called when Layer 3 detects that the foreground
-  /// refresh failed. Reads last-known-user and emits AuthReloginRequired;
-  /// LoginScreen renders WelcomeBackDialog in response.
-  Future<void> _triggerWelcomeBack() async {
+  /// refresh failed, OR when the AuthInterceptor catches a 401 whose token
+  /// refresh failed with a session-expired signature
+  /// (`triggerWelcomeBackOnSessionExpiry`). Reads last-known-user and emits
+  /// AuthReloginRequired; LoginScreen renders WelcomeBackDialog in response.
+  ///
+  /// [source] / [reason] are recorded as telemetry dimensions so we can split
+  /// the welcome-back funnel by trigger origin (`lifecycle` from Layer 3,
+  /// `interceptor` from a 401 in flight). Useful for measuring whether the
+  /// interceptor coordination eliminates the AsyncError-then-WelcomeBack
+  /// flicker we shipped this fix to address.
+  Future<void> _triggerWelcomeBack({String? source, String? reason}) async {
     final hint = await _tokenStorage.getLastKnownUser();
-    debugPrint('[AUTH-LAYER-5] welcome_back_shown email=${hint.email}');
-    _telemetry.record('welcome_back_shown');
+    debugPrint('[AUTH-LAYER-5] welcome_back_shown email=${hint.email} '
+               'source=${source ?? "lifecycle"} reason=${reason ?? "-"}');
+    final extra = <String, String>{};
+    if (source != null) extra['source'] = source;
+    if (reason != null) extra['reason'] = reason;
+    _telemetry.record('welcome_back_shown',
+        extra: extra.isEmpty ? null : extra);
     _stopLifecycle();
     state = AuthReloginRequired(email: hint.email, displayName: hint.name);
+  }
+
+  /// Public entry into Layer 5 from the AuthInterceptor when a 401's token
+  /// refresh fails with a session-expired pattern (AADSTS700082 etc).
+  /// Guards against double-firing — no-op if state is already in a terminal
+  /// re-login or unauth path, or actively signing in. Always fire-and-forget
+  /// from the interceptor so the original 401 still propagates to the caller
+  /// (which surfaces as AsyncError on whichever screen made the call); the
+  /// state transition this method drives causes GoRouter to redirect to
+  /// /login + LoginScreen pops WelcomeBackDialog, replacing the AsyncError UI.
+  Future<void> triggerWelcomeBackOnSessionExpiry({String? reason}) async {
+    final current = state;
+    if (current is AuthReloginRequired ||
+        current is AuthUnauthenticated ||
+        current is AuthLoading) {
+      return;
+    }
+    await _triggerWelcomeBack(source: 'interceptor', reason: reason);
   }
 
   void _telemetryRecord(String event,
