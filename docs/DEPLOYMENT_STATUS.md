@@ -1,6 +1,61 @@
 # DEPLOYMENT_STATUS.md — Clique Pix v1
 
-Last updated: 2026-05-03 (Cold-start spinner eliminated — stale-while-revalidate + deferred main() init)
+Last updated: 2026-05-03 (iPhone video playback hang — fixed via iOS-skips-HLS + universal init-timeout safety net)
+
+## iPhone video playback hang — fixed (2026-05-03)
+
+**Status:** ✅ code complete, ✅ verified on tethered iPhone (iOS 26.4.2) — cloud video plays within ~3-5s, no forever spinner. ✅ `flutter analyze` 54-issue baseline preserved. ✅ `flutter test` 82/82 green.
+
+**The user complaint.** Every cloud video tap on iPhone resulted in a forever spinner — the `_isLoading == true` state never flipped. Local-first uploader playback also reported as hanging. Android worked fine.
+
+**The root cause.** A documented (but not previously hit) iOS AVPlayer limitation: `VideoPlayerController.networkUrl(Uri.file(<m3u8 path>), formatHint: VideoFormat.hls)` with a manifest whose segment lines are absolute `https://*.blob.core.windows.net/...` SAS URLs leaves `AVPlayerItem` in `Status: Unknown` indefinitely. `controller.initialize()` returns a `Future` that NEVER resolves and NEVER throws — so the existing `try/catch` HLS-then-MP4-fallback flow never engaged. ExoPlayer (Android) handles cross-scheme playlist→segment fine, which masked the bug for the entire prior testing window. The "every video hangs" report was misleading: the cloud HLS path hangs hard; local-first and instant-preview paths were collateral damage from the lack of a fail-safe (no init timeout, no controller dispose-on-failure → orphaned `AVPlayerItem` could wedge subsequent attempts).
+
+**The fix.** Two coordinated changes in `app/lib/features/videos/presentation/video_player_screen.dart`, single file:
+
+1. **iOS skips HLS, goes straight to MP4** — new `_iosForcedMp4` state flag, `Platform.isIOS` branch in `_initializePlayer` cloud tier (after `repo.getPlayback()`) that calls `_initWithMp4(playback)` directly and returns. v1 is single-rendition HLS so MP4 progressive download with `+faststart` is functionally equivalent. Caption logic in `_buildBody` gates the misleading "Playing standard quality" caption on `!_iosForcedMp4` so iOS users don't see degraded-service messaging on their primary path. Android keeps the HLS-first flow unchanged.
+2. **Universal init-timeout safety net** — new `_initWithTimeout(controller, duration, tier)` helper wraps every `controller.initialize()` site in `_initializePlayer`, `_initWithHls`, `_initWithMp4`. 8s for local-file tier, 15s for instant-preview / HLS / MP4 tiers. On `TimeoutException` (or any exception): disposes the controller before rethrowing — critical on iOS where an orphaned `AVPlayerItem` can wedge subsequent player attempts. Outer `catch` differentiates `TimeoutException` ("Playback didn't start in time. Tap back and try again.") from generic init failure ("We couldn't play this video. Please try again later."). Mounted-race fix on both `_wireChewie` and `_wireChewieFromController` — disposes the controller cleanly when the user navigates away during init. Persistent `[VPS]` `debugPrint` markers at every step so future iOS playback regressions can be triaged with `flutter run --release` + Xcode device console in minutes instead of hours.
+
+**Why both changes ship together.** The safety net alone makes the user-visible symptom recoverable (15s wait then MP4 plays via existing fallback) — verified on-device. But every iPhone user would eat the 15s wait on every cloud playback. The iOS HLS skip eliminates the wait entirely. The safety net is the long-term insurance — even if a future regression introduces a new hang, the user gets a friendly error instead of forever-spinner.
+
+| Phase | Status | Files |
+|---|---|---|
+| Phase 3 safety net (timeouts, dispose-on-failure, mounted-race fix, [VPS] logs) | ✅ | `app/lib/features/videos/presentation/video_player_screen.dart` |
+| Phase 2A iOS HLS skip (Platform.isIOS branch + `_iosForcedMp4` flag + caption gate) | ✅ | same file |
+| `flutter analyze` 54-issue baseline | ✅ | — |
+| `flutter test` 82/82 | ✅ | — |
+| Tethered-iPhone release-build verification (Gene's iPhone, iOS 26.4.2) | ✅ Verified 2026-05-03 | — |
+| Docs: DEPLOYMENT_STATUS (this), CLAUDE.md, BETA_TEST_PLAN §5, BETA_OPERATIONS_RUNBOOK, VIDEO_ARCHITECTURE_DECISIONS Decision 15 | ✅ | as listed |
+| Commit + push | ⏳ Pending | — |
+| TestFlight release build for broader beta | ⏳ Pending | — |
+
+**Diagnostic process — recorded for future regressions.** The bug was hard to catch because:
+- The symptom was "spinner spins forever" — no error, no crash, no exception in the catch path
+- iOS device testing in beta had primarily exercised the local-first uploader path (which works on iOS without HLS), so the cloud HLS hang was latent for the entire video v1 ship cycle
+- `flutter run --debug` on iOS 26.x triggers the LLDB launch-watchdog issue documented in BETA_OPERATIONS_RUNBOOK, so the user couldn't easily attach for live diagnosis. `flutter run --release` was the workable path
+- The "blank white screen on profile-mode launch" the user reported turned out to be a red herring — it was just slow profile-mode startup + `flutter run` failing to attach VM service, NOT a `main()` hang. The cold-start refactor (commit 3f882a3) was briefly suspected but cleared
+
+The investigation took: 1× full-codebase Explore, 1× backend Explore, 1× iOS native Explore, 1× Plan agent for architecture validation, 1× device-tethered release deploy, 1× user-confirmed end-to-end test. Total wall-clock ~3 hours from first symptom report to verified fix.
+
+**Telemetry to watch (post-deploy soak).**
+```kql
+customEvents
+| where timestamp > ago(7d)
+| where name in ("video_init_timeout", "video_played")
+| extend tier = tostring(customDimensions.tier),
+         platform = tostring(customDimensions.platform)
+| summarize count() by name, tier, platform
+```
+Expect on iOS: `video_played` with `tier=mp4` (the iOS-forced path) at non-zero count; `video_init_timeout` at near-zero. Any non-zero timeout on iOS within 7 days indicates a remaining hang scenario worth investigating. (Telemetry events are TBD — currently we only have `[VPS]` debugPrints; promoting to App Insights `trackEvent` is a separate hygiene PR.)
+
+**Out of scope (tracked for v1.5).**
+- Backend raw-m3u8 endpoint (`GET /api/videos/{id}/playback.m3u8` returning manifest with `Content-Type: application/vnd.apple.mpegurl`) — would let iOS use HTTPS-served HLS instead of `file://` workaround, unblocking adaptive bitrate ladders. Not needed for v1 (single-rendition HLS = MP4-equivalent). Has auth-token-staleness complications since `VideoPlayerController` bypasses Dio's `AuthInterceptor`.
+- App Insights `trackEvent` for the `[VPS]` diagnostic events — currently `debugPrint` only.
+- Two-device cross-platform iOS verification gate added to BETA_TEST_PLAN.md §5 (so the next time something like this slips through the cracks, it's caught before user reports).
+- Investigate why iOS device testing missed this — likely cause: solo dev tested as the uploader (local-first path always succeeds on iOS) and never exercised the cloud HLS path as a clique-mate viewer.
+
+**Rollback plan:** revert the commit. Single-file change, no backend, no infra, no migration. Pre-existing HLS-then-MP4-fallback flow is unchanged on Android.
+
+---
 
 ## Cold-start Home spinner eliminated — stale-while-revalidate cache (2026-05-03)
 

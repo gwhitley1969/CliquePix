@@ -221,6 +221,27 @@ customEvents
    ```
 3. For Android users: confirm battery-optimization exemption was granted (`battery_exempt_granted` event for that user). If not, ask the user to grant it in system Settings → Apps → Clique Pix → Battery → Unrestricted.
 
+### iPhone user reports "video spinner spins forever"
+
+**Symptoms:** "I tap a video on my iPhone and it just spins. Never plays. Same video plays fine on Android."
+
+**Resolution:** confirmed and fixed 2026-05-03. Root cause was a documented iOS AVPlayer limitation: `VideoPlayerController.networkUrl(Uri.file(<m3u8 path>), formatHint: VideoFormat.hls)` with a manifest whose segment lines are absolute `https://*.blob.core.windows.net/...` SAS URLs leaves `AVPlayerItem` in `Status: Unknown` indefinitely. `controller.initialize()` returns a `Future` that NEVER resolves and NEVER throws. ExoPlayer (Android) handles cross-scheme manifest→segment fine, which masked the bug for the entire video v1 ship cycle. Fix shipped:
+- `Platform.isIOS` branch in `_initializePlayer` cloud tier — skips HLS entirely on iOS, goes straight to MP4. v1 single-rendition HLS = MP4-equivalent.
+- Universal `_initWithTimeout` helper wraps every `controller.initialize()` site (8s local file, 15s cloud/preview/HLS/MP4) — disposes controller on failure to prevent orphaned `AVPlayerItem` from wedging subsequent attempts.
+- `[VPS]` `debugPrint` markers at every step — visible via Xcode device console for triage.
+
+**If this symptom recurs in a future build:**
+1. Get the user to install a release build (`flutter build ios --release` then install via Xcode → Run). On iOS 26.x, `flutter run --debug` triggers the LLDB launch-watchdog issue and the app blank-screens before any code runs — `--release` (or `--profile`) is the only diagnostic path. `debugPrint` output still flows to Xcode device console (Window → Devices and Simulators → iPhone → bottom log pane) in release mode.
+2. Have the user tap a video. Watch for `[VPS]` log lines.
+   - **`[VPS] tier=cloud: iOS — skipping HLS, going to MP4`** then `tier=mp4: initialize() returned OK` → fix is working, bug is elsewhere
+   - **No `[VPS]` lines at all** → `_initializePlayer` never ran. Check the navigation/router state, the videoId, the Riverpod provider chain
+   - **`[VPS] tier=mp4: initialize() FAILED` with TimeoutException** → MP4 SAS URL is unreachable. Verify the URL works in Safari from the same network. Check `Content-Type` on the blob (must be `video/mp4`, not `application/octet-stream`)
+   - **`[VPS] tier=mp4: initialize() FAILED` with a different error** → blob auth or codec issue. Inspect the error message
+3. If the iOS branch is gone (e.g., reverted), Phase 2A in `DEPLOYMENT_STATUS.md` "iPhone video playback hang — fixed (2026-05-03)" is the canonical fix. Re-add the `Platform.isIOS` branch in `app/lib/features/videos/presentation/video_player_screen.dart::_initializePlayer` cloud tier (after `repo.getPlayback()` resolves, before the HLS attempt).
+4. **Do NOT re-enable HLS on iOS** unless `docs/VIDEO_ARCHITECTURE_DECISIONS.md` Decision 15 is updated and the v1.5 backend raw-m3u8 endpoint is shipped first. The `file://` workaround will hang again.
+
+**Do not be misled by:** "blank white screen on launch" reports from iPhone users running profile-mode debug builds with `flutter run --profile` — that's just slow profile-mode startup + `flutter run` failing to attach the VM service, NOT a `main()` hang. The app DOES load; the user just hasn't waited long enough or has been distracted by the missing splash. Confirm by asking the user to wait 60+ seconds, or by deploying via Xcode → Run instead of `flutter run`.
+
 ### iOS user reports "app vanishes the second I sign in"
 
 **Symptoms:** "I tap Get Started, Safari opens, I sign in, Safari closes — and the app is just gone. I tap the icon again and I'm signed in fine, but it crashed once on the way in."

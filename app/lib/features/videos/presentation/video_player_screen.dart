@@ -1,3 +1,4 @@
+import 'dart:async' show TimeoutException;
 import 'dart:io';
 import 'package:chewie/chewie.dart';
 import 'package:flutter/material.dart';
@@ -56,6 +57,13 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
   bool _usedLocalFile = false;
   bool _usedFallback = false;
   bool _usedInstantPreview = false;
+  /// iOS-only: cloud playback skipped HLS and used MP4 directly. Distinct
+  /// from `_usedFallback` (which implies degraded service) — on iOS, MP4 IS
+  /// the primary path because AVPlayer hangs on file:// HLS playlists with
+  /// https:// segment URLs. v1 is single-rendition HLS, so MP4 progressive
+  /// download with +faststart is functionally equivalent. Used to suppress
+  /// the misleading "Playing standard quality" caption on iOS.
+  bool _iosForcedMp4 = false;
   bool _isRecovering = false;
   String? _errorText;
 
@@ -65,24 +73,60 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
     _initializePlayer();
   }
 
+  /// Initializes a VideoPlayerController with a hard timeout. On any
+  /// exception (including TimeoutException), disposes the controller before
+  /// rethrowing — critical on iOS where an orphaned AVPlayerItem can wedge
+  /// the next player attempt by holding the AVPlayer slot. [tier] is logged
+  /// at the [VPS] tag for tier-by-tier diagnosis (Phase 1 of the iPhone
+  /// playback hang investigation — see plan).
+  Future<void> _initWithTimeout(
+    VideoPlayerController controller,
+    Duration timeout,
+    String tier,
+  ) async {
+    debugPrint('[VPS] tier=$tier: about to await initialize() '
+               '(timeout=${timeout.inSeconds}s)');
+    final stopwatch = Stopwatch()..start();
+    try {
+      await controller.initialize().timeout(timeout);
+      debugPrint('[VPS] tier=$tier: initialize() returned OK '
+                 'after ${stopwatch.elapsedMilliseconds}ms');
+    } catch (e) {
+      debugPrint('[VPS] tier=$tier: initialize() FAILED '
+                 'after ${stopwatch.elapsedMilliseconds}ms (${e.runtimeType}): $e');
+      try {
+        await controller.dispose();
+      } catch (disposeErr) {
+        debugPrint('[VPS] tier=$tier: dispose() also failed: $disposeErr');
+      }
+      rethrow;
+    }
+  }
+
   Future<void> _initializePlayer() async {
+    debugPrint('[VPS] enter _initializePlayer videoId=${widget.videoId} '
+               'hasLocalPath=${widget.localFilePath != null} '
+               'hasPreviewUrl=${widget.previewUrl != null}');
     try {
       // 1. LOCAL FILE — uploader's device has the original. Fastest path.
       // VideoPlayerController.file() is correct here — the formatHint
       // caveat in CLAUDE.md only applies to HLS manifests; local MP4/MOV
       // files are auto-detected correctly.
       if (widget.localFilePath != null) {
+        debugPrint('[VPS] tier=local: path=${widget.localFilePath}');
         final file = File(widget.localFilePath!);
-        if (await file.exists()) {
-          debugPrint('[CliquePix Video] Local file path: ${widget.localFilePath}');
+        final exists = await file.exists();
+        debugPrint('[VPS] tier=local: file.exists()=$exists');
+        if (exists) {
           _usedLocalFile = true;
           final controller = VideoPlayerController.file(file);
-          await controller.initialize();
+          await _initWithTimeout(
+            controller, const Duration(seconds: 8), 'local');
           _controller = controller;
           _wireChewieFromController(controller);
           return;
         }
-        debugPrint('[CliquePix Video] Local file missing, falling through...');
+        debugPrint('[VPS] tier=local: file missing, falling through');
       }
 
       // 2. INSTANT PREVIEW — uploader fallback (SAS to original blob).
@@ -93,29 +137,50 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
       // the feed refreshes and future playback goes through the normal HLS/MP4
       // pipeline.
       if (widget.previewUrl != null) {
-        debugPrint('[CliquePix Video] Instant-preview path: ${widget.previewUrl}');
+        debugPrint('[VPS] tier=preview: url=${widget.previewUrl!.substring(0, widget.previewUrl!.length > 100 ? 100 : widget.previewUrl!.length)}...');
         _usedInstantPreview = true;
         final controller = VideoPlayerController.networkUrl(
           Uri.parse(widget.previewUrl!),
         );
-        await controller.initialize();
+        await _initWithTimeout(
+          controller, const Duration(seconds: 15), 'preview');
         _controller = controller;
         _wireChewieFromController(controller);
         return;
       }
 
+      debugPrint('[VPS] tier=cloud: fetching /playback');
       final repo = await ref.read(videosRepositoryProvider.future);
       final playback = await repo.getPlayback(widget.videoId);
       _playbackInfo = playback;
+
+      // iOS bypasses HLS entirely. AVPlayer hangs indefinitely on a file://
+      // HLS playlist whose segment lines are absolute https:// SAS URLs (the
+      // shape produced by /playback rewriting). The 15s timeout in the safety
+      // net catches it and falls through to MP4, but every iOS user would eat
+      // the wait on every cloud playback. Going straight to MP4 keeps the UX
+      // instant. v1 is single-rendition HLS so MP4 progressive download with
+      // +faststart is functionally equivalent. Revisit when adaptive bitrate
+      // ladders ship in v1.5 (would require backend raw-m3u8 endpoint to
+      // serve the manifest via https:// instead of file:// — see Phase 2 of
+      // iPhone playback hang plan).
+      if (Platform.isIOS) {
+        debugPrint('[VPS] tier=cloud: iOS — skipping HLS, going to MP4');
+        _iosForcedMp4 = true;
+        await _initWithMp4(playback);
+        return;
+      }
+
+      debugPrint('[VPS] tier=cloud: got playback info, attempting HLS first');
 
       // Try HLS first
       try {
         await _initWithHls(playback);
         return;
       } catch (e, st) {
-        debugPrint('[CliquePix Video] HLS init failed (${e.runtimeType}): $e');
-        debugPrint('[CliquePix Video] HLS stack: $st');
-        debugPrint('[CliquePix Video] Falling back to MP4...');
+        debugPrint('[VPS] tier=cloud: HLS init failed (${e.runtimeType}): $e');
+        debugPrint('[VPS] tier=cloud: HLS stack: $st');
+        debugPrint('[VPS] tier=cloud: Falling back to MP4...');
       }
 
       // HLS failed — try MP4 fallback
@@ -123,49 +188,68 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
       try {
         await _initWithMp4(playback);
       } catch (e, st) {
-        debugPrint('[CliquePix Video] MP4 fallback init failed (${e.runtimeType}): $e');
-        debugPrint('[CliquePix Video] MP4 stack: $st');
+        debugPrint('[VPS] tier=cloud: MP4 fallback init failed (${e.runtimeType}): $e');
+        debugPrint('[VPS] tier=cloud: MP4 stack: $st');
         rethrow;
       }
-    } catch (e) {
-      debugPrint('[CliquePix Video] Player init failed: $e');
+    } catch (e, st) {
+      debugPrint('[VPS] CAUGHT (${e.runtimeType}): $e');
+      debugPrint('[VPS] stack: $st');
       if (mounted) {
         setState(() {
           _isLoading = false;
-          _errorText = "We couldn't play this video. Please try again later.";
+          _errorText = e is TimeoutException
+              ? "Playback didn't start in time. Tap back and try again."
+              : "We couldn't play this video. Please try again later.";
         });
       }
     }
   }
 
-  /// Wires a ChewieController for the instant-preview path (no
-  /// VideoPlaybackInfo available). Mirrors `_wireChewie` but takes just
-  /// the controller.
+  /// Wires a ChewieController for the local-file or instant-preview path
+  /// (no VideoPlaybackInfo available). Mirrors `_wireChewie` but takes just
+  /// the controller. If the user navigated away during init, disposes the
+  /// controller instead of leaking it (was a real bug pre-fix: ChewieController
+  /// was constructed before the mounted check, then state mutation was skipped,
+  /// leaving _chewieController == null which renders SizedBox.shrink — blank).
   void _wireChewieFromController(VideoPlayerController controller) {
-    _chewieController = ChewieController(
-      videoPlayerController: controller,
-      autoPlay: true,
-      looping: false,
-      aspectRatio: controller.value.aspectRatio,
-      materialProgressColors: ChewieProgressColors(
-        playedColor: AppColors.electricAqua,
-        handleColor: AppColors.electricAqua,
-        backgroundColor: Colors.white24,
-        bufferedColor: Colors.white38,
-      ),
-    );
-    if (mounted) {
-      setState(() => _isLoading = false);
+    if (!mounted) {
+      debugPrint('[VPS] _wireChewieFromController: !mounted, disposing');
+      controller.dispose();
+      return;
     }
+    setState(() {
+      _chewieController = ChewieController(
+        videoPlayerController: controller,
+        autoPlay: true,
+        looping: false,
+        aspectRatio: controller.value.aspectRatio,
+        materialProgressColors: ChewieProgressColors(
+          playedColor: AppColors.electricAqua,
+          handleColor: AppColors.electricAqua,
+          backgroundColor: Colors.white24,
+          bufferedColor: Colors.white38,
+        ),
+      );
+      _isLoading = false;
+    });
   }
 
   Future<void> _initWithHls(VideoPlaybackInfo playback) async {
     // Materialize the manifest text into a temp file. video_player can play
     // HLS from a file:// URL but not from raw text or a data URL.
+    //
+    // KNOWN iOS LIMITATION (under investigation — Phase 1 of iPhone playback
+    // hang plan): AVPlayer may hang indefinitely on a file:// HLS playlist
+    // whose segment lines are absolute https:// URLs. ExoPlayer (Android)
+    // handles this fine. If Phase 1 device logs confirm the hypothesis, this
+    // path will be Android-only with iOS forced to MP4 fallback.
     final tempDir = await getTemporaryDirectory();
     final manifestFile = File('${tempDir.path}/cliquepix_video_${widget.videoId}.m3u8');
     await manifestFile.writeAsString(playback.hlsManifest);
     _tempManifestFile = manifestFile;
+    debugPrint('[VPS] tier=hls: manifest written to ${manifestFile.path} '
+               '(${playback.hlsManifest.length} bytes)');
 
     // We use networkUrl with a file:// URI instead of .file() because only
     // the network constructors expose formatHint. formatHint is REQUIRED —
@@ -177,39 +261,45 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
       Uri.file(manifestFile.path),
       formatHint: VideoFormat.hls,
     );
-    await controller.initialize();
+    await _initWithTimeout(controller, const Duration(seconds: 15), 'hls');
     _controller = controller;
     _wireChewie(controller, playback);
   }
 
   Future<void> _initWithMp4(VideoPlaybackInfo playback) async {
+    debugPrint('[VPS] tier=mp4: url=${playback.mp4FallbackUrl.substring(0, playback.mp4FallbackUrl.length > 100 ? 100 : playback.mp4FallbackUrl.length)}...');
     final controller = VideoPlayerController.networkUrl(Uri.parse(playback.mp4FallbackUrl));
-    await controller.initialize();
+    await _initWithTimeout(controller, const Duration(seconds: 15), 'mp4');
     _controller = controller;
     _wireChewie(controller, playback);
   }
 
   void _wireChewie(VideoPlayerController controller, VideoPlaybackInfo playback) {
-    _chewieController = ChewieController(
-      videoPlayerController: controller,
-      autoPlay: true,
-      looping: false,
-      aspectRatio: controller.value.aspectRatio,
-      materialProgressColors: ChewieProgressColors(
-        playedColor: AppColors.electricAqua,
-        handleColor: AppColors.electricAqua,
-        backgroundColor: Colors.white24,
-        bufferedColor: Colors.white38,
-      ),
-    );
-    // Listen for playback errors (e.g. SAS token expiry after 15-min pause).
-    // On error, re-fetch /playback for a fresh manifest and reload at the
-    // current position. Only applies to cloud HLS/MP4 playback — local file
-    // and instant-preview paths don't use SAS tokens.
-    controller.addListener(_onPlaybackError);
-    if (mounted) {
-      setState(() => _isLoading = false);
+    if (!mounted) {
+      debugPrint('[VPS] _wireChewie: !mounted, disposing');
+      controller.dispose();
+      return;
     }
+    setState(() {
+      _chewieController = ChewieController(
+        videoPlayerController: controller,
+        autoPlay: true,
+        looping: false,
+        aspectRatio: controller.value.aspectRatio,
+        materialProgressColors: ChewieProgressColors(
+          playedColor: AppColors.electricAqua,
+          handleColor: AppColors.electricAqua,
+          backgroundColor: Colors.white24,
+          bufferedColor: Colors.white38,
+        ),
+      );
+      // Listen for playback errors (e.g. SAS token expiry after 15-min pause).
+      // On error, re-fetch /playback for a fresh manifest and reload at the
+      // current position. Only applies to cloud HLS/MP4 playback — local file
+      // and instant-preview paths don't use SAS tokens.
+      controller.addListener(_onPlaybackError);
+      _isLoading = false;
+    });
   }
 
   void _onPlaybackError() {
@@ -497,7 +587,10 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
               style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 12),
             ),
           )
-        else if (_usedFallback)
+        else if (_usedFallback && !_iosForcedMp4)
+          // Suppressed on iOS-forced-MP4 path: MP4 is the primary cloud
+          // playback on iOS (HLS hangs on AVPlayer with file:// playlists),
+          // not a degraded fallback — showing the caption would mislead.
           Padding(
             padding: const EdgeInsets.all(8),
             child: Text(

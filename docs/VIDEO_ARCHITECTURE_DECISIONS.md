@@ -983,6 +983,84 @@ Save uses `StorageService.saveVideoToGallery()` with the MP4 fallback URL. Share
 
 ---
 
+## Decision 15: iOS bypasses HLS in v1 (uses MP4 directly)
+
+**Added 2026-05-03 after a user-reported iPhone video hang revealed a documented AVFoundation limitation.**
+
+### Question
+
+iPhone users reported that every cloud video tap resulted in a forever spinner. Same code worked on Android. What's the iOS-specific failure mode and what's the fix?
+
+### Root cause
+
+`VideoPlayerController.networkUrl(Uri.file(<m3u8 path>), formatHint: VideoFormat.hls)` with a manifest whose segment lines are absolute `https://*.blob.core.windows.net/...` SAS URLs (the shape produced by the backend's `rewriteHlsManifest` at `backend/src/shared/services/hlsManifestRewriter.ts`) leaves `AVPlayerItem` in `Status: Unknown` indefinitely on iOS. `controller.initialize()` returns a `Future` that **NEVER resolves and NEVER throws** — so the existing `try/catch` HLS-then-MP4-fallback flow never engaged. ExoPlayer (Android) handles cross-scheme manifest→segment fine, which masked the bug for the entire video v1 ship cycle.
+
+This is a documented (but not previously hit) iOS AVPlayer constraint. AVURLAsset value-loading hangs when the playlist URL scheme (`file://`) doesn't match the segment URL scheme (`https://`) AND the manifest is loaded from a local sandboxed path. The "offline HLS" pattern (`AVAssetDownloadURLSession`) downloads segments to disk and works correctly because BOTH manifest and segments are `file://`. Streaming HLS (`https://` manifest + `https://` segments) also works correctly. **Mixed schemes are unsupported.**
+
+### Chosen: iOS skips HLS entirely on the cloud tier — uses MP4 fallback as the primary path
+
+In `app/lib/features/videos/presentation/video_player_screen.dart::_initializePlayer`, after `repo.getPlayback()` resolves and before the HLS attempt:
+
+```dart
+if (Platform.isIOS) {
+  _iosForcedMp4 = true;
+  await _initWithMp4(playback);
+  return;
+}
+// Android continues with HLS-first flow unchanged
+```
+
+`_iosForcedMp4` is a new state flag distinct from `_usedFallback`. The caption logic in `_buildBody` gates the misleading "Playing standard quality" caption on `!_iosForcedMp4` so iOS users don't see degraded-service messaging on their primary path.
+
+### Why this is safe for v1
+
+- v1 is **single-rendition HLS** — one quality level, one bitrate. MP4 progressive download with `+faststart` (per Decision 3 / FFmpeg `movflags=+faststart`) starts playback after a few hundred KB, functionally equivalent UX to single-rendition HLS.
+- The MP4 fallback URL (`mp4_fallback_blob_path`) is already produced by the transcoder for both fast and slow paths (per Decision 3's tee-muxer invocation). No backend change required.
+- Local-first uploader (`VideoPlayerController.file(file)`) and instant-preview (`VideoPlayerController.networkUrl(Uri.parse(previewUrl))`) tiers work on iOS unchanged — they don't go through the HLS path.
+- Android continues to use HLS-first with MP4 fallback unchanged.
+
+### Universal init-timeout safety net (shipped same commit)
+
+In addition to the iOS branch, every `controller.initialize()` site is now wrapped in a `_initWithTimeout(controller, duration, tier)` helper:
+- **8 second timeout** for local file (no network excuse for a longer wait)
+- **15 second timeout** for instant-preview / HLS / MP4 (covers slow LTE)
+- **On any exception** (including TimeoutException): disposes the controller before rethrowing — critical on iOS where an orphaned `AVPlayerItem` can wedge subsequent attempts by holding the AVPlayer slot
+- **Outer catch differentiates** TimeoutException ("Playback didn't start in time. Tap back and try again.") from generic init failure ("We couldn't play this video. Please try again later.")
+- **Mounted-race fix** on both `_wireChewie` and `_wireChewieFromController` — disposes the controller cleanly when the user navigates away during init (was a real bug pre-fix: ChewieController was constructed before the mounted check, then state mutation was skipped, leaving `_chewieController == null` which renders SizedBox.shrink — blank screen)
+- **`[VPS]` `debugPrint` markers** at every step so future iOS playback regressions can be triaged with `flutter run --release` + Xcode device console in minutes instead of hours
+
+### What this does NOT change
+
+- Backend pipeline (transcoder, manifest rewriter, blob storage layout, /playback endpoint) — completely unchanged
+- Web client — uses `hls.js`, not affected by AVPlayer's cross-scheme limitation
+- Android playback — HLS still primary
+- Adaptive bitrate readiness — when v1.5 ships ladder support, the iOS branch remains because the AVPlayer limitation is independent of rendition count. The proper architectural fix (raw-m3u8 backend endpoint serving manifest over HTTPS) is needed before iOS can use HLS again
+
+### v1.5 follow-up (deferred)
+
+Track 2 from the original plan: add `GET /api/videos/{videoId}/playback.m3u8` returning the rewritten HLS manifest as raw text with `Content-Type: application/vnd.apple.mpegurl`. Client constructs:
+```dart
+VideoPlayerController.networkUrl(
+  Uri.parse('https://api.clique-pix.com/.../playback.m3u8'),
+  formatHint: VideoFormat.hls,
+  httpHeaders: {'Authorization': 'Bearer $token'},
+)
+```
+
+AVPlayer handles HTTPS-manifest + HTTPS-segments cleanly. Required for adaptive bitrate ladders (v1.5+). Has auth-token-staleness complications because `VideoPlayerController` bypasses the Dio `AuthInterceptor` — needs explicit `tokenStorage.isTokenStale()` check + 401-retry path before player init. **Once Track 2 ships, the iOS branch in this Decision becomes a Platform.isIOS-conditional URL choice (m3u8 endpoint vs raw playback JSON) rather than a complete HLS bypass.**
+
+### Investigation cost (recorded for future maintainers)
+
+The bug was hard to triage because:
+- The symptom was "spinner spins forever" — no error, no crash, no exception in any catch path
+- `flutter run --debug` on iOS 26.x triggers the LLDB launch-watchdog issue (per BETA_OPERATIONS_RUNBOOK), so live diagnosis required `--release` + Xcode device console
+- "Blank white screen on profile-mode launch" was a red herring — slow profile-mode startup + VM service detection failure, NOT a `main()` hang. The cold-start refactor (commit 3f882a3) was briefly suspected but cleared
+- iOS device testing in beta had primarily exercised the local-first uploader path (which works on iOS without HLS), so the cloud HLS hang was latent for the entire video v1 ship cycle
+
+Wall-clock from first symptom report to verified fix: ~3 hours. The `[VPS]` debugPrint scaffolding shipped with this fix means any future iOS playback regression should triage in under 30 minutes.
+
+---
+
 ## Decisions deferred to the implementation plan
 
 These are known-unknowns that will be resolved when we write the implementation plan, not now:

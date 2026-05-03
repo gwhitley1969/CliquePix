@@ -128,6 +128,13 @@ This is a manual smoke test checklist to run before each beta release. Every ite
 - [ ] **HLS playback** — Device B taps video, player opens, video plays via HLS
 - [ ] **MP4 fallback** — if HLS fails (check logs), MP4 fallback plays
 - [ ] **Poster image** — feed card shows poster frame before tap
+- [ ] **iOS cloud playback (PRIMARY REGRESSION FIX, added 2026-05-03)** — Account A (Android) uploads a video, waits for `video_ready`. Account B (iPhone) opens the event feed, taps the poster card. **MP4 begins playback within ~3-5 seconds. NO infinite spinner. NO 15s wait.** Caption area does NOT show "Playing standard quality" (because `_iosForcedMp4` is the primary path on iOS, not a fallback). Verify via `[VPS] tier=cloud: iOS — skipping HLS, going to MP4` log line in Xcode device console
+- [ ] **Android cloud playback unchanged** — same test, Android viewer. HLS still plays first, `_usedFallback` remains false on happy path. Verify via `[VPS] tier=cloud: got playback info, attempting HLS first` log line
+- [ ] **iOS local-file playback unchanged** — uploader (iPhone) records or picks a video, taps the local-pending card immediately. Plays from device file with zero network wait. Caption: "Playing from your device". Verify via `[VPS] tier=local: file.exists()=true` then `tier=local: initialize() returned OK` log lines
+- [ ] **iOS instant-preview playback unchanged** — uploader's local file unavailable (force `localFilePath: null`); tap during processing. Plays from preview SAS URL. Caption: "Playing preview while we finish processing...". Verify via `[VPS] tier=preview: initialize() returned OK` log line
+- [ ] **iOS player init timeout safety net** — enable airplane mode, then tap a cloud video that has not been cached. Within 15s the friendly error "Playback didn't start in time. Tap back and try again." appears. Back button works. Disabling airplane mode + retry works. Verify via `[VPS] tier=mp4: initialize() FAILED ... TimeoutException` log line
+- [ ] **iOS local-file timeout (8s)** — corrupt a local recording (truncate to <1KB) → friendly error within 8s, no hang
+- [ ] **`mounted`-race regression** — tap a cloud video, immediately tap the back arrow before init completes. App does not crash; no orphaned `AVPlayerItem` warnings in Xcode console; navigation succeeds cleanly. Verify via `[VPS] _wireChewie: !mounted, disposing` log line
 
 ### Actions
 
