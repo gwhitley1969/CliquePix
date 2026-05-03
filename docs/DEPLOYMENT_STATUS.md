@@ -1,6 +1,69 @@
 # DEPLOYMENT_STATUS.md — Clique Pix v1
 
-Last updated: 2026-05-03 (iPhone video playback hang — fixed via iOS-skips-HLS + universal init-timeout safety net)
+Last updated: 2026-05-03 (Raw DioException leak on session-expired 401 — fixed via interceptor → notifier coordination + friendly home-screen error)
+
+## Raw DioException leak on session-expired 401 — fixed (2026-05-03)
+
+**Status:** ✅ code complete, ✅ `flutter analyze` 54-issue baseline preserved, ✅ `flutter test` 82/82 green, ✅ committed `0d1ffcb` and pushed to `main`. **Pending:** APK + IPA build for broader rollout, on-device verification of the `welcome_back_shown { source=interceptor }` telemetry split.
+
+**The user complaint.** Returning iPhone user (cached MSAL token from 2 days ago — past Entra's hardcoded 12-hour inactivity timeout) saw a raw error message on the home screen verbatim: *"DioException [bad response]: This exception was thrown because the response has a status code of 401 and RequestOptions.validateStatus was configured to throw for this status code. The status code of 401 has the following meaning: 'Client error - the request contains bad syntax or cannot be fulfilled'..."*. The 5-layer Entra defense's Layer 5 (WelcomeBackDialog) eventually appeared but was racing the AsyncError UI to the screen — and losing.
+
+**The bug chain.** Cold start with stale token + no list cache (returning user predates the 2026-05-03 cold-start cache rollout):
+
+1. `main()` reads cached token + UserModel from secure storage → `bootstrapState = AuthAuthenticated(cachedUser)`
+2. Router resolves `AuthAuthenticated` → renders `/events` → `HomeScreen.build`
+3. `HomeScreen` watches `allEventsListProvider`. `AllEventsNotifier.build()` sees `cached == null` (no cache yet) → calls `repo.listAllEvents()` directly — **no try/catch**
+4. Backend returns 401 (token past 12h inactivity)
+5. `AuthInterceptor.onError` catches the 401 → tries `tokenStorage.refreshToken()` (the bool variant) → MSAL `acquireTokenSilent` fails with `AADSTS700082` → `refreshed = false` → falls through and propagates the original `DioException` via `handler.next(err)`. **The interceptor only `debugPrint`'d the failure — it did NOT signal `AuthNotifier`**, so `AuthAuthenticated` state persisted
+6. `AllEventsNotifier.build()` had no error handling → AsyncNotifier transitions to `AsyncError(DioException)`
+7. `home_screen.dart:292` rendered `eventsAsync.error.toString()` → "DioException [bad response]: ..." text painted to screen
+8. Concurrently, `_verifyInBackground` (also fired by AuthNotifier on AuthAuthenticated bootstrap) was running its own `silentSignIn` — it eventually failed with the same AADSTS700082, matched `_handleSilentSignInFailure`'s session-expired regex, and transitioned state to `AuthReloginRequired`. GoRouter redirected to `/login` → WelcomeBackDialog appeared
+9. **The user saw the raw DioException for ~1-2 seconds before WelcomeBackDialog overlaid it**
+
+**The fix.** Two coordinated changes in one commit (`0d1ffcb`), three files:
+
+1. **`home_screen.dart`** — replace `eventsAsync.error.toString()` and `cliquesAsync.error.toString()` with the existing `friendlyApiErrorMessage(err, resourceLabel: ...)` helper from `core/utils/api_error_messages.dart` which explicitly never returns raw `DioException` toString. Maps 401/403/timeout/5xx to human-readable messaging.
+
+2. **`auth_interceptor.dart` + `auth_providers.dart`** — root-cause coordination:
+   - Interceptor switches from `tokenStorage.refreshToken()` (bool) to `authRepository.refreshTokenDetailed()` (`RefreshResult` with structured `errorCode`)
+   - On refresh failure with session-expired pattern (`AADSTS700082` / `AADSTS500210` / `no_account_found`): fires `AuthNotifier.triggerWelcomeBackOnSessionExpiry(reason: errorCode)` fire-and-forget. Auth state transitions immediately, racing the AsyncError to the screen
+   - New public `triggerWelcomeBackOnSessionExpiry({reason})` on AuthNotifier with state guard against double-firing (no-op if already in `AuthReloginRequired` / `AuthUnauthenticated` / `AuthLoading`)
+   - `_triggerWelcomeBack` refactored to accept optional `source` / `reason` for telemetry splitting — `welcome_back_shown { source: 'interceptor' | 'lifecycle' }` lets us measure fix effectiveness in App Insights
+   - The session-expired regex is now in THREE sites in sync: `AuthRepository._extractAadstsCode`, `AuthNotifier._handleSilentSignInFailure`, and `AuthInterceptor._isSessionExpired` — comment on each notes the others. Adding a new pattern (e.g., a future Entra error code) requires updating all three
+
+**TimeoutException on refresh intentionally does NOT trigger welcome-back** — a hung MSAL is more likely a network hiccup than session-expiry, and Layer-3 on-resume retries cleanly. Logging out on transient timeout would be worse UX than the brief AsyncError flicker (which now shows a friendly message anyway).
+
+| Phase | Status | Files |
+|---|---|---|
+| Fix 1: home_screen renders friendly error (no raw `error.toString()`) | ✅ | `app/lib/features/home/presentation/home_screen.dart` |
+| Fix 2: interceptor → notifier session-expired signal + telemetry split | ✅ | `app/lib/services/auth_interceptor.dart`, `app/lib/features/auth/presentation/auth_providers.dart` |
+| `flutter analyze` 54-issue baseline | ✅ | — |
+| `flutter test` 82/82 | ✅ | — |
+| Commit + push | ✅ `0d1ffcb` | — |
+| Docs: DEPLOYMENT_STATUS (this), CLAUDE.md, BETA_TEST_PLAN §1, BETA_OPERATIONS_RUNBOOK | ✅ | as listed |
+| TestFlight / APK rollout for broader beta | ⏳ Pending | — |
+| 24-72h telemetry soak: confirm `welcome_back_shown { source=interceptor }` rows appear and the AsyncError-then-WelcomeBack flicker is gone | ⏳ Pending | — |
+
+**Telemetry to watch (App Insights `customEvents`):**
+```kql
+customEvents
+| where timestamp > ago(7d)
+| where name == "welcome_back_shown"
+| extend source = tostring(customDimensions.source),
+         reason = tostring(customDimensions.reason)
+| summarize count() by source, reason
+```
+Healthy after fix lands: `source=interceptor` rows appear when stale tokens 401 mid-app-use (specifically: returning users who haven't opened the app in >12h on a screen that makes an API call). `source=lifecycle` (or empty for legacy events) is the on-resume Layer-3 path. The `reason` dimension carries the MSAL error code (`AADSTS700082` etc).
+
+**Out of scope (tracked for future).**
+- Audit the rest of the codebase for other `SnackBar(content: Text('Failed to X: $e'))` patterns that could leak DioExceptions on local actions (delete account, delete photo, share video, etc.) — narrow scopes, but worth a sweep
+- Promote `[VPS]` debugPrints from the prior video PR to App Insights `trackEvent` for visibility
+- Add a "stale-token cold-start" regression test to `BETA_TEST_PLAN.md` §1 — synthetically expire the token and verify the user lands on WelcomeBack within a frame, never sees a raw error
+- Consider extracting the session-expired matcher into a shared helper used by all three sites (low priority — the comment block keeps the three in sync)
+
+**Rollback plan:** revert `0d1ffcb`. Three-file change, no backend, no infra, no migration. Pre-existing behavior (raw error leak + delayed WelcomeBack) returns.
+
+---
 
 ## iPhone video playback hang — fixed (2026-05-03)
 

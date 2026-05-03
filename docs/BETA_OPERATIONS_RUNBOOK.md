@@ -221,6 +221,37 @@ customEvents
    ```
 3. For Android users: confirm battery-optimization exemption was granted (`battery_exempt_granted` event for that user). If not, ask the user to grant it in system Settings → Apps → Clique Pix → Battery → Unrestricted.
 
+### User reports a raw "DioException [bad response]: ... 401" on the home screen
+
+**Symptoms:** "I opened the app and it showed a long red error message starting with 'DioException [bad response]'. It went away after a few seconds and asked me to sign in, but I saw the technical error first."
+
+**Resolution:** confirmed and fixed 2026-05-03. The user-reported leak path was: returning user with cached MSAL token past Entra's 12-hour inactivity timeout (AADSTS700082) → cold-start `AllEventsNotifier.build()` called `repo.listAllEvents()` directly with no try/catch → 401 → `AuthInterceptor` attempted refresh, MSAL failed, but the interceptor only `debugPrint`'d the failure → AsyncNotifier transitioned to AsyncError → `home_screen.dart:292` rendered `eventsAsync.error.toString()` (the raw DioException). Concurrently, `_verifyInBackground` was racing to transition state to AuthReloginRequired, but the user saw the raw error first. Fix shipped:
+- `home_screen.dart` now uses `friendlyApiErrorMessage(err, resourceLabel: ...)` instead of `error.toString()` — never renders raw DioException text
+- `AuthInterceptor` switched to `authRepository.refreshTokenDetailed()` (returns structured `RefreshResult`) and on session-expired refresh failure (AADSTS700082 / AADSTS500210 / no_account_found) fires `AuthNotifier.triggerWelcomeBackOnSessionExpiry()` to transition state immediately — racing the AsyncError to the screen
+- New `welcome_back_shown { source: 'interceptor' | 'lifecycle' }` telemetry split lets us measure how often the interceptor path fires vs the legacy on-resume path
+
+**If this symptom recurs in a future build:**
+1. Have the user screenshot the error (the verbatim "DioException" text vs the friendly mapping is the smoking gun for whether `friendlyApiErrorMessage` is being called)
+2. Check App Insights for the welcome-back source split:
+   ```kql
+   customEvents
+   | where timestamp > ago(24h)
+   | where name == "welcome_back_shown"
+   | extend source = tostring(customDimensions.source),
+            reason = tostring(customDimensions.reason)
+   | summarize count() by source, reason
+   ```
+   - `source=interceptor` rows mean the coordination is firing — the user shouldn't have seen the raw error at all. If they did, the home_screen.dart friendly-message change is missing
+   - All `source` empty (legacy events only) or `source=lifecycle` only — the interceptor coordination is broken. Check `AuthInterceptor._isSessionExpired` matches the actual `errorCode` returned by `refreshTokenDetailed()` (the regex must stay in sync with `AuthRepository._extractAadstsCode`)
+3. Most common regression cause: a future change reverts `home_screen.dart` to render `error.toString()` directly. Re-apply the `friendlyApiErrorMessage` import and call.
+4. Second-most-common: a new screen surfaces a raw `DioException` via SnackBar/Dialog with `Text('$e')` or `Text(e.toString())`. Audit:
+   ```bash
+   cd app && grep -rn "SnackBar.*Text.*\$e\|content: Text(.*toString" lib/
+   ```
+   For any local action (delete photo, share video, delete account), the error is narrow-scope and a generic "Failed to X: ..." message is acceptable. For any bootstrap/refresh path that fires on cold start, the error MUST go through `friendlyApiErrorMessage` to avoid leaking raw DioException text.
+
+**Three sites must stay in sync** (regex-matched session-expired pattern): `app/lib/services/auth_interceptor.dart::_isSessionExpired`, `app/lib/features/auth/domain/auth_repository.dart::_extractAadstsCode`, `app/lib/features/auth/presentation/auth_providers.dart::_handleSilentSignInFailure`. Adding a new pattern (e.g., a future Entra error code) requires updating all three. The comment on each site notes the others.
+
 ### iPhone user reports "video spinner spins forever"
 
 **Symptoms:** "I tap a video on my iPhone and it just spins. Never plays. Same video plays fine on Android."
