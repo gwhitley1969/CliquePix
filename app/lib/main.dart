@@ -68,10 +68,17 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
         configFilePath: MsalConstants.androidConfigFilePath,
         redirectUri: MsalConstants.androidRedirectUri,
       ),
+      // Match interactive PCA broker so MsalAuth.broker (static, process-wide)
+      // stays consistent across isolates. Background path only does silent
+      // acquisition (no browser opens), so the broker value is functionally
+      // irrelevant here — but keeping it identical avoids a footgun where the
+      // last-created PCA's broker clobbers state for a subsequent interactive
+      // auth in a different isolate. See auth_repository.dart for the iOS
+      // cookie-jar reasoning that selects `msAuthenticator` over `safariBrowser`.
       appleConfig: AppleConfig(
         authority: MsalConstants.authority,
         authorityType: AuthorityType.b2c,
-        broker: Broker.safariBrowser,
+        broker: Broker.msAuthenticator,
       ),
     );
     final result = await pca.acquireTokenSilent(scopes: MsalConstants.scopes);

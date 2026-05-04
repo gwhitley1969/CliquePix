@@ -40,10 +40,22 @@ class AuthRepository {
         configFilePath: MsalConstants.androidConfigFilePath,
         redirectUri: MsalConstants.androidRedirectUri,
       ),
+      // iOS broker = msAuthenticator (NOT safariBrowser). msal_auth 3.3.0's iOS
+      // bridge only honors `prefersEphemeralWebBrowserSession = true` (set
+      // unconditionally at MsalAuthPlugin.swift:220) when webviewType falls into
+      // the `default:` case → ASWebAuthenticationSession on iOS 13+. The
+      // `safariBrowser` case forces SFSafariViewController, which has a per-app
+      // PERSISTENT cookie jar that survives signOut and traps users on the
+      // previous account's "Continue as <name>" prompt. `msAuthenticator` lands
+      // us in the default case; for B2C/CIAM tenants MSAL skips Authenticator
+      // brokering automatically (B2C unsupported) and uses the ephemeral web
+      // session — fresh cookie jar per sign-in, destroyed at session end.
+      // LSApplicationQueriesSchemes (msauthv2, msauthv3) already in Info.plist
+      // satisfies the brokerAvailability=.auto requirement.
       appleConfig: AppleConfig(
         authority: MsalConstants.authority,
         authorityType: AuthorityType.b2c,
-        broker: Broker.safariBrowser,
+        broker: Broker.msAuthenticator,
       ),
     );
     return _pca!;

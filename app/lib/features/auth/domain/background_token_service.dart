@@ -58,10 +58,14 @@ void callbackDispatcher() {
           configFilePath: MsalConstants.androidConfigFilePath,
           redirectUri: MsalConstants.androidRedirectUri,
         ),
+        // Match interactive PCA broker (see auth_repository.dart for rationale).
+        // Background WorkManager isolate only does silent acquisition (no browser),
+        // so the broker value is functionally irrelevant — but consistency across
+        // PCA creation sites avoids static-state clobbering between isolates.
         appleConfig: AppleConfig(
           authority: MsalConstants.authority,
           authorityType: AuthorityType.b2c,
-          broker: Broker.safariBrowser,
+          broker: Broker.msAuthenticator,
         ),
       );
 

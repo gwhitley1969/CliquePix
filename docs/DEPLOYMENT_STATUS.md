@@ -1,6 +1,67 @@
 # DEPLOYMENT_STATUS.md — Clique Pix v1
 
-Last updated: 2026-05-04 (iPhone-portrait videos play sideways on Android — fixed + deployed + on-device verified via slow-path bake-in + canStreamCopy rotation gate + portrait-aware scale filter)
+Last updated: 2026-05-04 (iOS account-switching unblocked — Broker.safariBrowser → Broker.msAuthenticator on iPhone unwraps SFSafariViewController's persistent cookie trap; on-device verified)
+
+## iOS account-switching trapped in previous user's CIAM session — fixed (2026-05-04)
+
+**Status:** ✅ code complete (3 line-changes + comments), ✅ flutter analyze 54-issue baseline preserved, ✅ flutter test 82/82 green, ✅ release IPA built + installed on Gene's iPhone (00008120-001965E014C3601E, iOS 26.4.2) in 22.2s, ✅ on-device verified by Gene Whitley 2026-05-04 — sign-out as user A → sign-in attempt as user B no longer traps on CIAM "Continue as A" prompt. **Pending:** Android regression check on Samsung, commit + push to main, doc updates merged.
+
+**The user complaint.** On iPhone, after signing out as user A (Google federated, e.g. `genewhitley2017@gmail.com`) and tapping Get Started to sign in as user B (e.g. `paulawhitley2017@gmail.com`), CIAM (`cliquepix.ciamlogin.com`) silently recognized user A's session and showed *"Are you trying to sign in to Clique Pix?"* with A's email pre-recognized. Continue → signed back in as A directly with NO password re-prompt (the cookie did the auth). Cancel → returned to LoginScreen with no escape; every subsequent Get Started repeated the same prompt forever. **Android did not reproduce** with the same accounts. The only known workaround pre-fix was uninstall-and-reinstall.
+
+**The root cause — confirmed by reading `msal_auth` 3.3.0 iOS source.** `~/.pub-cache/hosted/pub.dev/msal_auth-3.3.0/ios/Classes/MsalAuthPlugin.swift:220` unconditionally sets `webViewParameters.prefersEphemeralWebBrowserSession = true` on iOS 13+ — the intent is fresh cookie jar per sign-in. But the very next switch (lines 221-236) overrides `webviewType` based on `MsalAuth.broker`:
+
+- `safariBrowser` → `webviewType = .safariViewController` ← **THE BUG**
+- `webView` → `.wkWebView`
+- default (any other string, including `msAuthenticator`) → `.default` (ASWebAuthenticationSession on iOS 13+)
+
+`prefersEphemeralWebBrowserSession` is an ASWebAuthenticationSession-only API. SFSafariViewController **silently ignores** the flag and uses its iOS-11+ per-app **persistent** cookie jar. CIAM's session cookie at `cliquepix.ciamlogin.com` survived `pca.signOut()` (which only clears the MSAL keychain at `com.microsoft.adalcache`, not the cookie jar). The next `acquireToken` opened SFSafariViewController, sent the cookie, and CIAM completed auth silently via the cookie — `Prompt.login` was bypassed because the cookie did the auth before any prompt was rendered.
+
+**Why Android wasn't affected.** Android MSAL reads `"authorization_user_agent": "BROWSER"` and `"browser_sign_out_enabled": true` from `app/assets/msal_config.json`. On signOut, Android MSAL navigates to the OIDC `oauth2/v2.0/logout` endpoint inside Chrome Custom Tabs and clears the cookie server-side. iOS doesn't read `msal_config.json` at all (`utils.dart:39` shows the `broker` field is iOS-only; the JSON file path is only on `AndroidConfig`) — `browser_sign_out_enabled` is dead config on iOS. Same JSON file, totally different platform code paths.
+
+**The fix.** Change `Broker.safariBrowser` → `Broker.msAuthenticator` at all 3 PCA-creation call sites:
+
+| File | Line | Change |
+|---|---|---|
+| `app/lib/features/auth/domain/auth_repository.dart` | 58 | `Broker.safariBrowser` → `Broker.msAuthenticator` (+ explanatory comment) |
+| `app/lib/main.dart` | 81 | same change (+ comment) |
+| `app/lib/features/auth/domain/background_token_service.dart` | 68 | same change (+ comment) |
+
+`Broker.msAuthenticator` routes msal_auth into the `default:` webviewType branch → ASWebAuthenticationSession on iOS 13+ → `prefersEphemeralWebBrowserSession=true` is now effective → each interactive sign-in gets a fresh ephemeral cookie jar that's destroyed at session end. **Cookies cannot persist across sign-ins by construction.** The enum name is misleading: for our B2C/CIAM tenant, MSAL never brokers via the Microsoft Authenticator app (B2C is unsupported by Authenticator broker), so the actual behavior is "use ASWebAuthenticationSession with ephemeral session." `LSApplicationQueriesSchemes` (`msauthv2`, `msauthv3`) already in `Info.plist` satisfies the `MSALGlobalConfig.brokerAvailability=.auto` requirement that this enum value brings. Background-isolate sites (Layer 2 silent push, Layer 4 WorkManager) only run `acquireTokenSilent` (no browser opens), so the broker value is functionally irrelevant there — but `MsalAuth.broker` is a process-wide Swift static and last-write-wins, so consistency across PCA-creation sites avoids static-state clobbering between isolates.
+
+**UX side-effect.** iOS shows a one-time-per-session system prompt — *"'Clique Pix' Wants to Use 'cliquepix.ciamlogin.com' to Sign In — This allows the app and website to share information about you."* — before the auth flow opens. Standard iOS OAuth UX (Reddit, Discord, Twitter all show it). With ephemeral session it may appear every sign-in (no SSO state to remember). Acceptable trade-off vs the bug.
+
+| Phase | Status | Files |
+|---|---|---|
+| Phase 0 verification — msal_auth 3.3.0 iOS source inspected | ✅ | (read-only) |
+| Edits at 3 PCA creation sites | ✅ | as listed above |
+| `flutter analyze` 54-issue baseline preserved | ✅ | — |
+| `flutter test` 82/82 green | ✅ | — |
+| iOS release build + install on Gene's iPhone | ✅ Verified 2026-05-04 | — |
+| Reproduction test on iPhone (Gene → sign out → Paula → sign out → Gene) | ✅ Verified 2026-05-04 | — |
+| Docs: `CLAUDE.md` Frontend deps section, `ARCHITECTURE.md` iOS MSAL Platform Configuration, `ENTRA_REFRESH_TOKEN_WORKAROUND.md` Known unknowns table, this entry | ✅ | as listed |
+| Android regression test on Samsung (sign-out → switch account) | ⏳ Pending | — |
+| Commit + push to main | ⏳ Pending | — |
+| 24h telemetry soak — Layer 2/3/4 background-isolate health | ⏳ Pending | — |
+
+**Telemetry to watch (App Insights).** Background isolate paths (Layer 2 silent push, Layer 4 WorkManager) should be unaffected by the broker change since they only run `acquireTokenSilent`. Soak query:
+```kql
+customEvents
+| where timestamp > ago(24h)
+| where name in ("silent_push_refresh_success", "silent_push_refresh_failed",
+                 "wm_refresh_success", "wm_refresh_failed",
+                 "foreground_refresh_success", "foreground_refresh_failed")
+| summarize count() by name, bin(timestamp, 1h)
+```
+**Healthy:** rates within ±20% of pre-deploy baseline. A spike in `silent_push_refresh_failed` or `wm_refresh_failed` would indicate the broker change accidentally affected silent acquisition (unexpected — silent acquisition doesn't open a browser).
+
+**Residual risks (acknowledged, not blocking).**
+- **Microsoft Authenticator-installed iPhone:** B2C is documented as unsupported by Authenticator broker; MSAL falls through to web flow. Vanishingly few Clique Pix consumer users have Authenticator installed. If beta users report sign-in failures, check telemetry for `WORKPLACE_JOIN_REQUIRED` / `INTERACTION_REQUIRED` codes.
+- **Federated Google sign-in via ASWebAuthenticationSession:** ASWebAuthenticationSession is Safari-backed, uses standard Safari User-Agent, passes Google's "no embedded webview" rule. Verified by Gene's on-device test 2026-05-04.
+- **Pre-fix iOS users have stale cookies in the SFSafariViewController per-app jar:** new code never opens SFSafariViewController, so those orphaned cookies are unreachable and harmless. They expire on CIAM's tenant-default session lifetime (~24h).
+
+**Rollback plan.** Single revert: `git checkout app/lib/features/auth/domain/auth_repository.dart app/lib/main.dart app/lib/features/auth/domain/background_token_service.dart`. Pre-existing buggy behavior returns. No backend, no infra, no migration, no portal config to undo.
+
+---
 
 ## iPhone-recorded video plays sideways on Android viewer — fixed (2026-05-04)
 
