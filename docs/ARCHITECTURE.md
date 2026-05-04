@@ -1154,7 +1154,7 @@ The architecture is:
 | `CLAUDE.md` | Development guardrails, locked decisions, implementation rules for Claude Code |
 | `ENTRA_REFRESH_TOKEN_WORKAROUND.md` | Complete 5-layer token refresh implementation (code samples, debug tags, test procedures) |
 | `EVENT_DM_CHAT_ARCHITECTURE.md` | Event-centric 1:1 DM design: Web PubSub delivery, schema, auth rules |
-| `VIDEO_ARCHITECTURE_DECISIONS.md` | 15 video architecture decisions (transcoder, HLS delivery, stream-copy fast path, local-first playback, etc.) |
+| `VIDEO_ARCHITECTURE_DECISIONS.md` | 17 video architecture decisions (transcoder, HLS delivery, stream-copy fast path, local-first playback, iOS HLS bypass, source rotation handling, etc.) |
 | `VIDEO_LOCAL_FIRST_UPLOADER_ARCHITECTURE.md` | Local-first uploader playback handoff doc — architecture and implementation |
 | `VIDEO_INFRASTRUCTURE_RUNBOOK.md` | As-built runbook for video Azure infra (ACR, Container Apps, KEDA, RBAC) |
 | `NOTIFICATION_SYSTEM.md` | Push notification architecture: FCM payloads, Web PubSub events, token lifecycle |

@@ -19,5 +19,5 @@
     "moduleResolution": "node"
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "test-output", "sample-videos"]
+  "exclude": ["node_modules", "dist", "test-output", "sample-videos", "src/**/__tests__/**", "src/**/*.test.ts"]
 }

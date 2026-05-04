@@ -26,8 +26,48 @@ const FFPROBE_BIN = process.env.FFPROBE_PATH ?? 'ffprobe';
 
 // Hard limits from architecture decisions
 const MAX_DURATION_SECONDS = 5 * 60; // 5 minutes (Decision 0 / spec)
-const MAX_OUTPUT_HEIGHT = 1080; // Single 1080p rendition (Decision 3)
+const MAX_OUTPUT_HEIGHT = 1080; // Single 1080p rendition (Decision 3) — used for the canStreamCopy gate
+// Long-edge cap for the slow-path scale filter. 1920 covers both 1080p
+// landscape (1920×1080) and 1080p portrait (1080×1920) without downscale.
+// computeOutputDimensions below is the JS mirror of this filter; keep both
+// in sync if the cap ever changes.
+export const MAX_OUTPUT_LONG_EDGE = 1920;
 const HLS_SEGMENT_DURATION = 4; // 4-second segments for VOD (Decision 3 standard)
+
+/**
+ * Predict the output width/height of the slow-path FFmpeg encode given a
+ * source's storage dimensions and rotation. Mirrors:
+ *
+ *   1. FFmpeg autorotate at decode (swaps W/H for ±90° rotation)
+ *   2. Slow-path scale filter:
+ *      `scale=min(1920,iw):min(1920,ih):force_original_aspect_ratio=decrease`
+ *   3. libx264's even-dimension requirement (round down to even)
+ *
+ * Used by the runner so the callback can report the actual delivered
+ * dimensions without an extra ffprobe round-trip on the output file.
+ *
+ * Exported for unit testing.
+ */
+export function computeOutputDimensions(
+  sourceWidth: number,
+  sourceHeight: number,
+  rotation: 0 | 90 | 180 | 270,
+): { width: number; height: number } {
+  // Autorotate swaps W/H for ±90; 180 is a flip with same dimensions.
+  const [w, h] = rotation === 90 || rotation === 270
+    ? [sourceHeight, sourceWidth]
+    : [sourceWidth, sourceHeight];
+
+  // force_original_aspect_ratio=decrease: scale by the more aggressive of the
+  // two min() ratios, never upscale.
+  const scale = Math.min(1, MAX_OUTPUT_LONG_EDGE / Math.max(w, h));
+
+  // libx264 requires even dimensions; round down to even.
+  const outW = Math.floor((w * scale) / 2) * 2;
+  const outH = Math.floor((h * scale) / 2) * 2;
+
+  return { width: outW, height: outH };
+}
 
 // ====================================================================================
 // ffprobe — server-side authoritative validation
@@ -41,6 +81,17 @@ interface FfprobeStream {
   duration?: string;
   color_transfer?: string;
   color_primaries?: string;
+  // Legacy mov atom (older iOS, Android camera apps): `tags.rotate = "90"`.
+  // ffprobe surfaces it as a JSON string (not a number).
+  tags?: { rotate?: string };
+  // Modern iPhone (iOS 14+) writes rotation as Display Matrix side data on the
+  // video stream. ffprobe computes the canonical angle into the `rotation`
+  // field on the matching side_data entry; values are typically negative
+  // (e.g. -90 for portrait) per FFmpeg's CW convention.
+  side_data_list?: Array<{
+    side_data_type?: string;
+    rotation?: number;
+  }>;
 }
 
 interface FfprobeOutput {
@@ -49,6 +100,51 @@ interface FfprobeOutput {
     duration?: string;
   };
   streams?: FfprobeStream[];
+}
+
+/**
+ * Extract the source video rotation from an ffprobe stream object and
+ * normalize it to a cardinal CCW angle in 0/90/180/270 degrees.
+ *
+ * Resolution order:
+ *   1. Display Matrix side data (modern iOS) — preferred, canonical.
+ *   2. Legacy `tags.rotate` mov atom (older iOS, some Android cameras).
+ *   3. 0 (no rotation) — also returned for unrecognizable values.
+ *
+ * The angle direction (CW vs CCW) does not matter for our usage downstream.
+ * We only branch on `rotation === 0` vs not for path selection (canStreamCopy).
+ * FFmpeg's default `autorotate` behavior consumes the source metadata and
+ * produces correctly-oriented frames regardless of the source convention.
+ *
+ * Exported for unit testing.
+ */
+export function extractRotation(stream: FfprobeStream): 0 | 90 | 180 | 270 {
+  const rawAngle = readRawAngle(stream);
+  if (rawAngle === null) return 0;
+  // Normalize to [0, 360)
+  const normalized = ((rawAngle % 360) + 360) % 360;
+  // Snap to nearest cardinal angle. Anything that doesn't land within 1° of a
+  // cardinal angle is treated as 0 (no recognizable orientation).
+  if (Math.abs(normalized - 0) <= 1 || Math.abs(normalized - 360) <= 1) return 0;
+  if (Math.abs(normalized - 90) <= 1) return 90;
+  if (Math.abs(normalized - 180) <= 1) return 180;
+  if (Math.abs(normalized - 270) <= 1) return 270;
+  return 0;
+}
+
+function readRawAngle(stream: FfprobeStream): number | null {
+  const displayMatrix = stream.side_data_list?.find(
+    (sd) => sd.side_data_type === 'Display Matrix',
+  );
+  if (displayMatrix && typeof displayMatrix.rotation === 'number' && Number.isFinite(displayMatrix.rotation)) {
+    return displayMatrix.rotation;
+  }
+  const legacyTag = stream.tags?.rotate;
+  if (typeof legacyTag === 'string' && legacyTag.length > 0) {
+    const parsed = Number(legacyTag);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
 }
 
 /**
@@ -162,6 +258,7 @@ export async function ffprobe(localPath: string): Promise<FfprobeResult> {
     videoCodec,
     audioCodec: audioStream?.codec_name ?? null,
     container,
+    rotation: extractRotation(videoStream),
   };
 }
 
@@ -248,7 +345,7 @@ export async function transcodeHlsAndMp4(
     `[f=hls:hls_time=${HLS_SEGMENT_DURATION}:hls_playlist_type=vod:hls_segment_filename=${segmentPattern}]${manifestPath}` +
     `|[f=mp4:movflags=+faststart]${mp4FallbackPath}`;
 
-  // Video filter chain. Two concerns:
+  // Video filter chain. Three concerns:
   //
   // 1. HDR→SDR tone-mapping. If the source is HDR (HEVC iPhone captures with
   //    BT.2020 primaries + SMPTE 2084 PQ transfer), we run it through a
@@ -262,15 +359,30 @@ export async function transcodeHlsAndMp4(
   //    encode to 10-bit High10 profile H.264 — which almost no mobile player
   //    supports. `format=yuv420p` + explicit `-pix_fmt yuv420p` force 8-bit.
   //
+  // 3. Portrait-aware scale. The scale filter caps the LONG edge at 1920 px
+  //    rather than capping height (the original landscape-only intent). This
+  //    is the right behavior for portrait sources (1080×1920 stays 1080×1920;
+  //    pre-fix `scale=-2:min(ih,1080)` would have crushed it to ~608×1080).
+  //    Inputs to the scale filter are post-decode and therefore POST-rotation:
+  //    FFmpeg 6's libavfilter auto-rotates frames at decode time when the
+  //    source has a rotation atom (Display Matrix or legacy `tags.rotate`),
+  //    unless `-noautorotate` is passed. We rely on autorotate being the
+  //    default to bake source rotation into the output pixels.
+  //
   // The zscale + tonemap filters are provided by libzimg. Confirmed present
   // in jrottenberg/ffmpeg:6-alpine via `ffmpeg -filters` (2026-04-08).
   //
   // SDR sources skip the zscale+tonemap chain (overhead for no benefit) and
   // only get scale + format=yuv420p.
+  //
+  // Comma escaping: backslash-escaped commas inside scale's min() expressions
+  // are required because the outer `-vf` argument uses `,` as filter chain
+  // separator. Same convention as the prior single-arg form.
   const hdrToSdrChain = options.isHdr
     ? 'zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,'
     : '';
-  const videoFilter = `${hdrToSdrChain}scale=-2:min(ih\\,${MAX_OUTPUT_HEIGHT}),format=yuv420p`;
+  const videoFilter =
+    `${hdrToSdrChain}scale=min(${MAX_OUTPUT_LONG_EDGE}\\,iw):min(${MAX_OUTPUT_LONG_EDGE}\\,ih):force_original_aspect_ratio=decrease,format=yuv420p`;
 
   const args: string[] = [
     '-y', // overwrite output
@@ -295,6 +407,13 @@ export async function transcodeHlsAndMp4(
     '-c:a', 'aac',
     '-b:a', '128k',
     '-vf', videoFilter,
+    // Suppress the legacy `tags.rotate` mov atom on the MP4 branch. Pixels
+    // are already rotated correctly via FFmpeg's autorotate at decode time;
+    // leaving the residual rotate atom would cause players to double-rotate.
+    // No-op on the MPEG-TS / HLS branch (MPEG-TS has no rotation atom).
+    // Modern Display Matrix side data is consumed by autorotate and not
+    // re-emitted by the libx264 encoder, so no extra clear is needed for it.
+    '-metadata:s:v:0', 'rotate=0',
     // Tee muxer requires explicit stream mapping
     '-map', '0:v?',
     '-map', '0:a?',
@@ -366,6 +485,11 @@ export async function remuxHlsAndMp4(
  * Must be called AFTER the ffprobe `valid: true` discriminant has been checked.
  *
  * Criteria (ALL must hold):
+ *   - rotation === 0                      → rotated sources MUST be re-encoded
+ *                                           so the rotation is baked into pixels
+ *                                           (HLS MPEG-TS has no rotation atom,
+ *                                           so `-c copy` strips it and Android
+ *                                           ExoPlayer plays sideways)
  *   - videoCodec === 'h264'               → libx264-compatible only, no HEVC
  *   - !isHdr                              → SDR only, HDR needs tone-mapping
  *   - height <= MAX_OUTPUT_HEIGHT (1080)  → no upscale/downscale required
@@ -375,6 +499,7 @@ export async function remuxHlsAndMp4(
 export function canStreamCopy(
   probe: Extract<FfprobeResult, { valid: true }>,
 ): boolean {
+  if (probe.rotation !== 0) return false;
   if (probe.videoCodec !== 'h264') return false;
   if (probe.isHdr) return false;
   if (probe.height > MAX_OUTPUT_HEIGHT) return false;

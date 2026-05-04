@@ -26,6 +26,11 @@ export type FfprobeResult =
       videoCodec: 'h264' | 'hevc';
       audioCodec: string | null;
       container: 'mp4' | 'mov';
+      // Source rotation in degrees CCW, normalized to a cardinal angle
+      // (0 / 90 / 180 / 270). Reads modern Display Matrix side data first,
+      // falls back to the legacy `tags.rotate` mov atom. See extractRotation
+      // in ffmpegService.ts.
+      rotation: 0 | 90 | 180 | 270;
     }
   | {
       valid: false;
@@ -59,6 +64,11 @@ export interface CallbackSuccessPayload {
   // Only set when the fast path was attempted but failed and we fell through
   // to the slow re-encode path. null in all other cases.
   fast_path_failure_reason?: string | null;
+  // Source rotation telemetry (added when rotation handling shipped). Optional
+  // for forward-compat: a future rollback of the transcoder to a pre-rotation
+  // image still produces valid callbacks. Backend telemetry treats undefined
+  // as 0.
+  source_rotation?: 0 | 90 | 180 | 270;
 }
 
 export interface CallbackFailurePayload {

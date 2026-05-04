@@ -1143,6 +1143,90 @@ Photos remain unlimited per user per event — this cap is video-specific becaus
 
 ---
 
+## Decision 16: Source rotation handling (iPhone-portrait → Android sideways fix)
+
+**Added 2026-05-04 after a user-reported "iPhone video plays sideways on Android" bug. See `video07.png` — dog visible rotated 90° CCW inside a portrait viewport.**
+
+### Problem
+
+iPhones record at the sensor's native orientation (e.g. 1920×1080 landscape) and store a rotation hint in the MOV container — either the legacy `tags.rotate` mov atom (older iOS) or the modern `Display Matrix` side-data structure on the video stream (iOS 14+; ffprobe surfaces a canonical `rotation` value, typically negative, e.g. `-90` for portrait). AVPlayer / Safari / direct-MOV ExoPlayer honor this hint at playback. Our transcoded delivery does not — for the most common upload type:
+
+- **HLS branch:** writes MPEG-TS segments. **MPEG-TS has no rotation atom.** With `-c copy` the rotation hint is silently dropped, ExoPlayer plays raw landscape pixels in a portrait viewport → sideways.
+- **MP4 fallback branch:** `-c copy` may or may not preserve the modern Display Matrix in a form ExoPlayer-on-MP4 honors (FFmpeg-version-dependent; behavior unreliable across the matrix of source iOS versions and target Android versions).
+
+Latent the entire video-v1 cycle because (a) the uploader plays from the local file via Decision 13 (rotation atom intact, AVPlayer honors it); (b) iOS viewers go to MP4 directly via Decision 15 and *sometimes* get correct playback; (c) Android viewers always try HLS first and always lose.
+
+### Chosen — server-side bake-in via the slow path
+
+Any source with non-zero rotation drops to `transcodeHlsAndMp4` with FFmpeg's default `autorotate` enabled. The decoder rotates frames to displayed orientation; the encoder writes correctly-oriented pixels into both HLS segments and the MP4 fallback. The legacy `tags.rotate` atom is suppressed on the MP4 output via `-metadata:s:v:0 rotate=0` so players don't double-rotate. MPEG-TS has no rotation atom to clear.
+
+The fast path (`-c copy`) cannot bake rotation in because no decoder runs. Rotated sources are therefore disqualified from the fast path via a new `canStreamCopy` gate (`probe.rotation === 0`).
+
+The HLS-segment-format-change alternative (MPEG-TS → fMP4/CMAF) was rejected as too broad a change for a single bug. Client-side rotation (Flutter `Transform.rotate` + CSS `transform: rotate()`) was rejected because posters generated server-side from un-rotated pixels would still be sideways and the multi-surface viewport-juggling is significant complexity for a problem fundamentally about output-pixel correctness.
+
+### Side-effect: portrait-aware scale filter
+
+The original slow-path filter `scale=-2:min(ih,1080)` was implicitly written for landscape — it caps the output **height** at 1080 px. Pre-fix that didn't matter because no portrait video reached the slow path. Post-fix every iPhone portrait does, and the original filter would crush 1080×1920 to ~608×1080. Replaced with the orientation-agnostic long-edge cap:
+
+```
+scale=min(1920\,iw):min(1920\,ih):force_original_aspect_ratio=decrease
+```
+
+Identical behavior for all current shipping landscape inputs (1920×1080 stays 1920×1080, 1280×720 stays 1280×720, 4K landscape downscales to 1920×1080), correct behavior for the new portrait-slow-path case (1080×1920 stays 1080×1920, 4K portrait downscales to 1080×1920). The deterministic JS mirror is `computeOutputDimensions(width, height, rotation)` in `backend/transcoder/src/ffmpegService.ts` — the runner uses it to populate `width`/`height` in the success callback without an extra ffprobe round-trip on the output file.
+
+### Why we rely on FFmpeg autorotate (load-bearing default)
+
+FFmpeg 6's libavfilter auto-rotates frames at decode time when the input has rotation metadata, unless `-noautorotate` is passed. The encoder writes correctly-oriented pixels regardless of which form (Display Matrix vs `tags.rotate`) the source uses. We do **not** add an explicit `transpose` filter — that would require maintaining rotation-direction conversion logic ourselves and handling the modern-vs-legacy convention split. We only need to know `rotation === 0` vs not for the path-selection gate; the angle direction is FFmpeg's problem.
+
+If a future Dockerfile pin removes autorotate-by-default, this decision becomes a regression — call sites would need explicit `-noautorotate` + a `transpose` filter computed from the probed angle. The image SHA in `backend/transcoder/Dockerfile` is locked specifically to limit this risk.
+
+### Schema / API impact
+
+Zero. Pixels are baked into the output, so no new database column is needed. `width` / `height` already exist on the `photos` table and are now populated with post-rotation dimensions for slow-path encodes via the `computeOutputDimensions` helper. The new `source_rotation: 0 | 90 | 180 | 270` field on `CallbackSuccessPayload` is telemetry-only — surfaced as `sourceRotation` on the `video_transcoding_completed` App Insights custom event. The Flutter and web clients require no changes.
+
+### Cost / latency impact
+
+| Source type | Pre-fix | Post-fix |
+|---|---|---|
+| iPhone landscape H.264 SDR | Fast path ~3 s | Fast path ~3 s (unchanged) |
+| **iPhone portrait H.264 SDR** | **Fast path ~3 s** (broken on Android) | **Slow path ~10–15 s** (correct everywhere) |
+| iPhone HEVC HDR (any orientation) | Slow path ~21 s | Slow path ~21 s (unchanged + correct rotation) |
+| Android landscape | Fast path ~3 s | Fast path ~3 s (unchanged) |
+| Android portrait (modern Display Matrix) | Fast path ~3 s (often broken on other Androids too) | Slow path ~10–15 s (now correct everywhere — incidental win) |
+
+Wall-clock impact on uploader: **zero** (Decision 13's local-first uploader playback). Wall-clock impact on other clique members waiting for `video_ready`: ~7–12 seconds longer for affected videos. Compute cost: ~$0.001 extra per affected video, ~$0.05/month at MVP scale. Negligible.
+
+### Telemetry
+
+`video_transcoding_completed` gains a `sourceRotation: 0 | 90 | 180 | 270` dimension. Health query:
+
+```kql
+customEvents
+| where name == "video_transcoding_completed"
+| where timestamp > ago(7d)
+| extend rot = toint(customDimensions.sourceRotation),
+         mode = tostring(customDimensions.processingMode)
+| summarize count() by rot, mode
+```
+
+Healthy expectation: ~30–50% of all uploads show `sourceRotation=90` (or `=270`) and `mode=transcode`. Any `rot != 0, mode == stream_copy` row is a bug — `canStreamCopy` should have rejected it.
+
+### Code references
+
+- `backend/transcoder/src/ffmpegService.ts` — `extractRotation`, `computeOutputDimensions`, `canStreamCopy` rotation gate, slow-path `-metadata:s:v:0 rotate=0` arg, portrait-aware scale filter
+- `backend/transcoder/src/types.ts` — `rotation` on `FfprobeResult`, `source_rotation?` on `CallbackSuccessPayload`
+- `backend/transcoder/src/runner.ts` — uses `computeOutputDimensions` for slow-path callback dimensions, passes `source_rotation` through
+- `backend/src/functions/videos.ts` — `CallbackBody.source_rotation?`, `sourceRotation` on `video_transcoding_completed` trackEvent
+- `backend/transcoder/src/__tests__/rotation.test.ts` — 24 unit tests covering extraction, gating, and dimension computation
+
+### Out of scope (deliberate)
+
+- Reprocessing already-transcoded rotated videos in active events — they expire ≤ 7 days.
+- Switching HLS segment format from MPEG-TS to fMP4 — separate, larger architectural change. Worth revisiting if/when adaptive bitrate ladder ships in v1.5 (Decision 15 alludes to the `playback.m3u8` raw-manifest endpoint that would also enable iOS HLS).
+- `app/lib/features/videos/presentation/video_card_widget.dart` aspect-ratio-aware poster sizing (`BoxFit.cover` at 300 px tall card center-crops portrait posters). Separate UX follow-up.
+
+---
+
 ## Original "Open questions" — preserved for history
 
 1. **Container image maintenance policy** → Q1 above

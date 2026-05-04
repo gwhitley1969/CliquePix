@@ -1,6 +1,70 @@
 # DEPLOYMENT_STATUS.md — Clique Pix v1
 
-Last updated: 2026-05-03 (Raw DioException leak on session-expired 401 — fixed via interceptor → notifier coordination + friendly home-screen error)
+Last updated: 2026-05-04 (iPhone-portrait videos play sideways on Android — fixed + deployed + on-device verified via slow-path bake-in + canStreamCopy rotation gate + portrait-aware scale filter)
+
+## iPhone-recorded video plays sideways on Android viewer — fixed (2026-05-04)
+
+**Status:** ✅ code complete, ✅ transcoder build green + 24/24 new jest tests, ✅ backend build green + 164/164 jest tests preserved, ✅ backend deployed via `func azure functionapp publish func-cliquepix-fresh`, ✅ transcoder image v0.1.7 built + pushed to ACR (`sha256:b4da3290aea83393b7d87488eb18725a9c15adc0961e9cabeeffcec2b0cc57f8`), ✅ `caj-cliquepix-transcoder` Container Apps Job updated to v0.1.7, ✅ end-to-end verified on iPhone-uploader → Samsung-viewer 2026-05-04. **Pending:** 24h telemetry soak.
+
+**The user complaint.** Beta tester uploaded a portrait video recorded on her iPhone. On her own iPhone the video played correctly. On the Samsung viewer it played rotated 90° CCW — `video07.png` shows the dog sideways with the floor on the right and a window on the left, framed inside a portrait player canvas.
+
+**The root cause.** iPhones record at the sensor's native landscape orientation and store a rotation hint in the MOV container — either the legacy `tags.rotate` mov atom (older iOS) or the modern `Display Matrix` side-data structure (iOS 14+, ffprobe surfaces a canonical `rotation` value, typically negative). AVPlayer / Safari / direct-MOV ExoPlayer honor this hint at playback. Our transcoded delivery did not:
+- The fast path (`-c copy`) writes HLS MPEG-TS segments. **MPEG-TS has no rotation atom.** With stream-copy the rotation hint is silently dropped, ExoPlayer plays raw landscape pixels in a portrait viewport.
+- The MP4 fallback branch *sometimes* preserved rotation (FFmpeg-version-dependent, unreliable across the source iOS × target Android matrix).
+
+Latent the entire video-v1 cycle because (a) the uploader plays from the local file via Decision 13 (rotation atom intact, AVPlayer honors it); (b) iOS viewers go to MP4 directly via Decision 15 and *sometimes* got correct playback; (c) Android viewers always tried HLS first and always lost. The bug surfaced when an iPhone uploader and a Samsung viewer were in the same beta-test event.
+
+**The fix.** Server-side bake-in via the slow path. Five coordinated edits across two packages:
+
+1. **`backend/transcoder/src/ffmpegService.ts`**: new `extractRotation` helper reads `Display Matrix` side data first (canonical), falls back to `tags.rotate`, normalizes to 0/90/180/270. New `computeOutputDimensions` predicts output W×H from source dims + rotation (used by the runner instead of an extra ffprobe round-trip on the output). `canStreamCopy` gains `if (probe.rotation !== 0) return false` — rotated sources MUST go through the slow path because `-c copy` cannot bake rotation into pixels. The slow-path FFmpeg invocation gains `-metadata:s:v:0 rotate=0` (suppresses residual legacy rotation atom on the MP4 output to prevent player double-rotation; no-op on MPEG-TS) and replaces the landscape-only `scale=-2:min(ih,1080)` with the orientation-agnostic `scale=min(1920\,iw):min(1920\,ih):force_original_aspect_ratio=decrease` (caps long edge at 1920 — without this, iPhone portraits would be crushed to 608×1080 the moment they hit the slow path).
+2. **`backend/transcoder/src/types.ts`**: `rotation: 0 | 90 | 180 | 270` added to `FfprobeResult.valid:true`. `source_rotation?: 0 | 90 | 180 | 270` added to `CallbackSuccessPayload` (optional for forward-compat with rolled-back transcoder images).
+3. **`backend/transcoder/src/runner.ts`**: imports `computeOutputDimensions`, uses it for slow-path callback `width`/`height`, passes `source_rotation: probeResult.rotation` through, logs rotation alongside the existing dimension log.
+4. **`backend/src/functions/videos.ts`**: `CallbackBody` interface gains `source_rotation?`. The `video_transcoding_completed` `trackEvent` properties block gains `sourceRotation: String(body.source_rotation ?? 0)` — App Insights now exposes the rotation distribution.
+5. **`backend/transcoder/src/__tests__/rotation.test.ts`** (new): 24 unit tests covering rotation extraction (legacy tag, Display Matrix, precedence rules, non-cardinal angles, unparseable input), `canStreamCopy` rotation gating (regression check the existing rules still pass for rotation=0), and `computeOutputDimensions` (1080p/4K landscape and portrait, 180° flip, even-dimension guarantee, odd-source rounding).
+
+We rely on FFmpeg 6's default `autorotate` behavior — the decoder rotates frames to displayed orientation BEFORE the encoder writes pixels. We do NOT add an explicit `transpose` filter; that would force us to maintain rotation-direction conversion logic (CW vs CCW, modern vs legacy convention) ourselves. We only branch on `rotation === 0` vs not for path selection. The Dockerfile pin (`jrottenberg/ffmpeg:6-alpine@sha256:464...`) is locked specifically to limit the risk of an autorotate-default change in a future FFmpeg release.
+
+| Phase | Status | Files |
+|---|---|---|
+| Transcoder: ffprobe rotation extraction + canStreamCopy gate + slow-path filter changes | ✅ | `backend/transcoder/src/ffmpegService.ts` |
+| Transcoder: types | ✅ | `backend/transcoder/src/types.ts` |
+| Transcoder: runner uses computeOutputDimensions + sends source_rotation | ✅ | `backend/transcoder/src/runner.ts` |
+| Backend: CallbackBody.source_rotation? + telemetry dimension | ✅ | `backend/src/functions/videos.ts` |
+| Transcoder: jest setup + 24 unit tests | ✅ | `backend/transcoder/jest.config.js`, `backend/transcoder/package.json`, `backend/transcoder/tsconfig.json`, `backend/transcoder/src/__tests__/rotation.test.ts` |
+| Transcoder: `npm run build` clean | ✅ | — |
+| Transcoder: `npm test` 24/24 | ✅ | — |
+| Backend: `npm run build` clean | ✅ | — |
+| Backend: `npm test` 164/164 (preserved) | ✅ | — |
+| Docs: VIDEO_ARCHITECTURE_DECISIONS Decision 16, BETA_TEST_PLAN §5 row, BETA_OPERATIONS_RUNBOOK troubleshooting entry, CLAUDE.md slow-path note + Decision count, ARCHITECTURE.md Decision count, this entry | ✅ | as listed |
+| Backend deploy (`func azure functionapp publish func-cliquepix-fresh`) | ✅ Deployed 2026-05-04 — health 200 via direct + Front Door | — |
+| Transcoder image v0.1.7 build + push (`docker build -t cracliquepix.azurecr.io/cliquepix-transcoder:v0.1.7 . && az acr login --name cracliquepix && docker push ...`) | ✅ Pushed 2026-05-04, digest `sha256:b4da3290aea83393b7d87488eb18725a9c15adc0961e9cabeeffcec2b0cc57f8` | — |
+| Container Apps Job update (`az containerapp job update -n caj-cliquepix-transcoder -g rg-cliquepix-prod --image cracliquepix.azurecr.io/cliquepix-transcoder:v0.1.7`) | ✅ Live 2026-05-04 — `az containerapp job show ... --query 'properties.template.containers[0].image'` returns `:v0.1.7` | — |
+| Two-device verification (iPhone uploader → Samsung viewer, plus regression cases) per BETA_TEST_PLAN §5 | ✅ Verified 2026-05-04 — iPhone-portrait video plays UPRIGHT on Samsung viewer | — |
+| 24h telemetry soak: confirm `sourceRotation` distribution and zero `rot != 0 + stream_copy` rows | ⏳ Pending | — |
+
+**Telemetry to watch (App Insights `customEvents`):**
+```kql
+customEvents
+| where name == "video_transcoding_completed"
+| where timestamp > ago(7d)
+| extend rot = toint(customDimensions.sourceRotation),
+         mode = tostring(customDimensions.processingMode)
+| summarize count() by rot, mode
+```
+Healthy: ~30–50% of all uploads show `rot=90` (or `rot=270`) and `mode=transcode`. **Any `rot != 0, mode == stream_copy` row is a bug** — `canStreamCopy` should have rejected it.
+
+**Deploy ordering** (forward-compatible): backend FIRST (gains the optional `source_rotation` callback field — old transcoder image continues working unchanged), then transcoder image v0.1.7. Atomic on the Container Apps Job side — next queue dequeue uses new code.
+
+**Cost / latency impact.** iPhone landscape videos: unchanged (~3 s fast path). iPhone portrait H.264 SDR: ~3 s → ~10–15 s slow path. iPhone HEVC HDR: unchanged (~21 s slow path was already being used; now also rotates correctly). Android landscape: unchanged. Android portrait with modern Display Matrix: ~3 s → ~10–15 s slow path (incidental win — was also broken pre-fix). Uploader-perceived latency: **zero** (Decision 13's local-first playback). Other clique members waiting for `video_ready`: ~7–12 s longer for affected videos. Compute cost: ~$0.001 per affected video, ~$0.05/month at MVP scale. Negligible.
+
+**Out of scope (tracked for follow-up).**
+- Reprocessing already-transcoded rotated videos in current events (events expire ≤ 7 days; not worth a one-shot script).
+- Switching HLS segment format from MPEG-TS to fMP4 (would let `-c copy` preserve rotation natively but is a much larger architectural change; revisit if/when adaptive bitrate ladder ships).
+- `app/lib/features/videos/presentation/video_card_widget.dart` aspect-ratio-aware poster card (currently `BoxFit.cover` at fixed 300 px tall — center-crops portrait posters in the feed). Separate UX PR; doesn't affect playback correctness.
+
+**Rollback plan.** `az containerapp job update -n caj-cliquepix-transcoder -g rg-cliquepix-prod --image cracliquepix.azurecr.io/cliquepix-transcoder:v0.1.6`. New uploads revert to broken-rotation behavior; in-flight transcodes finish on whichever image was running when they started. Backend `CallbackBody.source_rotation?` is optional, so v0.1.6 callbacks (which don't send the field) continue working without rolling the backend back.
+
+---
 
 ## Raw DioException leak on session-expired 401 — fixed (2026-05-03)
 

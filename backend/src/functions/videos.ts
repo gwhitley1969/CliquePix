@@ -864,6 +864,9 @@ interface CallbackBody {
   // Performance telemetry (added 2026-04-08 with stream-copy fast path)
   processing_mode?: 'transcode' | 'stream_copy';
   fast_path_failure_reason?: string | null;
+  // Source rotation (added with rotation handling). 0 / 90 / 180 / 270.
+  // Optional for forward-compat with pre-rotation transcoder images.
+  source_rotation?: 0 | 90 | 180 | 270;
 }
 
 async function videoProcessingComplete(
@@ -973,6 +976,7 @@ async function videoProcessingComplete(
       durationSeconds: String(body.duration_seconds ?? 0),
       processingMode: String(body.processing_mode ?? 'transcode'),
       fastPathFailureReason: String(body.fast_path_failure_reason ?? 'none'),
+      sourceRotation: String(body.source_rotation ?? 0),
     });
 
     // Push video_ready to event members

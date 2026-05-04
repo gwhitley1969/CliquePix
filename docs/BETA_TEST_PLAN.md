@@ -1,6 +1,6 @@
 # Clique Pix — Open Beta Smoke Test Plan
 
-**Last Updated:** April 17, 2026
+**Last Updated:** May 4, 2026
 
 This is a manual smoke test checklist to run before each beta release. Every item must pass on **both iOS and Android** unless noted otherwise.
 
@@ -129,6 +129,10 @@ This is a manual smoke test checklist to run before each beta release. Every ite
 - [ ] **HLS playback** — Device B taps video, player opens, video plays via HLS
 - [ ] **MP4 fallback** — if HLS fails (check logs), MP4 fallback plays
 - [ ] **Poster image** — feed card shows poster frame before tap
+- [ ] **iPhone portrait → Android upright (rotation fix, added 2026-05-04)** — Device A (iPhone) records a PORTRAIT clip (hold phone vertically, capture 5-10 seconds — e.g. of a fixed object so orientation is unambiguous). Upload to a shared event. Device B (Samsung) opens the event feed and taps the poster. **Video plays UPRIGHT — subject vertical, ground on bottom, sky/ceiling on top.** Pre-fix this rendered rotated 90° CCW (per `video07.png` — dog visible sideways with floor on the right). Verify via App Insights `customEvents | where name == "video_transcoding_completed" | extend rot = toint(customDimensions.sourceRotation), mode = tostring(customDimensions.processingMode) | project rot, mode` — the new video shows `mode=transcode` (slow path was forced) and `rot ∈ {90, 270}` (typical iPhone portrait)
+- [ ] **iPhone landscape → all viewers regression** — same flow but iPhone records LANDSCAPE. App Insights shows `mode=stream_copy`, `rot=0`. Plays correctly on both Android and iPhone viewers. Confirms the fast path still works for non-rotated sources
+- [ ] **Android portrait → iPhone viewer upright** — Device A (Samsung) records portrait, uploads. Device B (iPhone) opens feed, taps, plays UPRIGHT. (Modern Android cameras with Display Matrix benefit from the fix incidentally)
+- [ ] **iPhone HEVC HDR portrait** — Device A (iPhone, default High Efficiency setting) records a portrait clip (HDR is enabled by default in modern iOS Camera). Slow path was already taken pre-fix; verify the new metadata clear doesn't regress (no double-rotation = no upside-down playback)
 - [ ] **iOS cloud playback (PRIMARY REGRESSION FIX, added 2026-05-03)** — Account A (Android) uploads a video, waits for `video_ready`. Account B (iPhone) opens the event feed, taps the poster card. **MP4 begins playback within ~3-5 seconds. NO infinite spinner. NO 15s wait.** Caption area does NOT show "Playing standard quality" (because `_iosForcedMp4` is the primary path on iOS, not a fallback). Verify via `[VPS] tier=cloud: iOS — skipping HLS, going to MP4` log line in Xcode device console
 - [ ] **Android cloud playback unchanged** — same test, Android viewer. HLS still plays first, `_usedFallback` remains false on happy path. Verify via `[VPS] tier=cloud: got playback info, attempting HLS first` log line
 - [ ] **iOS local-file playback unchanged** — uploader (iPhone) records or picks a video, taps the local-pending card immediately. Plays from device file with zero network wait. Caption: "Playing from your device". Verify via `[VPS] tier=local: file.exists()=true` then `tier=local: initialize() returned OK` log lines

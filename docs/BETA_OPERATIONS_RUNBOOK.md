@@ -1,6 +1,6 @@
 # Clique Pix — Beta Operations Runbook
 
-**Last Updated:** April 10, 2026
+**Last Updated:** May 4, 2026
 
 Operational procedures for the Clique Pix open beta. Covers incident response, common troubleshooting, and maintenance tasks.
 
@@ -272,6 +272,47 @@ customEvents
 4. **Do NOT re-enable HLS on iOS** unless `docs/VIDEO_ARCHITECTURE_DECISIONS.md` Decision 15 is updated and the v1.5 backend raw-m3u8 endpoint is shipped first. The `file://` workaround will hang again.
 
 **Do not be misled by:** "blank white screen on launch" reports from iPhone users running profile-mode debug builds with `flutter run --profile` — that's just slow profile-mode startup + `flutter run` failing to attach the VM service, NOT a `main()` hang. The app DOES load; the user just hasn't waited long enough or has been distracted by the missing splash. Confirm by asking the user to wait 60+ seconds, or by deploying via Xcode → Run instead of `flutter run`.
+
+### iPhone-recorded video plays sideways on Android viewer
+
+**Symptoms:** "I uploaded a portrait video from my iPhone. On my iPhone it looks fine. My friend on Samsung sees the dog/face/scene rotated 90° — the floor is on the right side of the screen instead of the bottom."
+
+**Resolution:** confirmed and fixed 2026-05-04. Root cause: iPhones store a rotation hint in the MOV container (legacy `tags.rotate` or modern Display Matrix side data) but record at the sensor's native landscape orientation. The transcoder's `-c copy` fast path (`remuxHlsAndMp4`) writes HLS MPEG-TS segments — and **MPEG-TS has no rotation atom**, so the hint is silently dropped, ExoPlayer plays raw landscape pixels in a portrait viewport. iPhone viewers were partly masked by Decision 15 (iOS plays MP4 directly, where `-c copy` sometimes preserves enough metadata for AVPlayer). Android viewers always tried HLS first and always lost. Fix shipped:
+- New `extractRotation` + `rotation` field on `FfprobeResult`.
+- `canStreamCopy` now requires `rotation === 0` — rotated sources drop to the slow re-encode path. There the libx264 encoder writes correctly-oriented pixels into both HLS segments and MP4 fallback (FFmpeg's default `autorotate` does the rotation at decode time).
+- Slow path adds `-metadata:s:v:0 rotate=0` so the residual legacy `tags.rotate` atom doesn't propagate to the MP4 output and cause double-rotation.
+- Slow-path scale filter now caps the long edge at 1920 (`scale=min(1920\,iw):min(1920\,ih):force_original_aspect_ratio=decrease`) instead of capping height. Without this, iPhone portrait videos (1080×1920) would have been crushed to 608×1080 by the prior landscape-only filter.
+- Backend telemetry: `video_transcoding_completed` gains `sourceRotation: 0 | 90 | 180 | 270`.
+
+See `docs/VIDEO_ARCHITECTURE_DECISIONS.md` Decision 16 for the full design.
+
+**If this symptom recurs in a future build:**
+
+1. Confirm the user's APK is post-2026-05-04. Pre-fix builds always send rotated sources through the fast path.
+2. Pull telemetry for the affected video:
+   ```kql
+   customEvents
+   | where name == "video_transcoding_completed"
+   | where timestamp > ago(2h)
+   | where customDimensions.videoId == "<video-uuid-from-photos-row>"
+   | project timestamp, processingMode = tostring(customDimensions.processingMode),
+             sourceRotation = tostring(customDimensions.sourceRotation),
+             durationSeconds = tostring(customDimensions.durationSeconds)
+   ```
+   - **`sourceRotation=0` and `processingMode=stream_copy`** → expected for any video that should play right-side up. If this video is sideways anyway, the bug is on the playback side (player aspect ratio, viewport sizing) rather than transcode-side rotation.
+   - **`sourceRotation != 0` and `processingMode=stream_copy`** → REGRESSION. `canStreamCopy` should have rejected this. Check that the deployed transcoder image is the post-fix version, not a rolled-back v0.1.6. Image SHA in `az containerapp job show -n caj-cliquepix-transcoder -g rg-cliquepix-prod --query 'properties.template.containers[0].image' -o tsv`.
+   - **`sourceRotation != 0` and `processingMode=transcode`** → fix path ran but output is still sideways. Either FFmpeg autorotate failed to fire (Dockerfile pin changed?) or `-metadata:s:v:0 rotate=0` failed to clear the residual atom. Pull the original blob from `photos/{cliqueId}/{eventId}/{videoId}/original.mp4`, run `ffprobe` locally, compare to the transcoded `fallback.mp4` and `hls/manifest.m3u8` to isolate.
+3. Health check across all recent transcodes:
+   ```kql
+   customEvents
+   | where name == "video_transcoding_completed"
+   | where timestamp > ago(7d)
+   | extend rot = toint(customDimensions.sourceRotation),
+            mode = tostring(customDimensions.processingMode)
+   | summarize count() by rot, mode
+   ```
+   Healthy: ~30–50% `rot != 0, mode=transcode` rows; zero `rot != 0, mode=stream_copy` rows.
+4. **Rollback** if needed: `az containerapp job update -n caj-cliquepix-transcoder -g rg-cliquepix-prod --image cracliquepix.azurecr.io/cliquepix-transcoder:v0.1.6`. New uploads will revert to broken-rotation behavior; in-flight transcodes finish on whichever image was running when they started.
 
 ### iOS user reports "app vanishes the second I sign in"
 

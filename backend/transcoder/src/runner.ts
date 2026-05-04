@@ -15,7 +15,14 @@ import * as fs from 'fs';
 import * as os from 'os';
 import { dequeueMessage, deleteMessage } from './queueService';
 import { downloadBlob, uploadBlob, uploadDirectory, setBlobTier } from './blobService';
-import { ffprobe, transcodeHlsAndMp4, remuxHlsAndMp4, canStreamCopy, extractPoster } from './ffmpegService';
+import {
+  ffprobe,
+  transcodeHlsAndMp4,
+  remuxHlsAndMp4,
+  canStreamCopy,
+  extractPoster,
+  computeOutputDimensions,
+} from './ffmpegService';
 import { postCallback } from './callbackService';
 import type { CallbackPayload, FfprobeResult } from './types';
 
@@ -53,7 +60,7 @@ async function runLocalMode(): Promise<void> {
     console.error(`[LOCAL_MODE] Validation failed: ${probeResult.errorCode} — ${probeResult.errorMessage}`);
     process.exit(1);
   }
-  console.log(`[LOCAL_MODE] ffprobe: ${probeResult.width}x${probeResult.height} ${probeResult.videoCodec} ${probeResult.durationSeconds.toFixed(1)}s${probeResult.isHdr ? ' HDR' : ''}`);
+  console.log(`[LOCAL_MODE] ffprobe: ${probeResult.width}x${probeResult.height} ${probeResult.videoCodec} ${probeResult.durationSeconds.toFixed(1)}s${probeResult.isHdr ? ' HDR' : ''} rotation=${probeResult.rotation}`);
 
   await fs.promises.mkdir(outputDir, { recursive: true });
   const hlsDirLocal = path.join(outputDir, 'hls');
@@ -135,7 +142,7 @@ async function runQueueMode(): Promise<void> {
       await deleteMessage(message);
       return;
     }
-    console.log(`[runner] Validated: ${probeResult.width}x${probeResult.height} ${probeResult.videoCodec} ${probeResult.durationSeconds.toFixed(1)}s${probeResult.isHdr ? ' HDR' : ''}`);
+    console.log(`[runner] Validated: ${probeResult.width}x${probeResult.height} ${probeResult.videoCodec} ${probeResult.durationSeconds.toFixed(1)}s${probeResult.isHdr ? ' HDR' : ''} rotation=${probeResult.rotation}`);
 
     // 3. Transcode HLS + MP4 fallback
     // Try the stream-copy fast path first for compatible sources (H.264 + SDR +
@@ -165,7 +172,7 @@ async function runQueueMode(): Promise<void> {
         await transcodeHlsAndMp4(localInput, hlsDir, fallbackPath, { isHdr: false });
       }
     } else {
-      console.log(`[runner] Slow path: full re-encode (hdr=${probeResult.isHdr}, hevc/>1080p/non-aac)`);
+      console.log(`[runner] Slow path: full re-encode (hdr=${probeResult.isHdr}, rotation=${probeResult.rotation}, hevc/>1080p/non-aac/rotated)`);
       await transcodeHlsAndMp4(localInput, hlsDir, fallbackPath, {
         isHdr: probeResult.isHdr,
       });
@@ -196,6 +203,18 @@ async function runQueueMode(): Promise<void> {
     }
 
     // 6. Report success to Function callback
+    //
+    // Width/height reporting:
+    //   - Stream-copy: report storage dimensions as-is (matches what readers
+    //     will probe out of the MP4/MPEG-TS — rotation atom may or may not be
+    //     honored downstream, but stream-copy can't have run on rotated source
+    //     because canStreamCopy() requires rotation=0).
+    //   - Re-encode: report the computed POST-autorotate, POST-scale
+    //     dimensions so the photos row reflects the actual delivered frame.
+    const reported = processingMode === 'stream_copy'
+      ? { width: probeResult.width, height: probeResult.height }
+      : computeOutputDimensions(probeResult.width, probeResult.height, probeResult.rotation);
+
     const successPayload: CallbackPayload = {
       video_id: videoId,
       success: true,
@@ -203,8 +222,8 @@ async function runQueueMode(): Promise<void> {
       mp4_fallback_blob_path: `${basePrefix}/fallback.mp4`,
       poster_blob_path: `${basePrefix}/poster.jpg`,
       duration_seconds: Math.round(probeResult.durationSeconds),
-      width: probeResult.width,
-      height: probeResult.height,
+      width: reported.width,
+      height: reported.height,
       is_hdr_source: probeResult.isHdr,
       // Stream-copy path preserves HDR (no tone-mapping); re-encode path
       // tone-maps HDR→SDR. canStreamCopy() already rejects HDR sources, so
@@ -213,6 +232,7 @@ async function runQueueMode(): Promise<void> {
       normalized_to_sdr: probeResult.isHdr && processingMode === 'transcode',
       processing_mode: processingMode,
       fast_path_failure_reason: fastPathFailureReason,
+      source_rotation: probeResult.rotation,
     };
     console.log('[runner] Posting success callback');
     await postCallback(successPayload);
