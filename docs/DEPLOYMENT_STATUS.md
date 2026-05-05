@@ -1,8 +1,54 @@
 # DEPLOYMENT_STATUS.md — Clique Pix v1
 
-Last updated: 2026-05-05 (Cliques tab "Create Clique" CTA discoverability fix — bare `+` icon replaced with full-width gradient pill above the list; release APK built)
+Last updated: 2026-05-05 (APIM migrated Developer → Basic v2: `apim-cliquepix-002` decommissioned, `apim-cliquepix-003` Basic v2 active and serving production traffic; ~46 min total wall-clock; 99.95% SLA before App Store / Play Store submission)
 
-## Cliques tab — labeled "Create Clique" gradient pill replaces bare `+` IconButton (2026-05-05)
+## APIM Developer → Basic v2 migration — executed (2026-05-05)
+
+**Status:** ✅ End-to-end complete. `apim-cliquepix-002` (Developer, ~$50/month, no SLA) decommissioned. `apim-cliquepix-003` (Basic v2, $150/month, 99.95% SLA, autoscale 1→10 units, v2 platform) provisioned via Bicep, integrated into Front Door, validated via CORS preflight + canonical 401 envelope, and serving 100% of production traffic. Total wall-clock from Phase A start → Phase H decommission: **~46 minutes**.
+
+**Why now.** Pre-launch hardening for App Store / Play Store submission. Developer tier has no SLA, no Azure Status Page coverage, no autoscale — submitting an app with no-SLA gateway during the 24-48h reviewer-flag-traffic window risks a one-time outage you can't redo. $100/month delta (Basic v2 $150 vs Developer $50) buys: 99.95% SLA, scale 1→10 units in seconds, v2 platform reliability, modern API surface, Azure Status Page coverage.
+
+**Why side-by-side + Front Door cutover (and not in-place upgrade).** Per Microsoft's v2 service tiers FAQ verbatim: *"Currently, there's no automated tooling to migrate an existing API Management instance (in the Consumption, Developer, Basic, Standard, or Premium tier) to a new v2 tier instance. The v2 tiers are currently available for newly created service instances only."* You CAN upgrade Developer ↔ Basic / Standard / Premium (classic), and Basic v2 ↔ Standard v2 (v2). You CANNOT upgrade across the classic↔v2 boundary in place. Backup/restore APIs don't support cross-tier restore. Side-by-side new-deploy + Front Door origin cutover is the only supported path.
+
+**The 8 phases as actually executed.**
+
+| Phase | Action | Duration | Outcome |
+|---|---|---|---|
+| A | Edit `bicep/apim/main.bicep`: SKU `Developer` → `BasicV2`, name → `apim-cliquepix-003`, remove classic-only `customProperties` (TLS cipher toggles) + `legacyPortalStatus`/`developerPortalStatus`/`releaseChannel`, delete ~240 lines of Echo API scaffolding (1 API + 6 ops + 3 op policies + 4 product apiLinks across two ARM resource types), refactor inline ~80-line policy XML → `loadTextContent('../../apim_policy.xml')` (single source of truth, eliminates the 6-incident-history doc drift permanently), de-`@secure()` the three APIM-export-artifact display-name params + add string defaults | ~10 min | Bicep compiles clean (warnings only), what-if shows the desired side-by-side coexistence pattern (60 Creates on `apim-cliquepix-003`, 20 Ignore on existing resources, 0 Modify, 0 Delete) |
+| A.5 | `az bicep build` + `az deployment group what-if` validation BEFORE deploy | ~2 min | Both succeed. What-if archived to `C:\Users\genew\AppData\Local\Temp\apim-migration-20260505-1810\what-if.json` for audit |
+| B (first attempt) | `az deployment group create` against the bicep | ~3 min | Service `apim-cliquepix-003` provisioned successfully (BasicV2, capacity 1, eastus, system-assigned MI). cliquepix-v1 API + all 7 operations created. **API-scope policy + several scaffolding resources failed.** Root causes: (1) `apim_policy.xml` line 44 had literal `--protocols` inside an XML comment — XML doesn't allow `--` inside `<!-- ... -->`. (2) BasicV2 rejects `portalsettings/{delegation,signin,signup}` (`MethodNotAllowedInPricingTier`). (3) APIM auto-creates system-product↔system-group links at service creation; redeclaring them in bicep returns `Link already exists between specified Product and Group` (this affected BOTH the `service/products/groups` and the newer `service/products/groupLinks` resource types — 12 resources total). (4) System groups (administrators, developers) reject `groups/users/{N}` membership changes (`System group membership cannot be changed`). (5) The default `master` subscription's scope (full service ID with trailing slash) is rejected with `Subscription scope should be one of /apis, /apis/{apiId}, /products/{productId}` — same for the two product subscriptions whose scope is the full product resource ID rather than the relative `/products/{p}` path |
+| B (retry after bicep cleanup) | Fix `apim_policy.xml` line 44 (rephrase `--protocols` literal). Remove from bicep: 3 portalsettings, 6 product/groups, 6 product/groupLinks, 2 groups/users/1, 3 subscriptions (master + two product subs). Re-run what-if (1 Create + 7 Modify + 32 NoChange + 0 Delete). Re-deploy. | ~30 sec deploy | ✅ `provisioningState: Succeeded`. CORS preflight from `https://clique-pix.com` returns HTTP 200 with `Access-Control-Allow-Origin: https://clique-pix.com` + identical headers to the old APIM. Direct probe `https://apim-cliquepix-003.azure-api.net/api/health` returns HTTP 200 in ~285ms |
+| ~~C~~ | ~~RBAC re-grants for new MI~~ | n/a | **SKIPPED** — pre-flight audit confirmed the old APIM's MI had zero role assignments (no Key Vault refs, no Storage roles), so the new MI doesn't need any either |
+| D | `az afd origin create` to add `apim-003-origin` to `apim-origin-group`. **Front Door rejected `--weight 0`** (`Invalid format: '0' is less than 1`). Pivoted to **priority-based routing**: new origin at priority=2 (failover-only), old origin stays priority=1. Front Door only sends traffic to lower-priority origins if all higher-priority origins are unhealthy → new origin gets exactly zero customer traffic during the soak | ~3 min add + ~2.5 min health-probe convergence wait | New origin Enabled, healthy. Front Door continues 100% routing to priority-1 (old APIM). 5/5 health probes return HTTP 200 |
+| E | Cutover via priority swap: promote `apim-003-origin` → priority=1 (active), demote `apim-origin` → priority=2 (drained, failover-only). Wait 5 min for Front Door global propagation | ~5.5 min | Front Door now routes 100% of customer traffic to apim-cliquepix-003 Basic v2. CORS preflight + canonical 401 `UNAUTHORIZED` envelope both verified through `api.clique-pix.com`. Latency 213-338ms (comparable to pre-migration) |
+| F | End-to-end mobile + web smoke test | (user-driven) | ✅ User reported "looks like things are working" |
+| ~~G~~ | ~~24-48h soak~~ | n/a | **COMPRESSED** to inline validation per user direction. The user wanted to stop paying for the Developer instance immediately after Phase F validation passed. Acceptable risk given the cutover already proved end-to-end correctness |
+| H | Decommission. Remove `apim-origin` from Front Door origin group (was already drained, zero traffic). Then `az apim delete -n apim-cliquepix-002 --no-wait` + poll until ResourceNotFound | ~2 min total | ✅ apim-cliquepix-002 GONE in 2 polls (~120 sec). Front Door origin group has 1 origin remaining (apim-003-origin priority=1 weight=1000). Final smoke through `api.clique-pix.com/api/health` returns HTTP 200 in 330ms. Developer-tier $50/month meter stopped |
+
+**Audit deltas vs. the §8 runbook draft.** The pre-migration `BETA_OPERATIONS_RUNBOOK.md §8` draft anticipated several things that turned out to be no-ops or wrong:
+
+- **§8 said "RBAC re-grants required for new MI" — actual: zero re-grants needed** (old MI had zero role assignments).
+- **§8 said "verify named values for Key Vault refs" — actual: zero named values defined**.
+- **§8 said "custom-domain certificates may need migration" — actual: APIM had no custom domain** (Front Door fronts everything).
+- **§8 said "remove classic-only properties (vague)" — actual hard ARM blockers** were specifically `customProperties` + `legacyPortalStatus`/`developerPortalStatus`/`releaseChannel` (4 properties); plus a SECOND wave (5 categories of resources) that ARM accepted at first but APIM rejected at the resource level (portalsettings, product/groups, product/groupLinks, groups/users for system groups, subscriptions with bad scope).
+- **§8 said "Echo API removal as separate cleanup PR" — actual: removed in this migration**, ~240 lines saved.
+- **NEW finding §8 didn't anticipate**: the inline API-scope policy XML in bicep had drifted from `apim_policy.xml` (incident-history comment was 2 incidents stale). Consolidated via `loadTextContent` so the drift can never happen again — the very thing incident #6 lesson #2 already called for.
+- **NEW finding §8 didn't anticipate**: Front Door minimum origin weight is 1, not 0. Plan adapted to priority-based routing on the fly.
+- **Pricing reality:** $150/month Basic v2 (confirmed by user via Azure pricing calculator pre-flight) — much cheaper than the §8 draft's recollected ~$525/month, which turned out to be Standard v2.
+
+**Outstanding follow-ups (separate work after the migration soaks):**
+
+- **Add APIM-level App Insights logger** — opt-in via separate bicep PR. Currently APIM mgmt-plane logs don't flow to App Insights; Function App's instrumentation does all the work, which is sufficient for now.
+- **Pin API version to GA `2024-05-01`** — current bicep uses `2025-03-01-preview`. Preview versions can deprecate without notice; GA is the resilience cleanup.
+- **Clean up the 21 `dependsOn` linter warnings** in `bicep/apim/main.bicep` — non-blocking; bicep lint says they're inferable from `parent:` references.
+- **Clean up the 2 `no-unused-params` warnings** for `subscriptions_69c2f544f2ccf70039070001_displayName` + `_002_displayName` — they were only used by the now-removed product-subscription resources.
+- **Rename bicep symbol `service_apim_cliquepix_002_name_*` to `..._003_name_*`** — currently the symbol names retain "_002_" for minimum diff. Cosmetic refactor, can be a sweep.
+
+**Rollback (no longer relevant — Developer instance is gone).** During Phases B-G the rollback was a 5-min Front Door priority swap reversed. After Phase H decommission the path forward is fix-forward only (per D8 decision).
+
+---
+
+## Cliques tab — labeled "Create Clique" gradient pill replaces bare `+` IconButton (2026-05-05, earlier in the day)
 
 **Status:** ✅ code complete, ✅ `flutter analyze` 54-issue baseline preserved, ✅ `flutter test` 82/82 green, ✅ `flutter clean && flutter pub get && flutter build apk --release` green (`app-release.apk`, 63.0 MB). **Pending:** on-device verification on Samsung + iPhone, commit + push.
 
@@ -851,7 +897,7 @@ Deploy order: migration 009 → backend → client. Backend silent-push path mus
 | Storage Account | `stcliquepixprod` | eastus | Ready — `photos` container, blob public access disabled |
 | PostgreSQL | `pg-cliquepixdb` | eastus2 | Ready — v18, `cliquepix` DB with 10 tables (incl. `event_dm_threads`, `event_dm_messages`) |
 | Key Vault | `kv-cliquepix-prod` | eastus | Ready — `pg-connection-string` + `fcm-credentials` + `web-pubsub-connection-string` stored |
-| API Management | `apim-cliquepix-002` | eastus | Ready — Developer SKU, API imported. **NO rate-limit-by-key** as of 2026-04-27 (see incident history in `apim_policy.xml`); CORS is the only inbound policy |
+| API Management | `apim-cliquepix-003` | eastus | Ready — **Basic v2 SKU** (since 2026-05-05; migrated from Developer-tier `apim-cliquepix-002` which was decommissioned the same day). 99.95% SLA, autoscale 1→10 units, $150/month. **NO rate-limit-by-key** (see 6-incident history in `apim_policy.xml`); CORS is the only inbound policy. API-scope policy is loaded from `apim_policy.xml` via Bicep `loadTextContent` (single source of truth) |
 | Front Door | `fd-cliquepix-prod` | global | Ready — Standard SKU (no WAF) |
 | Static Web App | `swa-cliquepix-prod` | eastus2 | Ready — clique-pix.com + www |
 | DNS Zone | `clique-pix.com` | global | Ready — api CNAME, apex ALIAS, www CNAME, TXT validation |
@@ -863,6 +909,7 @@ Deploy order: migration 009 → backend → client. Backend silent-push path mus
 | Resource | Name | Reason |
 |----------|------|--------|
 | PostgreSQL | `pg-cliquepix` | Replaced by `pg-cliquepixdb` (v18) |
+| API Management | `apim-cliquepix-002` | Replaced by `apim-cliquepix-003` (Basic v2) on 2026-05-05. Name locked by Azure for ~30 days per policy. |
 
 ### RBAC Role Assignments (Function App managed identity)
 
@@ -875,12 +922,12 @@ Deploy order: migration 009 → backend → client. Backend silent-push path mus
 ### Traffic Path (verified working)
 
 ```
-Flutter App → Front Door (fd-cliquepix-prod) → APIM (apim-cliquepix-002) → Azure Functions (func-cliquepix-fresh) → PostgreSQL / Blob Storage
+Flutter App → Front Door (fd-cliquepix-prod) → APIM (apim-cliquepix-003, Basic v2) → Azure Functions (func-cliquepix-fresh) → PostgreSQL / Blob Storage
 ```
 
 Health endpoint confirmed at:
 - `https://func-cliquepix-fresh.azurewebsites.net/api/health`
-- `https://apim-cliquepix-002.azure-api.net/api/health`
+- `https://apim-cliquepix-003.azure-api.net/api/health`
 - `https://cliquepix-api-fcc6b7f4enathbac.z02.azurefd.net/api/health`
 - `https://api.clique-pix.com/api/health`
 

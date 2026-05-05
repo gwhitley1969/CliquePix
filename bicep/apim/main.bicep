@@ -1,18 +1,22 @@
-@secure()
-param subscriptions_69c2f544f2ccf70039070001_displayName string
+// APIM-export-artifact display names. Not secrets — just placeholder display
+// strings for the default starter / unlimited product subscriptions and the
+// Administrator user. The previous @secure() decorators were misleading: ARM
+// export added them automatically but the values are non-sensitive.
+param subscriptions_69c2f544f2ccf70039070001_displayName string = 'Subscription 1'
+param subscriptions_69c2f544f2ccf70039070002_displayName string = 'Subscription 2'
+param users_1_lastName string = 'Administrator'
 
-@secure()
-param subscriptions_69c2f544f2ccf70039070002_displayName string
-
-@secure()
-param users_1_lastName string
-param service_apim_cliquepix_002_name string = 'apim-cliquepix-002'
+// 2026-05-05: migrated Developer (apim-cliquepix-002) → Basic v2
+// (apim-cliquepix-003) for SLA + v2 platform. The bicep symbol names retain
+// the "_002_" suffix on purpose — renaming every parent reference would be a
+// large cosmetic diff. The deployed name (this param) is what reaches Azure.
+param service_apim_cliquepix_002_name string = 'apim-cliquepix-003'
 
 resource service_apim_cliquepix_002_name_resource 'Microsoft.ApiManagement/service@2025-03-01-preview' = {
   name: service_apim_cliquepix_002_name
   location: 'East US'
   sku: {
-    name: 'Developer'
+    name: 'BasicV2'
     capacity: 1
   }
   identity: {
@@ -31,24 +35,15 @@ resource service_apim_cliquepix_002_name_resource 'Microsoft.ApiManagement/servi
         certificateSource: 'BuiltIn'
       }
     ]
-    customProperties: {
-      'Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Protocols.Tls10': 'False'
-      'Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Protocols.Tls11': 'False'
-      'Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Protocols.Ssl30': 'False'
-      'Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Ciphers.TripleDes168': 'False'
-      'Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Backend.Protocols.Tls10': 'False'
-      'Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Backend.Protocols.Tls11': 'False'
-      'Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Backend.Protocols.Ssl30': 'False'
-      'Microsoft.WindowsAzure.ApiManagement.Gateway.Protocols.Server.Http2': 'False'
-    }
+    // customProperties (TLS cipher toggles) removed for v2 — classic-only,
+    // ARM deploy fails on v2 if present. Per Microsoft Learn v2 unavailable-
+    // features list ("Cipher configuration").
+    // legacyPortalStatus / developerPortalStatus / releaseChannel removed —
+    // also classic-only.
     virtualNetworkType: 'None'
     disableGateway: false
-    natGatewayState: 'Unsupported'
     apiVersionConstraint: {}
     publicNetworkAccess: 'Enabled'
-    legacyPortalStatus: 'Disabled'
-    developerPortalStatus: 'Enabled'
-    releaseChannel: 'Preview'
   }
 }
 
@@ -76,29 +71,9 @@ resource service_apim_cliquepix_002_name_cliquepix_v1 'Microsoft.ApiManagement/s
   }
 }
 
-resource service_apim_cliquepix_002_name_echo_api 'Microsoft.ApiManagement/service/apis@2025-03-01-preview' = {
-  parent: service_apim_cliquepix_002_name_resource
-  name: 'echo-api'
-  properties: {
-    displayName: 'Echo API'
-    apiRevision: '1'
-    subscriptionRequired: true
-    serviceUrl: 'https://echo.playground.azure-api.net/api'
-    path: 'echo'
-    protocols: [
-      'https'
-    ]
-    authenticationSettings: {
-      oAuth2AuthenticationSettings: []
-      openidAuthenticationSettings: []
-    }
-    subscriptionKeyParameterNames: {
-      header: 'Ocp-Apim-Subscription-Key'
-      query: 'subscription-key'
-    }
-    isCurrent: true
-  }
-}
+// Echo API + all its operations / policies / product apiLinks were removed
+// 2026-05-05 as part of the BasicV2 migration. Default APIM scaffolding,
+// never used by Clique Pix. The cliquepix-v1 API below is the only real API.
 
 resource service_apim_cliquepix_002_name_administrators 'Microsoft.ApiManagement/service/groups@2025-03-01-preview' = {
   parent: service_apim_cliquepix_002_name_resource
@@ -202,38 +177,10 @@ resource service_apim_cliquepix_002_name_default 'Microsoft.ApiManagement/servic
   }
 }
 
-resource service_apim_cliquepix_002_name_delegation 'Microsoft.ApiManagement/service/portalsettings@2025-03-01-preview' = {
-  parent: service_apim_cliquepix_002_name_resource
-  name: 'delegation'
-  properties: {
-    subscriptions: {
-      enabled: false
-    }
-    userRegistration: {
-      enabled: false
-    }
-  }
-}
-
-resource service_apim_cliquepix_002_name_signin 'Microsoft.ApiManagement/service/portalsettings@2025-03-01-preview' = {
-  parent: service_apim_cliquepix_002_name_resource
-  name: 'signin'
-  properties: {
-    enabled: false
-  }
-}
-
-resource service_apim_cliquepix_002_name_signup 'Microsoft.ApiManagement/service/portalsettings@2025-03-01-preview' = {
-  parent: service_apim_cliquepix_002_name_resource
-  name: 'signup'
-  properties: {
-    enabled: true
-    termsOfService: {
-      enabled: false
-      consentRequired: false
-    }
-  }
-}
+// portalsettings/{delegation,signin,signup} removed for BasicV2 — Microsoft
+// rejects them as 'MethodNotAllowedInPricingTier'. Clique Pix does not use
+// the APIM developer portal anyway (clients hit api.clique-pix.com via
+// Front Door → APIM gateway directly).
 
 resource service_apim_cliquepix_002_name_starter 'Microsoft.ApiManagement/service/products@2025-03-01-preview' = {
   parent: service_apim_cliquepix_002_name_resource
@@ -263,16 +210,11 @@ resource service_apim_cliquepix_002_name_unlimited 'Microsoft.ApiManagement/serv
   }
 }
 
-resource service_apim_cliquepix_002_name_master 'Microsoft.ApiManagement/service/subscriptions@2025-03-01-preview' = {
-  parent: service_apim_cliquepix_002_name_resource
-  name: 'master'
-  properties: {
-    scope: '${service_apim_cliquepix_002_name_resource.id}/'
-    displayName: 'Built-in all-access subscription'
-    state: 'active'
-    allowTracing: false
-  }
-}
+// Built-in 'master' all-access subscription removed — its scope (the full
+// service ID with trailing slash) is rejected by APIM REST as
+// 'Subscription scope should be one of /apis, /apis/{apiId},
+// /products/{productId}'. Clique Pix's cliquepix-v1 API has
+// subscriptionRequired:false, so APIM subscriptions aren't used at all.
 
 resource service_apim_cliquepix_002_name_AccountClosedDeveloper 'Microsoft.ApiManagement/service/templates@2025-03-01-preview' = {
   parent: service_apim_cliquepix_002_name_resource
@@ -927,196 +869,12 @@ resource service_apim_cliquepix_002_name_cliquepix_v1_catch_all_put 'Microsoft.A
   ]
 }
 
-resource service_apim_cliquepix_002_name_echo_api_create_resource 'Microsoft.ApiManagement/service/apis/operations@2025-03-01-preview' = {
-  parent: service_apim_cliquepix_002_name_echo_api
-  name: 'create-resource'
-  properties: {
-    displayName: 'Create resource'
-    method: 'POST'
-    urlTemplate: '/resource'
-    templateParameters: []
-    description: 'A demonstration of a POST call based on the echo backend above. The request body is expected to contain JSON-formatted data (see example below). A policy is used to automatically transform any request sent in JSON directly to XML. In a real-world scenario this could be used to enable modern clients to speak to a legacy backend.'
-    request: {
-      queryParameters: []
-      headers: []
-      representations: [
-        {
-          contentType: 'application/json'
-          examples: {
-            default: {
-              value: '{\r\n\t"vehicleType": "train",\r\n\t"maxSpeed": 125,\r\n\t"avgSpeed": 90,\r\n\t"speedUnit": "mph"\r\n}'
-            }
-          }
-        }
-      ]
-    }
-    responses: [
-      {
-        statusCode: 200
-        representations: []
-        headers: []
-      }
-    ]
-  }
-  dependsOn: [
-    service_apim_cliquepix_002_name_resource
-  ]
-}
-
-resource service_apim_cliquepix_002_name_echo_api_modify_resource 'Microsoft.ApiManagement/service/apis/operations@2025-03-01-preview' = {
-  parent: service_apim_cliquepix_002_name_echo_api
-  name: 'modify-resource'
-  properties: {
-    displayName: 'Modify Resource'
-    method: 'PUT'
-    urlTemplate: '/resource'
-    templateParameters: []
-    description: 'A demonstration of a PUT call handled by the same "echo" backend as above. You can now specify a request body in addition to headers and it will be returned as well.'
-    responses: [
-      {
-        statusCode: 200
-        representations: []
-        headers: []
-      }
-    ]
-  }
-  dependsOn: [
-    service_apim_cliquepix_002_name_resource
-  ]
-}
-
-resource service_apim_cliquepix_002_name_echo_api_remove_resource 'Microsoft.ApiManagement/service/apis/operations@2025-03-01-preview' = {
-  parent: service_apim_cliquepix_002_name_echo_api
-  name: 'remove-resource'
-  properties: {
-    displayName: 'Remove resource'
-    method: 'DELETE'
-    urlTemplate: '/resource'
-    templateParameters: []
-    description: 'A demonstration of a DELETE call which traditionally deletes the resource. It is based on the same "echo" backend as in all other operations so nothing is actually deleted.'
-    responses: [
-      {
-        statusCode: 200
-        representations: []
-        headers: []
-      }
-    ]
-  }
-  dependsOn: [
-    service_apim_cliquepix_002_name_resource
-  ]
-}
-
-resource service_apim_cliquepix_002_name_echo_api_retrieve_header_only 'Microsoft.ApiManagement/service/apis/operations@2025-03-01-preview' = {
-  parent: service_apim_cliquepix_002_name_echo_api
-  name: 'retrieve-header-only'
-  properties: {
-    displayName: 'Retrieve header only'
-    method: 'HEAD'
-    urlTemplate: '/resource'
-    templateParameters: []
-    description: 'The HEAD operation returns only headers. In this demonstration a policy is used to set additional headers when the response is returned and to enable JSONP.'
-    responses: [
-      {
-        statusCode: 200
-        representations: []
-        headers: []
-      }
-    ]
-  }
-  dependsOn: [
-    service_apim_cliquepix_002_name_resource
-  ]
-}
-
-resource service_apim_cliquepix_002_name_echo_api_retrieve_resource 'Microsoft.ApiManagement/service/apis/operations@2025-03-01-preview' = {
-  parent: service_apim_cliquepix_002_name_echo_api
-  name: 'retrieve-resource'
-  properties: {
-    displayName: 'Retrieve resource'
-    method: 'GET'
-    urlTemplate: '/resource'
-    templateParameters: []
-    description: 'A demonstration of a GET call on a sample resource. It is handled by an "echo" backend which returns a response equal to the request (the supplied headers and body are being returned as received).'
-    request: {
-      queryParameters: [
-        {
-          name: 'param1'
-          description: 'A sample parameter that is required and has a default value of "sample".'
-          type: 'string'
-          defaultValue: 'sample'
-          required: true
-          values: [
-            'sample'
-          ]
-        }
-        {
-          name: 'param2'
-          description: 'Another sample parameter, set to not required.'
-          type: 'number'
-          values: []
-        }
-      ]
-      headers: []
-      representations: []
-    }
-    responses: [
-      {
-        statusCode: 200
-        description: 'Returned in all cases.'
-        representations: []
-        headers: []
-      }
-    ]
-  }
-  dependsOn: [
-    service_apim_cliquepix_002_name_resource
-  ]
-}
-
-resource service_apim_cliquepix_002_name_echo_api_retrieve_resource_cached 'Microsoft.ApiManagement/service/apis/operations@2025-03-01-preview' = {
-  parent: service_apim_cliquepix_002_name_echo_api
-  name: 'retrieve-resource-cached'
-  properties: {
-    displayName: 'Retrieve resource (cached)'
-    method: 'GET'
-    urlTemplate: '/resource-cached'
-    templateParameters: []
-    description: 'A demonstration of a GET call with caching enabled on the same "echo" backend as above. Cache TTL is set to 1 hour. When you make the first request the headers you supplied will be cached. Subsequent calls will return the same headers as the first time even if you change them in your request.'
-    request: {
-      queryParameters: [
-        {
-          name: 'param1'
-          description: 'A sample parameter that is required and has a default value of "sample".'
-          type: 'string'
-          defaultValue: 'sample'
-          required: true
-          values: [
-            'sample'
-          ]
-        }
-        {
-          name: 'param2'
-          description: 'Another sample parameter, set to not required.'
-          type: 'string'
-          values: []
-        }
-      ]
-      headers: []
-      representations: []
-    }
-    responses: [
-      {
-        statusCode: 200
-        representations: []
-        headers: []
-      }
-    ]
-  }
-  dependsOn: [
-    service_apim_cliquepix_002_name_resource
-  ]
-}
+// Echo operations (6 — create-resource, modify-resource, remove-resource,
+// retrieve-header-only, retrieve-resource, retrieve-resource-cached) and
+// their 3 attached operation policies were removed 2026-05-05 as part of
+// the BasicV2 migration. The retrieve-resource-cached op had a
+// <cache-lookup>/<cache-store> policy whose v2 syntax differs slightly —
+// not relevant since the entire echo-api surface is gone.
 
 resource service_apim_cliquepix_002_name_cliquepix_v1_upload_url 'Microsoft.ApiManagement/service/apis/operations@2025-03-01-preview' = {
   parent: service_apim_cliquepix_002_name_cliquepix_v1
@@ -1140,11 +898,19 @@ resource service_apim_cliquepix_002_name_cliquepix_v1_upload_url 'Microsoft.ApiM
   ]
 }
 
+// API-scope policy for cliquepix-v1. Source of truth is apim_policy.xml at
+// repo root — loaded at compile time via loadTextContent so edits flow into
+// the next bicep deploy automatically. The 6-incident history + the
+// rate-limit prohibition live in apim_policy.xml's in-file comment.
+// Pre-migration the XML was duplicated inline here (drift had occurred — the
+// inline copy held the OLD 4-incident comment from 2026-04-27 while
+// apim_policy.xml had the 6-incident comment as of 2026-05-05). Consolidated
+// 2026-05-05 alongside the BasicV2 migration to eliminate the duplication.
 resource service_apim_cliquepix_002_name_cliquepix_v1_policy 'Microsoft.ApiManagement/service/apis/policies@2025-03-01-preview' = {
   parent: service_apim_cliquepix_002_name_cliquepix_v1
   name: 'policy'
   properties: {
-    value: '<!--\r\n  APIM policy for the "CliquePix API v1" - applies at the "All operations"\r\n  scope on that API (NOT the global / "All APIs" scope).\r\n\r\n  HISTORY OF RATE-LIMIT REMOVAL (2026-04-27):\r\n  rate-limit-by-key was removed from this policy after four consecutive\r\n  user-blocking failures in beta:\r\n    1. Original 120/min limit was easily exceeded by normal usage\r\n       (5-layer Entra refresh defense, 30s feed polling, avatar SAS\r\n       regeneration on every list/detail handler).\r\n    2. Bumping to 300/min did not help; the Developer-tier in-memory\r\n       counter cache appears to persist stale state across policy edits.\r\n    3. Bumping to 600/min and bypassing critical paths still produced\r\n       429 responses on a first-attempt upload (verified via\r\n       APIM "RateLimitExceeded" metric).\r\n    4. The same first-upload 429 reappeared on a follow-up attempt.\r\n\r\n  Abuse protection now comes entirely from the application layer:\r\n    - JWT bearer-token validation (every endpoint)\r\n    - Event / clique membership check (every endpoint that accepts an\r\n      event_id or clique_id)\r\n    - User Delegation SAS (5-minute expiry, scoped to a single blob\r\n      path; client cannot read or list)\r\n    - Orphan cleanup timer (every 15 min) deletes pending uploads\r\n    - Per-user video count cap (PER_USER_VIDEO_LIMIT, enforced in\r\n      backend/src/functions/videos.ts)\r\n\r\n  If real abuse risk emerges post-beta, the right response is:\r\n    - Move APIM off Developer tier (Standard v2 has a distributed\r\n      rate-limit cache and an SLA), THEN\r\n    - Add per-user upload-frequency caps at the Functions layer where\r\n      we control the logic and can debug it\r\n    - Configure Azure Front Door WAF for genuine bot traffic patterns\r\n\r\n  Do NOT re-add rate-limit-by-key to this policy without first migrating\r\n  off APIM Developer tier. The 4-incident history is documented\r\n  reproducibly above; repeating it would be a regression.\r\n\r\n  Source of truth: this file. Deploy via az rest PUT against the\r\n  management API policy URL with a JSON body of the form:\r\n    { "properties": { "format": "rawxml", "value": "<contents of this file>" } }\r\n-->\r\n<policies>\r\n  <inbound>\r\n    <base />\r\n    <cors allow-credentials="false">\r\n      <allowed-origins>\r\n        <origin>https://clique-pix.com</origin>\r\n        <origin>http://localhost:5173</origin>\r\n      </allowed-origins>\r\n      <allowed-methods preflight-result-max-age="3600">\r\n        <method>GET</method>\r\n        <method>POST</method>\r\n        <method>PUT</method>\r\n        <method>PATCH</method>\r\n        <method>DELETE</method>\r\n        <method>OPTIONS</method>\r\n      </allowed-methods>\r\n      <allowed-headers>\r\n        <header>*</header>\r\n      </allowed-headers>\r\n      <expose-headers>\r\n        <header>x-request-id</header>\r\n      </expose-headers>\r\n    </cors>\r\n  </inbound>\r\n  <backend>\r\n    <base />\r\n  </backend>\r\n  <outbound>\r\n    <base />\r\n  </outbound>\r\n  <on-error>\r\n    <base />\r\n  </on-error>\r\n</policies>'
+    value: loadTextContent('../../apim_policy.xml')
     format: 'xml'
   }
   dependsOn: [
@@ -1152,85 +918,19 @@ resource service_apim_cliquepix_002_name_cliquepix_v1_policy 'Microsoft.ApiManag
   ]
 }
 
-resource service_apim_cliquepix_002_name_administrators_1 'Microsoft.ApiManagement/service/groups/users@2025-03-01-preview' = {
-  parent: service_apim_cliquepix_002_name_administrators
-  name: '1'
-  dependsOn: [
-    service_apim_cliquepix_002_name_resource
-  ]
-}
+// System-group user memberships (administrators / developers) removed —
+// APIM rejects them with 'System group membership cannot be changed'.
+// The Administrator user is auto-added to the administrators system group
+// at service creation time.
 
-resource service_apim_cliquepix_002_name_developers_1 'Microsoft.ApiManagement/service/groups/users@2025-03-01-preview' = {
-  parent: service_apim_cliquepix_002_name_developers
-  name: '1'
-  dependsOn: [
-    service_apim_cliquepix_002_name_resource
-  ]
-}
+// Echo API product/apis links removed alongside the echo-api itself
+// (BasicV2 migration, 2026-05-05).
 
-resource service_apim_cliquepix_002_name_starter_echo_api 'Microsoft.ApiManagement/service/products/apis@2025-03-01-preview' = {
-  parent: service_apim_cliquepix_002_name_starter
-  name: 'echo-api'
-  dependsOn: [
-    service_apim_cliquepix_002_name_resource
-  ]
-}
-
-resource service_apim_cliquepix_002_name_unlimited_echo_api 'Microsoft.ApiManagement/service/products/apis@2025-03-01-preview' = {
-  parent: service_apim_cliquepix_002_name_unlimited
-  name: 'echo-api'
-  dependsOn: [
-    service_apim_cliquepix_002_name_resource
-  ]
-}
-
-resource service_apim_cliquepix_002_name_starter_administrators 'Microsoft.ApiManagement/service/products/groups@2025-03-01-preview' = {
-  parent: service_apim_cliquepix_002_name_starter
-  name: 'administrators'
-  dependsOn: [
-    service_apim_cliquepix_002_name_resource
-  ]
-}
-
-resource service_apim_cliquepix_002_name_unlimited_administrators 'Microsoft.ApiManagement/service/products/groups@2025-03-01-preview' = {
-  parent: service_apim_cliquepix_002_name_unlimited
-  name: 'administrators'
-  dependsOn: [
-    service_apim_cliquepix_002_name_resource
-  ]
-}
-
-resource service_apim_cliquepix_002_name_starter_developers 'Microsoft.ApiManagement/service/products/groups@2025-03-01-preview' = {
-  parent: service_apim_cliquepix_002_name_starter
-  name: 'developers'
-  dependsOn: [
-    service_apim_cliquepix_002_name_resource
-  ]
-}
-
-resource service_apim_cliquepix_002_name_unlimited_developers 'Microsoft.ApiManagement/service/products/groups@2025-03-01-preview' = {
-  parent: service_apim_cliquepix_002_name_unlimited
-  name: 'developers'
-  dependsOn: [
-    service_apim_cliquepix_002_name_resource
-  ]
-}
-
-resource service_apim_cliquepix_002_name_starter_guests 'Microsoft.ApiManagement/service/products/groups@2025-03-01-preview' = {
-  parent: service_apim_cliquepix_002_name_starter
-  name: 'guests'
-  dependsOn: [
-    service_apim_cliquepix_002_name_resource
-  ]
-}
-
-resource service_apim_cliquepix_002_name_unlimited_guests 'Microsoft.ApiManagement/service/products/groups@2025-03-01-preview' = {
-  parent: service_apim_cliquepix_002_name_unlimited
-  name: 'guests'
-  dependsOn: [
-    service_apim_cliquepix_002_name_resource
-  ]
-}
+// Six service/products/groups associations (starter + unlimited × admins,
+// developers, guests) removed — APIM auto-creates these system-product↔
+// system-group links at service creation. Re-declaring them in bicep would
+// fail with 'Link already exists between specified Product and Group'.
+// Verified live state on apim-cliquepix-003 already has all six.
 
 resource service_apim_cliquepix_002_name_starter_policy 'Microsoft.ApiManagement/service/products/policies@2025-03-01-preview' = {
   parent: service_apim_cliquepix_002_name_starter
@@ -1259,153 +959,21 @@ resource service_apim_cliquepix_002_name_starter_policy 'Microsoft.ApiManagement
 // See apim_policy.xml in-file comment, docs/DEPLOYMENT_STATUS.md, and
 // docs/BETA_OPERATIONS_RUNBOOK.md §2 for the full incident history (#1-#6).
 
-resource service_apim_cliquepix_002_name_echo_api_create_resource_policy 'Microsoft.ApiManagement/service/apis/operations/policies@2025-03-01-preview' = {
-  parent: service_apim_cliquepix_002_name_echo_api_create_resource
-  name: 'policy'
-  properties: {
-    value: '<policies>\r\n  <inbound>\r\n    <base />\r\n    <json-to-xml apply="always" consider-accept-header="false" />\r\n  </inbound>\r\n  <backend>\r\n    <base />\r\n  </backend>\r\n  <outbound>\r\n    <base />\r\n  </outbound>\r\n</policies>'
-    format: 'xml'
-  }
-  dependsOn: [
-    service_apim_cliquepix_002_name_echo_api
-    service_apim_cliquepix_002_name_resource
-  ]
-}
+// Echo API operation policies (3 — create-resource, retrieve-header-only,
+// retrieve-resource-cached) and the newer-form product/apiLinks (2 — starter
+// + unlimited) removed alongside echo-api itself (BasicV2 migration,
+// 2026-05-05). The retrieve-resource-cached policy used cache-lookup +
+// cache-store with vary-by-header — v2 policy syntax differs slightly here,
+// but moot because the entire echo surface is gone.
 
-resource service_apim_cliquepix_002_name_echo_api_retrieve_header_only_policy 'Microsoft.ApiManagement/service/apis/operations/policies@2025-03-01-preview' = {
-  parent: service_apim_cliquepix_002_name_echo_api_retrieve_header_only
-  name: 'policy'
-  properties: {
-    value: '<policies>\r\n  <inbound>\r\n    <base />\r\n  </inbound>\r\n  <backend>\r\n    <base />\r\n  </backend>\r\n  <outbound>\r\n    <base />\r\n    <set-header name="X-My-Sample" exists-action="override">\r\n      <value>This is a sample</value>\r\n      <!-- for multiple headers with the same name add additional value elements -->\r\n    </set-header>\r\n    <jsonp callback-parameter-name="ProcessResponse" />\r\n  </outbound>\r\n</policies>'
-    format: 'xml'
-  }
-  dependsOn: [
-    service_apim_cliquepix_002_name_echo_api
-    service_apim_cliquepix_002_name_resource
-  ]
-}
-
-resource service_apim_cliquepix_002_name_echo_api_retrieve_resource_cached_policy 'Microsoft.ApiManagement/service/apis/operations/policies@2025-03-01-preview' = {
-  parent: service_apim_cliquepix_002_name_echo_api_retrieve_resource_cached
-  name: 'policy'
-  properties: {
-    value: '<policies>\r\n  <inbound>\r\n    <base />\r\n    <cache-lookup vary-by-developer="false" vary-by-developer-groups="false">\r\n      <vary-by-header>Accept</vary-by-header>\r\n      <vary-by-header>Accept-Charset</vary-by-header>\r\n    </cache-lookup>\r\n    <rewrite-uri template="/resource" />\r\n  </inbound>\r\n  <backend>\r\n    <base />\r\n  </backend>\r\n  <outbound>\r\n    <base />\r\n    <cache-store duration="3600" />\r\n  </outbound>\r\n</policies>'
-    format: 'xml'
-  }
-  dependsOn: [
-    service_apim_cliquepix_002_name_echo_api
-    service_apim_cliquepix_002_name_resource
-  ]
-}
-
-resource service_apim_cliquepix_002_name_starter_6CABC885_14A6_49DE_9A6A_C2F7E2B7050E 'Microsoft.ApiManagement/service/products/apiLinks@2025-03-01-preview' = {
-  parent: service_apim_cliquepix_002_name_starter
-  name: '6CABC885-14A6-49DE-9A6A-C2F7E2B7050E'
-  properties: {
-    apiId: service_apim_cliquepix_002_name_echo_api.id
-  }
-  dependsOn: [
-    service_apim_cliquepix_002_name_resource
-  ]
-}
-
-resource service_apim_cliquepix_002_name_unlimited_8FAEC015_0E81_4A33_8B76_35256ECED32A 'Microsoft.ApiManagement/service/products/apiLinks@2025-03-01-preview' = {
-  parent: service_apim_cliquepix_002_name_unlimited
-  name: '8FAEC015-0E81-4A33-8B76-35256ECED32A'
-  properties: {
-    apiId: service_apim_cliquepix_002_name_echo_api.id
-  }
-  dependsOn: [
-    service_apim_cliquepix_002_name_resource
-  ]
-}
-
-resource service_apim_cliquepix_002_name_starter_2045FF8B_3CB2_4139_AC59_CFD65695158D 'Microsoft.ApiManagement/service/products/groupLinks@2025-03-01-preview' = {
-  parent: service_apim_cliquepix_002_name_starter
-  name: '2045FF8B-3CB2-4139-AC59-CFD65695158D'
-  properties: {
-    groupId: service_apim_cliquepix_002_name_guests.id
-  }
-  dependsOn: [
-    service_apim_cliquepix_002_name_resource
-  ]
-}
-
-resource service_apim_cliquepix_002_name_unlimited_25654526_4944_448E_A708_A0CCCB8DDC67 'Microsoft.ApiManagement/service/products/groupLinks@2025-03-01-preview' = {
-  parent: service_apim_cliquepix_002_name_unlimited
-  name: '25654526-4944-448E-A708-A0CCCB8DDC67'
-  properties: {
-    groupId: service_apim_cliquepix_002_name_administrators.id
-  }
-  dependsOn: [
-    service_apim_cliquepix_002_name_resource
-  ]
-}
-
-resource service_apim_cliquepix_002_name_starter_95911B5E_70D7_4AA6_A49B_EBB6B7E36742 'Microsoft.ApiManagement/service/products/groupLinks@2025-03-01-preview' = {
-  parent: service_apim_cliquepix_002_name_starter
-  name: '95911B5E-70D7-4AA6-A49B-EBB6B7E36742'
-  properties: {
-    groupId: service_apim_cliquepix_002_name_administrators.id
-  }
-  dependsOn: [
-    service_apim_cliquepix_002_name_resource
-  ]
-}
-
-resource service_apim_cliquepix_002_name_unlimited_AA041778_F751_4473_8019_964C9322098E 'Microsoft.ApiManagement/service/products/groupLinks@2025-03-01-preview' = {
-  parent: service_apim_cliquepix_002_name_unlimited
-  name: 'AA041778-F751-4473-8019-964C9322098E'
-  properties: {
-    groupId: service_apim_cliquepix_002_name_developers.id
-  }
-  dependsOn: [
-    service_apim_cliquepix_002_name_resource
-  ]
-}
-
-resource service_apim_cliquepix_002_name_starter_B58E7705_1DAC_47F3_8BDE_082099DD96C8 'Microsoft.ApiManagement/service/products/groupLinks@2025-03-01-preview' = {
-  parent: service_apim_cliquepix_002_name_starter
-  name: 'B58E7705-1DAC-47F3-8BDE-082099DD96C8'
-  properties: {
-    groupId: service_apim_cliquepix_002_name_developers.id
-  }
-  dependsOn: [
-    service_apim_cliquepix_002_name_resource
-  ]
-}
-
-resource service_apim_cliquepix_002_name_unlimited_F6C34732_5D04_4A3F_B403_561907405066 'Microsoft.ApiManagement/service/products/groupLinks@2025-03-01-preview' = {
-  parent: service_apim_cliquepix_002_name_unlimited
-  name: 'F6C34732-5D04-4A3F-B403-561907405066'
-  properties: {
-    groupId: service_apim_cliquepix_002_name_guests.id
-  }
-  dependsOn: [
-    service_apim_cliquepix_002_name_resource
-  ]
-}
-
-resource service_apim_cliquepix_002_name_69c2f544f2ccf70039070001 'Microsoft.ApiManagement/service/subscriptions@2025-03-01-preview' = {
-  parent: service_apim_cliquepix_002_name_resource
-  name: '69c2f544f2ccf70039070001'
-  properties: {
-    ownerId: service_apim_cliquepix_002_name_1.id
-    scope: service_apim_cliquepix_002_name_starter.id
-    state: 'active'
-    allowTracing: false
-    displayName: subscriptions_69c2f544f2ccf70039070001_displayName
-  }
-}
-
-resource service_apim_cliquepix_002_name_69c2f544f2ccf70039070002 'Microsoft.ApiManagement/service/subscriptions@2025-03-01-preview' = {
-  parent: service_apim_cliquepix_002_name_resource
-  name: '69c2f544f2ccf70039070002'
-  properties: {
-    ownerId: service_apim_cliquepix_002_name_1.id
-    scope: service_apim_cliquepix_002_name_unlimited.id
-    state: 'active'
-    allowTracing: false
-    displayName: subscriptions_69c2f544f2ccf70039070002_displayName
-  }
-}
+// Six product/groupLinks resources removed — APIM rejects them with
+// 'Link already exists between specified Product and Group' because the
+// service auto-creates these system-product↔system-group links at service
+// creation. They cannot be redeclared in IaC.
+//
+// Two product subscriptions (...69070001, ...69070002) removed — their
+// scope (full product resource ID) is rejected by APIM with
+// 'Subscription scope should be one of /apis, /apis/{apiId},
+// /products/{productId}'. Clique Pix does not use APIM subscriptions
+// (cliquepix-v1 has subscriptionRequired:false), so removing them
+// has zero functional impact.

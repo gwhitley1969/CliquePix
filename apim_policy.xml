@@ -41,8 +41,9 @@
                resources, replace with explanatory comment block.
       Phase B: az rest DELETE on each of the 6 .../operations/{op}/policies/policy
                URLs. Each operation falls through to API-scope (clean).
-      Phase C: sleep 90 + `az apim api update --protocols https` to flush
-               Developer-tier in-memory counters and force gateway pod refresh.
+      Phase C: sleep 90 + an `az apim api update` flush call (with the
+               protocols=https setting) to refresh Developer-tier in-memory
+               counters and force gateway pod refresh.
     Verified: sign-in lands on Events screen post-fix; backend probe of
     /api/auth/verify returns 401 (canonical UNAUTHORIZED), not 429.
 

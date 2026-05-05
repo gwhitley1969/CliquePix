@@ -1263,7 +1263,7 @@ Use Flutter flavor/environment mechanisms. Do not hardcode environment-specific 
 | App Insights | `appi-cliquepix-{env}` |
 | Key Vault | `kv-cliquepix-{env}` |
 | Front Door | `fd-cliquepix-prod` |
-| APIM | `apim-cliquepix-002` |
+| APIM | `apim-cliquepix-003` (Basic v2, since 2026-05-05 — migrated from `apim-cliquepix-002` Developer tier) |
 | Web PubSub | `wps-cliquepix-prod` |
 | Container Registry | `cracliquepix` (ACR names disallow hyphens) — **new for video v1** |
 | Container Apps Environment | `cae-cliquepix-prod` — **new for video v1** |

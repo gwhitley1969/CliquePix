@@ -25,7 +25,7 @@ Operational procedures for the Clique Pix open beta. Covers incident response, c
 | PostgreSQL | `pg-cliquepixdb` | Azure Portal → Azure Database for PostgreSQL |
 | Storage Account | `stcliquepixprod` | Azure Portal → Storage Accounts |
 | App Insights | `appi-cliquepix-prod` | Azure Portal → Application Insights |
-| APIM | `apim-cliquepix-002` | Azure Portal → API Management |
+| APIM | `apim-cliquepix-003` (Basic v2, since 2026-05-05) | Azure Portal → API Management |
 | Web PubSub | `wps-cliquepix-prod` | Azure Portal → Web PubSub |
 | ACR | `cracliquepix` | Azure Portal → Container Registries |
 
@@ -446,7 +446,7 @@ BAK="/c/Users/genew/AppData/Local/Temp/apim-bak-$(date +%Y%m%d-%H%M)"
 mkdir -p "$BAK"
 SUB=25410e67-b3c8-49a2-8cf0-ab9f77ce613f
 RG=rg-cliquepix-prod
-APIM=apim-cliquepix-002
+APIM=apim-cliquepix-003
 API=cliquepix-v1
 
 # Global scope
@@ -508,7 +508,7 @@ APIM Developer tier has a single in-memory counter cache. Even after the policy 
 
 ```bash
 sleep 90
-az apim api update -g rg-cliquepix-prod -n apim-cliquepix-002 --api-id cliquepix-v1 --protocols https
+az apim api update -g rg-cliquepix-prod -n apim-cliquepix-003 --api-id cliquepix-v1 --protocols https
 ```
 
 The `--protocols https` toggle is idempotent and forces APIM to refresh policies on the gateway pod.
@@ -1028,7 +1028,9 @@ print taps      = toscalar(taps),
 
 ## 8. APIM Migration: Developer → Basic v2
 
-**One-time procedure.** Move APIM from `apim-cliquepix-002` (Developer tier — no SLA, single instance, classic platform) to a new Basic v2 instance before App Store / Play Store submission. Total wall-clock: 4-6 hours of focused work plus 24-48 hours of soak.
+> ✅ **EXECUTED 2026-05-05.** Migrated from `apim-cliquepix-002` (Developer, ~$50/month, no SLA) to **`apim-cliquepix-003`** (Basic v2, $150/month, 99.95% SLA, autoscale 1→10 units, v2 platform). Total wall-clock from Phase A start → Phase H decommission: **~46 minutes** (much faster than the 4-6h budget; v2 platform provisions in 5-10 min vs Developer's 30-45 min and the 24-48h soak was compressed to inline validation per user direction). See `docs/DEPLOYMENT_STATUS.md` top entry for the executed-state writeup including the Phase B retry that surfaced 5 v2-incompatible classes of bicep resources (`portalsettings`, `products/groups`, `products/groupLinks`, `groups/users` for system groups, `subscriptions` with bad scope) — bicep was hand-cleaned and the redeploy succeeded. The procedure below is preserved as a reference for any future Developer ↔ v2 migration in another environment, with executed-state deviations called out inline.
+
+**One-time procedure.** Move APIM from `apim-cliquepix-002` (Developer tier — no SLA, single instance, classic platform) to a new Basic v2 instance before App Store / Play Store submission. Original budget: 4-6 hours of focused work plus 24-48 hours of soak. Actual: ~46 min including all cleanup + decommission.
 
 ### Why now
 
