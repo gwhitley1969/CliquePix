@@ -47,6 +47,11 @@ class _CliquesListScreenState extends ConsumerState<CliquesListScreen>
             accentOpacity: 0.15,
             actions: [
               IconButton(
+                icon: const Icon(Icons.add_rounded),
+                tooltip: 'Create Clique',
+                onPressed: () => context.go('/cliques/create'),
+              ),
+              IconButton(
                 icon: const Icon(Icons.refresh_rounded),
                 tooltip: 'Refresh',
                 onPressed: () => ref.read(cliquesListProvider.notifier).refresh(),
