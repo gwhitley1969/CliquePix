@@ -75,7 +75,7 @@ Why Flutter for Clique Pix:
 | Layer | Service | Purpose |
 |-------|---------|---------|
 | Entry point | **Azure Front Door** (Standard) | Global load balancing, SSL termination |
-| API gateway | **Azure API Management** | API versioning, CORS, single published API surface (rate-limit-by-key removed 2026-04-27 — abuse protection moved to application layer; see `apim_policy.xml` in-file comment for incident history) |
+| API gateway | **Azure API Management** | API versioning, CORS, single published API surface. **Rate limiting is intentionally NOT performed at APIM** — see "Abuse protection design" below |
 | Compute | **Azure Functions** (TypeScript, Node.js) | REST API endpoints, timer-triggered cleanup, thumbnail generation |
 | Database | **PostgreSQL Flexible Server** | Relational data (users, cliques, events, photos, reactions) |
 | Object storage | **Azure Blob Storage** | Photo originals and thumbnails |
@@ -84,6 +84,28 @@ Why Flutter for Clique Pix:
 | Secrets | **Azure Key Vault** | Database connection string, push notification credentials |
 | Observability | **Application Insights** | API telemetry, error tracking, dependency monitoring |
 | Realtime messaging | **Azure Web PubSub** | Real-time DM delivery via WebSocket (Standard S1) |
+
+### Abuse protection design (the positive statement)
+
+Rate limiting is **deliberately performed at the application layer**, not at APIM. The design choice was made after six consecutive incidents (2026-04 through 2026-05) of APIM `<rate-limit>` / `<rate-limit-by-key>` / `<quota>` policies producing user-blocking 429s — the most painful being incident #6 (2026-05-05) where six op-scope `<rate-limit-by-key>` resources declared in `bicep/apim/main.bicep` 429-blocked sign-ins for a single user attempting normal retry patterns.
+
+Per Microsoft's own docs ("Limit call rate by key"), APIM rate limiting is *"never completely accurate"* on any tier because of the distributed throttling architecture — even Standard v2's token-bucket algorithm is just modestly more burst-friendly than Developer's sliding window. The fundamental issue is that any limit picked without measuring actual traffic patterns (5-layer Entra refresh defense, 30-second feed polling, avatar SAS regeneration on every list/detail handler, AuthInterceptor 401 retry, verify-in-background) will inevitably be either too tight (user-blocking) or too loose (no protection).
+
+**Where abuse protection actually lives:**
+
+- **JWT bearer-token validation** on every endpoint via `authMiddleware.ts` — only authenticated users reach the function code at all.
+- **Membership checks** on every endpoint that accepts an `event_id` or `clique_id` — non-members get 404 (not 403) so media existence can't be enumerated.
+- **User Delegation SAS** with 5-minute expiry, scoped to a single blob path, write+create-only — clients cannot read, list, or replay; SAS keys cannot be issued without managed-identity auth on the function side.
+- **Orphan cleanup timer** (every 15 min) deletes pending uploads — abandoned upload-URL requests don't accumulate.
+- **Per-user video count cap** (`PER_USER_VIDEO_LIMIT = 10`) enforced in `backend/src/functions/videos.ts` at the upload-URL endpoint.
+
+**If real abuse risk emerges post-beta**, the response order is:
+
+1. Add per-user upload-frequency caps **at the Functions layer** (not at APIM) — we control the logic, can debug it, and can tune limits with telemetry from `App Insights` instead of Microsoft's "never completely accurate" caveat.
+2. Configure Azure Front Door WAF for genuine bot traffic patterns (different problem domain — high-volume single-IP burst, not per-user limits).
+3. Only then consider re-introducing APIM rate-limit policies. Migration to APIM Basic v2 buys an SLA but does NOT make APIM rate-limiting accurate; the prerequisite for re-introducing `rate-limit-by-key` is **load-testing the limit against actual traffic patterns**, not tier upgrade.
+
+The full incident history (six incidents, all reproducible) lives in `apim_policy.xml`'s in-file comment. The audit script that catches APIM policy regressions is in `docs/BETA_OPERATIONS_RUNBOOK.md` §2 — it now also greps `bicep/apim/main.bicep` so IaC declarations don't slip past live-APIM cleanup.
 
 ### What Is Not In v1
 

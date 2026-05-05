@@ -1,6 +1,63 @@
 # DEPLOYMENT_STATUS.md — Clique Pix v1
 
-Last updated: 2026-05-04 (iOS account-switching unblocked — Broker.safariBrowser → Broker.msAuthenticator on iPhone unwraps SFSafariViewController's persistent cookie trap; on-device verified)
+Last updated: 2026-05-05 (sign-in 429 from orphaned operation-scope APIM rate-limits — incident #6 — fixed; bicep + live APIM in sync; on-device verified)
+
+## Sign-in 429 from orphaned operation-scope APIM rate-limits — incident #6 — fixed (2026-05-05)
+
+**Status:** ✅ `bicep/apim/main.bicep` edited (6 `apis/operations/policies` resources removed, replaced with explanatory comment block at lines 1247-1260), ✅ live APIM cleaned via 6 `az rest DELETE` calls, ✅ counter cache flushed (`sleep 90 + az apim api update --protocols https`), ✅ on-device verified — sign-in lands on Events screen, no banner. ✅ Diagnostic instrumentation `[AUTH-SIGNIN-FAIL]` debugPrint at `auth_providers.dart:174-180` STAYS as permanent diagnostic. **Pending:** commit + push (this incident's edits to bicep/apim/main.bicep + apim_policy.xml + auth_providers.dart + DEPLOYMENT_STATUS.md + BETA_OPERATIONS_RUNBOOK.md + ARCHITECTURE.md).
+
+**The user complaint.** After rebuilding the release APK in this session for an unrelated cliques-screen UI change, sign-in stopped working on Android. Red banner *"Sign in failed. Please try again."* on the LoginScreen. The cliques-screen change was a 5-line addition in `app/lib/features/cliques/presentation/cliques_list_screen.dart` (a screen rendered only post-auth) — confirmed innocent by `git diff HEAD --stat`. So the rebuild was the trigger but not the cause; something else became visible.
+
+**Why we were initially blind.** The "Sign in failed. Please try again." string at `auth_providers.dart:199` is a generic catch-all. The catch block at lines 174-200 differentiates four cases (age-gate 403, MSAL/AADSTS, TimeoutException, generic) but **does not log the underlying exception** — `final msg = e.toString()` is computed but never printed. Whatever exception fired after MSAL succeeded was being silently swallowed. Three escalating diagnostic steps:
+
+1. **`adb shell pm clear com.cliquepix.clique_pix` + retry** — didn't help. (Critical signal: the rate-limit counter was keyed on JWT subject = user `oid`, so reinstalling the same user can't reset the bucket. This was the first hint.)
+2. **App Insights queries on `appi-cliquepix-prod` for `/api/auth/verify` in the failure window** — Query 3 (`customEvents` filtered to `auth_verify_*`) returned `auth_verify_success` events. Backend was succeeding. So the failure was either after the backend response OR (as it turned out) was a 429 NOT generating the `auth_verify_success` event for the failed attempt while ALSO not throwing an exception in `authVerify` (because APIM rejected before reaching the function).
+3. **Debug APK with `[AUTH-SIGNIN-FAIL]` debugPrint instrumentation** — added three lines to `auth_providers.dart:174-180` printing exception runtimeType, message, and (for DioException) status + body. Captured trace was definitive:
+   ```
+   13:16:08.451 [AUTH-SIGNIN-FAIL] type=DioException msg=DioException [bad response] ... 429
+   13:16:08.451 [AUTH-SIGNIN-FAIL] dio.type=DioExceptionType.badResponse dio.status=429
+                dio.body={statusCode: 429, message: Rate limit is exceeded. Try again in 1 seconds.}
+   ```
+
+**The root cause.** Phase 0+A audit (per `BETA_OPERATIONS_RUNBOOK.md §2`) found six operation-scope `<rate-limit-by-key>` policies on the `cliquepix-v1` API, all keyed on JWT Subject:
+
+| Operation | Limit | Effect |
+|---|---|---|
+| `auth-verify` | 30 calls / 60s per user | **The user-blocking bug** — the 5-layer Entra refresh defense + verify-in-background + AuthInterceptor 401 retry + a few user retries can blow past 30/min for a single user in seconds |
+| `upload-url` | 10 calls / 60s per user | The original incident #1-#4 limit re-emerged at op scope |
+| `catch-all-delete` | 30 calls / 60s per user | Would 429 moderation/cleanup flows |
+| `catch-all-patch` | 30 calls / 60s per user | — |
+| `catch-all-post` | 30 calls / 60s per user | — |
+| `catch-all-put` | 30 calls / 60s per user | — |
+
+**The bigger surprise.** These weren't drift — they were declared in `bicep/apim/main.bicep` (lines 1247-1322 pre-fix; the file lived at the repo root as `main.bicep` until 2026-05-05 when it was relocated to `bicep/apim/` to make IaC discoverable). The 2026-04-29 cleanup (incident #5) deleted them in live APIM but a subsequent bicep deploy re-introduced them, leaving live and IaC contradictory: the API-scope policy in the same bicep file (line 1147) had a comment explicitly forbidding `rate-limit-by-key`, yet the operation-scope resources lower in the file were doing exactly that.
+
+**The fix (4 phases, all completed 2026-05-05).**
+
+| Phase | Action | Outcome |
+|---|---|---|
+| A | Edit `bicep/apim/main.bicep` — remove the 6 `apis/operations/policies@2025-03-01-preview` resources targeting `cliquepix-v1` operations. Replaced with one explanatory comment block at lines 1247-1260 | Source of truth fixed. Operation resources themselves (URL templates / methods at lines 840, 855, 870, 885, 900, 915, 1121) untouched — operations still route, just lose their rate-limit gate |
+| B | `az rest DELETE` on each of the 6 `.../apis/cliquepix-v1/operations/{op}/policies/policy?api-version=2022-08-01` URLs. Verified each subsequent GET returns `ResourceNotFound` | Live APIM cleaned. Each operation falls through to the API-scope policy (clean: `<base/>` + CORS) |
+| C | `sleep 90 && az apim api update -g rg-cliquepix-prod -n apim-cliquepix-002 --api-id cliquepix-v1 --protocols https` | Drains in-flight Developer-tier in-memory counter cache; protocols toggle (idempotent — was already https-only) forces gateway pod policy refresh |
+| D | This entry + apim_policy.xml comment update (incident #6, ~70 new lines documenting the diagnosis + fix + lessons) + BETA_OPERATIONS_RUNBOOK.md §2 augmentation (the audit script DOES NOT inspect IaC; must also `grep -nE 'apis/operations/policies' bicep/apim/main.bicep`) + ARCHITECTURE.md §6 paragraph (positive design statement: abuse protection lives at application layer, not APIM) | Future agents can't repeat this mistake without ignoring three explicit prohibitions |
+
+**Verification.**
+- Live APIM probe from this dev box: `POST /api/auth/verify` (no token) returns 401 with canonical `UNAUTHORIZED` envelope, not 429. Five rapid POSTs all return 401, confirming no per-IP rate-limit either.
+- On-device sign-in: lands on Events screen, no banner.
+- App Insights: `auth_verify_success` event fires for the user; zero 429s in `requests` for `/api/auth/verify` in the post-fix window.
+- Backup of pre-fix policy XMLs: `C:\Users\genew\AppData\Local\Temp\apim-bak-20260505-1327\` — all six policy bodies preserved verbatim if revert is ever needed (it won't be).
+
+**Operational lessons.**
+1. **The Phase 0+A audit script audits live APIM, not source.** Augment with `grep -nE 'apis/operations/policies' bicep/apim/main.bicep` so IaC declarations get caught even if live APIM is clean (or vice versa).
+2. **`bicep/apim/main.bicep` is the source of truth for ALL APIM resources, including operation-scope policies.** `apim_policy.xml` covers only the API scope. The two are partially redundant (the API-scope policy XML is duplicated between `apim_policy.xml` and `bicep/apim/main.bicep` line 1147). A future cleanup should consolidate to one source.
+3. **The `[AUTH-SIGNIN-FAIL]` debugPrint at `auth_providers.dart:174-180`** was the single highest-leverage diagnostic in this session. Without it we'd have spent days guessing. It costs nothing on the happy path (catch block is never entered on success) and stays in the codebase as a permanent regression-detection layer.
+4. **Tier migration is the wrong tool for "rate-limit too tight" bugs.** Per Microsoft's own docs, rate-limiting at APIM is "never completely accurate" on any tier — Basic v2's token-bucket algorithm is modestly more burst-friendly than Developer's sliding-window, but the same 30/60 limit will 429 a user storm just as effectively. The prohibition on re-adding `rate-limit-by-key` in `apim_policy.xml` should hold even if/when we move off Developer; the prerequisite for re-introducing one is LOAD-TESTING against actual traffic, not tier upgrade.
+
+**The unrelated `MsalClientException current_account_mismatch` at trace timestamp 13:15:57** was caught gracefully by the `msg.contains('Msal')` branch in `auth_providers.dart:193`, transitioned to `AuthUnauthenticated` (clean LoginScreen, no banner). Known transient MSAL hiccup on first-attempt-after-fresh-install. NOT a bug — `resetSession()` clears state and the next attempt succeeds.
+
+**Rollback plan.** Restore `bicep/apim/main.bicep` lines 1247-1322 from `git show HEAD:bicep/apim/main.bicep` AND PUT the 6 backup policy XMLs from `apim-bak-20260505-1327\` back via `az rest PUT`. Both source and live state would revert. There is no plausible reason to do this — the prior state was an unintentional regression of the API-scope policy's design intent — but the path is documented for completeness.
+
+---
 
 ## iOS account-switching trapped in previous user's CIAM session — fixed (2026-05-04)
 

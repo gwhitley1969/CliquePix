@@ -435,11 +435,11 @@ If `create = true` is missing, the regression is back — re-add it, run `npm ru
 
 ### Photo / video upload returns "Too many requests" (HTTP 429)
 
-**Should not happen in beta** — all four APIM policy scopes (Global, Product, API, Operation) were verified clean as of 2026-04-29 (see `apim_policy.xml` in-file comment for the five-incident history). The Azure Monitor alert `apim-429-detected` fires on any APIM 429 within 5 minutes; if it triggers, run the Phase 0+A audit BELOW first, before anything else.
+**Should not happen in beta** — all four APIM policy scopes (Global, Product, API, Operation) AND `bicep/apim/main.bicep` were verified clean as of 2026-05-05 (see `apim_policy.xml` in-file comment for the six-incident history). The Azure Monitor alert `apim-429-detected` fires on any APIM 429 within 5 minutes; if it triggers, run the Phase 0+A audit BELOW first, before anything else.
 
-#### Phase 0+A — Audit ALL FOUR APIM policy scopes
+#### Phase 0+A — Audit ALL FOUR APIM policy scopes AND `bicep/apim/main.bicep`
 
-The 2026-04-29 incident (#5) reproduced because the prior cleanup only touched the API-scope policy. APIM has FOUR scopes and a rate-limit at any of them produces the same 429 body. Always audit all four.
+The 2026-04-29 incident (#5) reproduced because the prior cleanup only touched the API-scope policy. The 2026-05-05 incident (#6) reproduced because the audit script only inspects LIVE APIM, not IaC — six op-scope rate-limit-by-key resources were declared in `bicep/apim/main.bicep` and a bicep deploy reintroduced what the previous live-APIM cleanup had removed. APIM has FOUR scopes (Global, Product, API, Operation) and a rate-limit at any of them produces the same 429 body. The `bicep/apim/main.bicep` source of truth is a fifth surface that can re-introduce orphaned policies on next deploy. **Always audit all five.**
 
 ```bash
 BAK="/c/Users/genew/AppData/Local/Temp/apim-bak-$(date +%Y%m%d-%H%M)"
@@ -468,10 +468,20 @@ while read -r op; do
 done < "$BAK/ops.txt"
 
 # The grep that names the culprit:
-grep -l 'rate-limit\|<quota' "$BAK"/*.xml || echo "ALL CLEAN"
+grep -l 'rate-limit\|<quota' "$BAK"/*.xml || echo "ALL LIVE-APIM SCOPES CLEAN"
+
+# Also audit IaC — bicep/apim/main.bicep is the source of truth and can re-introduce
+# what the live-APIM cleanup removed on the next bicep deploy. Incident #6
+# (2026-05-05) was caused by exactly this kind of drift.
+echo
+echo "=== bicep/apim/main.bicep IaC audit ==="
+grep -nE 'apis/operations/policies' /c/backup\ dev03/CliquePix/bicep/apim/main.bicep | tee "$BAK/bicep-op-policy-resources.txt"
+echo
+echo "=== bicep policy resources containing rate-limit-by-key ==="
+grep -nE 'rate-limit-by-key|<quota' /c/backup\ dev03/CliquePix/bicep/apim/main.bicep | tee "$BAK/bicep-rate-limit-matches.txt" || echo "bicep/apim/main.bicep: NO rate-limit-by-key declarations"
 ```
 
-Flagged file → corresponding scope is the source of the 429.
+Flagged file or bicep grep match → corresponding scope or IaC declaration is the source of the 429. Note: the Echo API sample (3 echo-api operation policies in bicep/apim/main.bicep) is the default APIM scaffolding and is unrelated to Clique Pix — its policies don't contain rate-limit-by-key, but if you ever see one there, it's still benign because Echo API isn't routed to from the client.
 
 #### Phase B — Remove the rate-limit from the flagged scope
 
@@ -489,6 +499,8 @@ az rest --method DELETE --uri "https://management.azure.com/subscriptions/$SUB/r
 ```
 
 For the **API** scope, redeploy `apim_policy.xml` (the local source of truth — see commands in its in-file comment).
+
+**ALSO edit `bicep/apim/main.bicep` to remove or simplify any matching `apis/operations/policies@2025-03-01-preview` resources** — otherwise the next `az deployment group create` re-introduces what you just deleted (the lesson of incident #6, 2026-05-05). The pattern: locate the resource at the line numbers reported by the bicep audit grep above, replace the entire `resource ... { ... }` block with a one-line comment explaining why it was removed and pointing at this incident in `apim_policy.xml`'s history. Operation resources themselves (`apis/operations` — declared elsewhere in bicep/apim/main.bicep) MUST stay — they define URL routing.
 
 #### Phase C — Force counter-cache invalidation (Developer-tier gotcha)
 
@@ -1011,6 +1023,257 @@ print taps      = toscalar(taps),
       users     = toscalar(users_scheduled),
       tap_rate  = round(100.0 * toscalar(taps) / toscalar(users_scheduled), 1)
 ```
+
+---
+
+## 8. APIM Migration: Developer → Basic v2
+
+**One-time procedure.** Move APIM from `apim-cliquepix-002` (Developer tier — no SLA, single instance, classic platform) to a new Basic v2 instance before App Store / Play Store submission. Total wall-clock: 4-6 hours of focused work plus 24-48 hours of soak.
+
+### Why now
+
+| Pre-migration risk | Mitigation |
+|---|---|
+| App Store / Play Store reviewer hits API during 24-48h review window | Need stable gateway — Developer tier has no SLA |
+| First week of public users gets first APIM outage = bad reviews you can't undo | Basic v2 has 99.95% SLA |
+| Microsoft maintenance event during launch week | v2 platform has rolling updates; Developer is single-instance |
+| Outage unobserved | Basic v2 has Azure Status Page coverage; Developer doesn't |
+
+### What stays the same
+
+- The Function App (`func-cliquepix-fresh`), storage account (`stcliquepixprod`), PostgreSQL, Front Door, and Web PubSub are all untouched.
+- Custom domain `api.clique-pix.com` stays on Front Door — APIM doesn't need its own custom domain because clients hit Front Door.
+- `bicep/apim/main.bicep` is updated in place (new SKU, new APIM name) and re-deployed against the same resource group.
+- All policies (the API-scope `<base/>` + CORS), products (`starter`, `unlimited`), and operation routes (`auth-verify`, `upload-url`, `catch-all-*`) are recreated by the bicep redeploy.
+- The Developer-tier `apim-cliquepix-002` stays running during migration as a hot fallback. We don't decommission it until 24-48h after Front Door has been pointing at the new Basic v2 instance with zero issues.
+
+### Pre-flight checklist (do these BEFORE starting the migration)
+
+- [ ] **Commit current state to git.** `bicep/apim/main.bicep` + the 6 modified files from incident #6 must be committed first so there's a clean reference point if rollback is needed.
+- [ ] **Verify no client code or tests reference the APIM hostname directly.** Should be zero hits — clients hit `api.clique-pix.com` (Front Door custom domain), not `apim-cliquepix-002.azure-api.net`. Quick check:
+  ```bash
+  grep -rn "apim-cliquepix" app/ webapp/ backend/ docs/ 2>/dev/null | grep -v "BETA_OPERATIONS_RUNBOOK\|DEPLOYMENT_STATUS\|ARCHITECTURE\|apim_policy"
+  ```
+  Expected: matches only in docs (which is fine — they describe the resource, not a runtime dependency). Any `app/`, `webapp/`, or `backend/` match means a hardcoded hostname that needs to be replaced before migration.
+- [ ] **Backup current APIM state.** Re-run the Phase 0+A audit script (§2) to dump current policies; commit the backup folder reference into the migration commit message for rollback.
+- [ ] **Note current Function App authentication state.** APIM forwards the `Authorization: Bearer …` header verbatim — JWT validation happens in `authMiddleware.ts`, not at APIM. Migration shouldn't affect this, but if anything's been adjusted, it'd surface here.
+- [ ] **Identify a low-traffic 4-hour window.** Tonight or early tomorrow morning, when your beta cohort is least active. The migration itself is zero-downtime once Front Door cuts over, but you want to be able to fix problems without anyone watching.
+
+### Phase 1 — Update bicep for Basic v2 (15-30 min)
+
+Edit `bicep/apim/main.bicep`:
+
+```bicep
+// FIND the APIM service resource (likely first ~30 lines):
+resource service_apim_cliquepix_002_name_resource 'Microsoft.ApiManagement/service@2025-03-01-preview' = {
+  name: 'apim-cliquepix-002'    // ← rename to 'apim-cliquepix-v2'
+  location: 'eastus'
+  sku: {
+    name: 'Developer'           // ← change to 'BasicV2'
+    capacity: 1
+  }
+  properties: {
+    publisherEmail: '...'
+    publisherName: '...'
+  }
+}
+```
+
+Required changes:
+1. **Resource name** in bicep: keep the bicep symbol name (`service_apim_cliquepix_002_name_resource`) for minimum diff, but change the `name:` property from `'apim-cliquepix-002'` to `'apim-cliquepix-v2'` (or whatever you want — pick a v2 suffix so the old/new can coexist during migration).
+2. **SKU**: `'Developer'` → `'BasicV2'` (note the capital V).
+3. **API version**: ensure it's `2024-05-01` or later — Basic v2 features require this. The current bicep uses `2025-03-01-preview` which is fine.
+4. **Remove classic-tier-only properties** (none in Clique Pix's bicep that I can see — but if the bicep references `virtualNetworkType`, `publicIpAddressId`, `additionalLocations`, or `multiRegion`, remove them; v2 has different schemas).
+5. **Reference to APIM in dependent resources**: every resource with `parent: service_apim_cliquepix_002_name_resource` keeps that — the bicep symbol name doesn't change, only the deployed `name:` property.
+
+**Find/replace candidates** (do these carefully — review each match before replacing):
+- The string `apim-cliquepix-002` in the bicep `name:` properties → `apim-cliquepix-v2`. Should appear ~1-2 times.
+- The string `Developer` in `sku.name` → `BasicV2`. Should appear once.
+
+### Phase 2 — Provision Basic v2 in parallel (30-45 min)
+
+```bash
+RG=rg-cliquepix-prod
+az deployment group create \
+  --resource-group "$RG" \
+  --template-file bicep/apim/main.bicep \
+  --name apim-migration-$(date +%Y%m%d-%H%M)
+```
+
+Watch for:
+- **Provisioning time**: Basic v2 provisions in ~5-10 min (vs Developer's 30-45 min). Much faster.
+- **Drift errors on existing resources**: bicep tries to update everything in the file, including resources that should be left alone. If it fails on something like the Echo API sample, comment that resource out for the migration deploy and add it back after.
+- **API operations + policies recreate**: the bicep declares all 7 operations + the API-scope policy. They'll be created on the new instance. The 6 op-scope rate-limit policies are NOT in bicep anymore (incident #6 removed them), so the new instance starts clean by design.
+
+After deployment succeeds:
+
+```bash
+# Direct probe of new APIM (NOT through Front Door)
+curl -s --ssl-no-revoke -o /dev/null -w "HTTP %{http_code} (%{time_total}s)\n" \
+  https://apim-cliquepix-v2.azure-api.net/api/health
+# Expected: HTTP 200, similar latency to Developer tier
+```
+
+### Phase 3 — Re-grant managed identity RBAC (15 min)
+
+The new APIM instance has a NEW system-assigned managed identity (different principal ID). If APIM is using managed identity for any Key Vault references in named values:
+
+```bash
+NEW_PRINCIPAL_ID=$(az apim show -g rg-cliquepix-prod -n apim-cliquepix-v2 --query 'identity.principalId' -o tsv)
+
+az role assignment create \
+  --assignee "$NEW_PRINCIPAL_ID" \
+  --role "Key Vault Secrets User" \
+  --scope "$(az keyvault show -g rg-cliquepix-prod -n kv-cliquepix-prod --query id -o tsv)"
+```
+
+**Verify** with `az role assignment list --assignee $NEW_PRINCIPAL_ID -o table`. Confirm the same roles the old APIM had (per `BETA_OPERATIONS_RUNBOOK.md §2`'s SAS error troubleshooting section, which lists APIM RBAC).
+
+If APIM doesn't actually use Key Vault for any named values (likely true for Clique Pix as of 2026-05-05 — verify with `az apim nv list -g rg-cliquepix-prod --service-name apim-cliquepix-002 -o table`), this step is a no-op.
+
+### Phase 4 — Add new APIM as second Front Door origin (15 min)
+
+Front Door has an origin group pointing at the Developer-tier APIM. We add the Basic v2 APIM as a SECOND origin in the same group, with weight 0 (no traffic yet) so we can stage the cutover.
+
+```bash
+az afd origin create \
+  --resource-group rg-cliquepix-prod \
+  --profile-name fd-cliquepix-prod \
+  --origin-group-name <ORIGIN_GROUP_NAME> \
+  --origin-name apim-v2 \
+  --host-name apim-cliquepix-v2.azure-api.net \
+  --origin-host-header apim-cliquepix-v2.azure-api.net \
+  --priority 1 \
+  --weight 0 \
+  --enabled-state Enabled \
+  --http-port 80 \
+  --https-port 443
+```
+
+Find your origin group name with:
+```bash
+az afd origin-group list --resource-group rg-cliquepix-prod --profile-name fd-cliquepix-prod -o table
+```
+
+### Phase 5 — Cut over (15 min + 30 min observation)
+
+Flip Front Door weight from old origin = 100, new origin = 0 → old = 0, new = 100. (Origin priorities are 1 — only weight matters for traffic distribution.)
+
+```bash
+# Set new origin weight to 100 (all traffic)
+az afd origin update \
+  --resource-group rg-cliquepix-prod \
+  --profile-name fd-cliquepix-prod \
+  --origin-group-name <ORIGIN_GROUP_NAME> \
+  --origin-name apim-v2 \
+  --weight 100
+
+# Set old origin weight to 0 (no traffic)
+az afd origin update \
+  --resource-group rg-cliquepix-prod \
+  --profile-name fd-cliquepix-prod \
+  --origin-group-name <ORIGIN_GROUP_NAME> \
+  --origin-name <OLD_ORIGIN_NAME> \
+  --weight 0
+```
+
+Front Door propagation: ~5 minutes globally.
+
+**Immediate post-cutover smoke test:**
+```bash
+# Through Front Door — should now hit Basic v2
+for i in 1 2 3 4 5; do
+  curl -s --ssl-no-revoke -o /dev/null -w "  attempt $i: HTTP %{http_code} (%{time_total}s)\n" \
+    https://api.clique-pix.com/api/health
+done
+# Expected: 5× HTTP 200, sub-second latencies
+```
+
+### Phase 6 — Full validation (1-2 hours)
+
+Run the full BETA_TEST_PLAN smoke tests against `api.clique-pix.com` (which now points at Basic v2):
+
+- [ ] Sign-in completes end-to-end on Android. (`POST /api/auth/verify` returns 200; user lands on Events screen.)
+- [ ] Sign-in completes end-to-end on iOS.
+- [ ] List Events. (`GET /api/events` returns 200 with the user's events.)
+- [ ] List Cliques. (`GET /api/cliques` returns 200.)
+- [ ] Photo upload — upload-url + blob PUT + commit all succeed. (`POST /api/events/{id}/photos/upload-url`, then commit `POST /api/events/{id}/photos`.)
+- [ ] Video upload — block uploads complete; transcoder triggers; `video_ready` push arrives.
+- [ ] DM message — send + receive in real-time via Web PubSub.
+- [ ] Push notification — receives `new_photo` push when other clique member uploads.
+- [ ] CORS — `https://clique-pix.com` web client can hit the API (preflight + actual call). Inspect response headers for `Access-Control-Allow-Origin`.
+
+**App Insights validation:**
+```kql
+// Confirm requests are flowing to App Insights from the new APIM
+requests
+| where timestamp > ago(15m)
+| where cloud_RoleName contains "apim" or cloud_RoleInstance contains "apim-cliquepix-v2"
+| summarize count() by bin(timestamp, 1m)
+| render timechart
+```
+
+If telemetry isn't flowing, check that the new APIM has the `APPLICATIONINSIGHTS_CONNECTION_STRING` configured (it should, since bicep declares it — but worth verifying).
+
+### Phase 7 — Soak (24-48 hours)
+
+Leave the configuration alone. Monitor App Insights for:
+- 4xx / 5xx rate vs. pre-migration baseline (should be similar).
+- p50 / p95 / p99 latency on `/api/health`, `/api/auth/verify`, `/api/events/{id}/photos/upload-url`. Expect Basic v2 to be slightly slower than Developer (~10-30 ms higher p50) but more consistent (lower p99).
+- Any spike in `requests` with `resultCode != 200` — investigate immediately.
+
+The Developer-tier `apim-cliquepix-002` stays running but receives no traffic. If anything goes wrong, immediately revert (Phase R below).
+
+### Phase 8 — Decommission Developer tier (only after 48h of clean soak)
+
+```bash
+# Remove old origin from Front Door first
+az afd origin delete \
+  --resource-group rg-cliquepix-prod \
+  --profile-name fd-cliquepix-prod \
+  --origin-group-name <ORIGIN_GROUP_NAME> \
+  --origin-name <OLD_ORIGIN_NAME> \
+  --yes
+
+# Then delete the Developer-tier APIM
+az apim delete -g rg-cliquepix-prod -n apim-cliquepix-002 --yes
+```
+
+Update `Quick Reference — Key Resources` table at the top of this runbook: change `APIM | apim-cliquepix-002` to `apim-cliquepix-v2`. Update the same in any other doc references.
+
+### Phase R — Rollback (if anything goes wrong in Phases 5-8)
+
+In <5 minutes:
+
+```bash
+# Flip Front Door weights BACK
+az afd origin update --resource-group rg-cliquepix-prod --profile-name fd-cliquepix-prod \
+  --origin-group-name <ORIGIN_GROUP_NAME> --origin-name <OLD_ORIGIN_NAME> --weight 100
+
+az afd origin update --resource-group rg-cliquepix-prod --profile-name fd-cliquepix-prod \
+  --origin-group-name <ORIGIN_GROUP_NAME> --origin-name apim-v2 --weight 0
+```
+
+5-minute Front Door propagation, you're back on Developer-tier APIM. Investigate, fix, retry.
+
+The Basic v2 instance can stay provisioned (costs ~$525/month prorated) until you're ready to retry. Or delete it: `az apim delete -g rg-cliquepix-prod -n apim-cliquepix-v2 --yes`.
+
+### Cost during migration window
+
+Both APIM instances running in parallel for ~2-3 days:
+- `apim-cliquepix-002` (Developer): ~$50/month → ~$5 prorated for 3 days
+- `apim-cliquepix-v2` (Basic v2): ~$525/month → ~$50 prorated for 3 days
+- **Total overlap cost: ~$55**
+
+After Phase 8 cleanup, ongoing cost is ~$525/month for Basic v2 alone. The ~$475/month delta from Developer is the SLA + v2 platform.
+
+### Known gotchas captured during this incident
+
+- **Microsoft's `rate-limit` algorithm differs between classic and v2 tiers.** Classic = sliding window, v2 = token bucket. Clique Pix has no rate-limit policies as of 2026-05-05 (incident #6 cleanup), so this is moot for us. If we ever re-add rate-limit policies on Basic v2, expect modestly more burst-friendly behavior than Developer would have given.
+- **Backup/restore APIs don't support cross-tier restore** (Developer → Basic v2). The migration approach is bicep redeploy against a new instance, NOT backup/restore.
+- **The new APIM gets a different system-assigned managed identity principal ID.** Any RBAC role assignments on the OLD APIM's identity must be re-granted to the NEW one (Phase 3).
+- **The Echo API sample bicep resources** are default APIM scaffolding. They redeploy fine but contribute nothing — consider removing them from `bicep/apim/main.bicep` as a separate cleanup PR.
+- **`apim-cliquepix-002` is name-locked for ~30 days after deletion.** Don't try to reuse the name. Pick `apim-cliquepix-v2` or whatever new suffix.
 
 ---
 

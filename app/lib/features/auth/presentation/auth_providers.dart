@@ -171,7 +171,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final user = await _repository.signIn(loginHint: loginHint);
       state = AuthAuthenticated(user);
       _startLifecycle();
-    } catch (e) {
+    } catch (e, st) {
+      debugPrint('[AUTH-SIGNIN-FAIL] type=${e.runtimeType} msg=$e');
+      if (e is DioException) {
+        debugPrint(
+            '[AUTH-SIGNIN-FAIL] dio.type=${e.type} dio.status=${e.response?.statusCode} dio.body=${e.response?.data}');
+      } else {
+        debugPrint('[AUTH-SIGNIN-FAIL] stack=${st.toString().split("\n").take(8).join(" | ")}');
+      }
       if (e is DioException && e.response?.statusCode == 403) {
         final err = e.response?.data is Map<String, dynamic>
             ? e.response!.data['error'] as Map<String, dynamic>?

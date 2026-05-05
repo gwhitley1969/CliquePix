@@ -4,6 +4,63 @@
 
   HISTORY OF RATE-LIMIT REMOVAL (most recent first):
 
+  2026-05-05 (incident #6 — orphaned op-scope policies declared in bicep/apim/main.bicep):
+    User reported the red "Sign in failed" banner on Android after rebuilding
+    the APK. Diagnosis took three escalating steps: (a) clear app data on
+    device — didn't help (the rate-limit counter is keyed on JWT subject =
+    user oid, so reinstalling the same user can't reset it); (b) Azure App
+    Insights — backend `auth_verify_success` events were firing fine, no
+    server-side exceptions, but no `requests` row matched the URL filter
+    (filter wrong, but the absence-of-exception was the signal); (c) shipped
+    a one-line `[AUTH-SIGNIN-FAIL]` debugPrint in
+    auth_providers.dart:174-180 that prints the runtimeType, message, and
+    (for DioException) status + body. Captured trace showed
+    `DioException [bad response]: 429` with body
+    `{statusCode: 429, message: "Rate limit is exceeded. Try again in 1
+    seconds."}` on /api/auth/verify.
+
+    Audit at all four APIM scopes (the Phase 0+A script audits operation
+    scope but the prior cleanups stopped at API/Product). Found six
+    operation-scope <rate-limit-by-key> policies on cliquepix-v1:
+      - auth-verify        : calls=30 / renewal-period=60 (THIS bit the user)
+      - upload-url         : calls=10 / renewal-period=60
+      - catch-all-delete   : calls=30 / renewal-period=60
+      - catch-all-patch    : calls=30 / renewal-period=60
+      - catch-all-post     : calls=30 / renewal-period=60
+      - catch-all-put      : calls=30 / renewal-period=60
+    All keyed on JWT Subject (CIAM oid). 30 calls/60s is too tight for the
+    app's actual sign-in retry pattern — the 5-layer Entra refresh defense
+    + verify-in-background + AuthInterceptor 401 retry + a few user retries
+    can blow past 30/min for one user in seconds.
+
+    The bigger surprise: these policies were declared in bicep/apim/main.bicep at the
+    repo root (lines 1247-1322 pre-fix). The 2026-04-29 cleanup deleted them
+    in live APIM but a subsequent bicep deploy re-introduced them. The fix
+    therefore had to touch BOTH source-of-truth (bicep) AND live APIM:
+      Phase A: edit bicep/apim/main.bicep — remove the 6 apis/operations/policies
+               resources, replace with explanatory comment block.
+      Phase B: az rest DELETE on each of the 6 .../operations/{op}/policies/policy
+               URLs. Each operation falls through to API-scope (clean).
+      Phase C: sleep 90 + `az apim api update --protocols https` to flush
+               Developer-tier in-memory counters and force gateway pod refresh.
+    Verified: sign-in lands on Events screen post-fix; backend probe of
+    /api/auth/verify returns 401 (canonical UNAUTHORIZED), not 429.
+
+    OPERATIONAL LESSONS:
+      1. The Phase 0+A audit script in BETA_OPERATIONS_RUNBOOK.md §2 audits
+         live APIM. It DOES NOT audit IaC. Augment with:
+           grep -nE 'apis/operations/policies' bicep/apim/main.bicep
+         Any match needs to be checked for rate-limit-by-key in the inline
+         policy XML.
+      2. bicep/apim/main.bicep is the source of truth for ALL APIM resources,
+         including operation-scope policies. This file (apim_policy.xml)
+         only covers the API scope. The two are partially redundant — the
+         API-scope policy is duplicated between this file and bicep
+         line 1147. A future cleanup should consolidate to one source.
+      3. The `[AUTH-SIGNIN-FAIL]` debugPrint at auth_providers.dart:174-180
+         was the difference between days of guesswork and 60-second triage.
+         It stays in the codebase as a permanent diagnostic.
+
   2026-04-29 (incident #5 — the one this comment is about):
     A brand-new test user hit the same 429 on their FIRST upload attempt
     even though this file was clean. Audit at all four APIM policy scopes
@@ -49,8 +106,21 @@
 
   Do NOT re-add rate-limit-by-key OR <rate-limit> OR <quota> at ANY
   APIM scope without first migrating off APIM Developer tier. The
-  5-incident history is documented reproducibly above; repeating it
+  6-incident history is documented reproducibly above; repeating it
   would be a regression.
+
+  TIER NOTE: the prohibition above stands for ALL tiers, not just
+  Developer. Per Microsoft's own docs ("Limit call rate by key"),
+  rate limiting at APIM is "never completely accurate" on any tier
+  because of the distributed throttling architecture. Classic tiers
+  use sliding-window; v2 tiers use token-bucket. Migrating from
+  Developer to Basic v2 (~$525/month) buys an SLA and slightly more
+  burst-friendly bucket math, but does NOT make a too-tight limit
+  generous. Prior versions of this comment said "Standard v2 has a
+  distributed cache" — that's folkloric and isn't in Microsoft's
+  docs. The right precondition for re-introducing rate-limit-by-key
+  is LOAD-TESTING the limit against actual traffic patterns, not
+  tier upgrade.
 
   Source of truth: this file (API scope only). For the other three
   scopes, the source of truth is the live APIM service — audit them
