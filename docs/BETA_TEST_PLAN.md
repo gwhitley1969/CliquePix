@@ -46,6 +46,7 @@ This is a manual smoke test checklist to run before each beta release. Every ite
 
 ## 2. Cliques
 
+- [ ] **My Cliques CTA — single labeled gradient pill** (added 2026-05-05) — open the Cliques tab on an account with at least one existing clique. A full-width "Create Clique" gradient pill (aqua → blue → violet, same treatment as Home's "Start Another Event" in `event07.png`) renders ABOVE the first clique card with a comfortable gap. The AppBar shows only the Refresh icon — no bare `+` icon. Tap the pill → opens `/cliques/create`. On a brand-new account with no cliques, the pill is hidden — `EmptyStateWidget` shows its own "Create Clique" button instead (no double-up).
 - [ ] **Create clique** — enter name, clique appears in list
 - [ ] **Generate invite link** — share sheet opens with invite URL
 - [ ] **Join via invite link** — Device B taps link, app opens to join screen, joins successfully

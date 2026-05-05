@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_gradients.dart';
 import '../../../core/utils/lifecycle_aware_poller_mixin.dart';
 import '../../../widgets/branded_sliver_app_bar.dart';
 import '../../../widgets/empty_state_widget.dart';
@@ -47,11 +48,6 @@ class _CliquesListScreenState extends ConsumerState<CliquesListScreen>
             accentOpacity: 0.15,
             actions: [
               IconButton(
-                icon: const Icon(Icons.add_rounded),
-                tooltip: 'Create Clique',
-                onPressed: () => context.go('/cliques/create'),
-              ),
-              IconButton(
                 icon: const Icon(Icons.refresh_rounded),
                 tooltip: 'Refresh',
                 onPressed: () => ref.read(cliquesListProvider.notifier).refresh(),
@@ -85,14 +81,24 @@ class _CliquesListScreenState extends ConsumerState<CliquesListScreen>
                 );
               }
 
-              return SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) => _CliqueCard(clique: cliques[index]),
-                    childCount: cliques.length,
+              return SliverMainAxisGroup(
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                      child: _buildCreateCliqueCta(context),
+                    ),
                   ),
-                ),
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                    sliver: SliverList(
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) => _CliqueCard(clique: cliques[index]),
+                        childCount: cliques.length,
+                      ),
+                    ),
+                  ),
+                ],
               );
             },
           ),
@@ -101,6 +107,44 @@ class _CliquesListScreenState extends ConsumerState<CliquesListScreen>
       ),
     );
   }
+}
+
+// Mirrors `_buildCreateEventCTA` at home_screen.dart:628-661 byte-for-byte
+// except for the label string and route. Keeping them visually identical so
+// the primary "create" affordance reads the same on Home and on Cliques.
+Widget _buildCreateCliqueCta(BuildContext context) {
+  return Container(
+    width: double.infinity,
+    height: 54,
+    decoration: BoxDecoration(
+      gradient: AppGradients.primary,
+      borderRadius: BorderRadius.circular(14),
+      boxShadow: [
+        BoxShadow(
+          color: AppColors.deepBlue.withValues(alpha: 0.4),
+          blurRadius: 20,
+          offset: const Offset(0, 8),
+        ),
+      ],
+    ),
+    child: Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => context.go('/cliques/create'),
+        borderRadius: BorderRadius.circular(14),
+        child: const Center(
+          child: Text(
+            'Create Clique',
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+              fontSize: 17,
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
 }
 
 class _CliqueCard extends StatelessWidget {

@@ -1,6 +1,45 @@
 # DEPLOYMENT_STATUS.md — Clique Pix v1
 
-Last updated: 2026-05-05 (sign-in 429 from orphaned operation-scope APIM rate-limits — incident #6 — fixed; bicep + live APIM in sync; on-device verified)
+Last updated: 2026-05-05 (Cliques tab "Create Clique" CTA discoverability fix — bare `+` icon replaced with full-width gradient pill above the list; release APK built)
+
+## Cliques tab — labeled "Create Clique" gradient pill replaces bare `+` IconButton (2026-05-05)
+
+**Status:** ✅ code complete, ✅ `flutter analyze` 54-issue baseline preserved, ✅ `flutter test` 82/82 green, ✅ `flutter clean && flutter pub get && flutter build apk --release` green (`app-release.apk`, 63.0 MB). **Pending:** on-device verification on Samsung + iPhone, commit + push.
+
+**The user complaint.** Earlier in the same session, a `+` IconButton was added to the Cliques tab AppBar (`cliques_list_screen.dart:49-53`, commit `60f1c21`) so users with existing cliques could create another without going through the event-creation flow. User reported back: *"I'm not sure people are going to see the `+` and realize what it's for."* The bare-icon affordance is too subtle for the primary "create" CTA on a tab root.
+
+**The fix.** Mirror the Home tab's existing `_buildCreateEventCTA` gradient pill pattern (`home_screen.dart:628-661`) on the Cliques tab. Same visual treatment as the "Start Another Event" button in `event07.png`:
+- Full-width 54 px tall pill, 14 px corner radius
+- Primary brand gradient (`AppGradients.primary`: #00C2D1 → #2563EB → #7C3AED)
+- Deep-blue drop shadow (α=0.4, blur 20, offset (0, 8))
+- White bold text "Create Clique" (17 sp, w700)
+- Tap → `context.go('/cliques/create')` (same destination as the prior `+` icon and the empty-state button)
+
+Placed via `SliverMainAxisGroup` ABOVE the first clique card with 12 px top + 16 px bottom margin. Top placement (rather than the bottom placement shown in `event07.png` for Home's "has active events" state) was chosen because Cliques has only one list section — a CTA below a scrollable list is functionally invisible until users scroll, defeating the discoverability goal.
+
+The `+` IconButton is removed from the AppBar entirely. The Refresh icon stays as the sole AppBar action. The empty-state's existing "Create Clique" button (`EmptyStateWidget` in `cliques_list_screen.dart:78-83`) is unchanged — first-time users keep their large prominent CTA, returning users get the gradient pill.
+
+| Phase | Status | Files |
+|---|---|---|
+| Single-file edit: remove `+` IconButton from AppBar, add `app_gradients.dart` import, wrap non-empty data branch in `SliverMainAxisGroup`, add `_buildCreateCliqueCta(context)` helper at file bottom (verbatim mirror of `_buildCreateEventCTA` except label + route) | ✅ | `app/lib/features/cliques/presentation/cliques_list_screen.dart` (~+40/-5 lines) |
+| `flutter analyze` 54-issue baseline | ✅ | — |
+| `flutter test` 82/82 green | ✅ | — |
+| `flutter clean && flutter pub get && flutter build apk --release` | ✅ Built 2026-05-05 | `app/build/app/outputs/flutter-apk/app-release.apk` (63.0 MB) |
+| Docs: this entry + `DEPLOYMENT_STATUS.md` line 761 wording fix + `BETA_TEST_PLAN.md` §2 Cliques smoke-test row | ✅ | as listed |
+| On-device verification (Samsung + iPhone — non-empty list shows gradient pill, AppBar shows only Refresh, empty list still shows EmptyStateWidget action button) | ⏳ Pending | — |
+| Commit + push to `main` | ⏳ Pending | — |
+
+**Why a gradient pill rather than restoring the historical FAB.** `DEPLOYMENT_STATUS.md:761` describes the original Cliques feature as shipping with a "labeled 'Create Clique' FAB," removed at some point in favor of the bare `+` (which itself caused the discoverability complaint). Going back to a FAB would have worked, but the gradient pill matches today's brand language across Home (three call sites of `_buildCreateEventCTA`) and avoids covering the bottom-most clique card with a floating button. Single canonical pattern beats two parallel "create CTA" patterns across tabs.
+
+**Out of scope (tracked for future):**
+- Hoisting `_buildCreateEventCTA` / `_buildCreateCliqueCta` into a shared widget (e.g., `BrandPillButton(label, onTap)` in `app/lib/widgets/`) — currently they're duplicated as private helpers in their respective screens. Worth doing if a third tab adopts the pattern; not worth the abstraction tax for two call sites
+- Web parity — `webapp/src/features/cliques/CliquesScreen.tsx` may have its own discoverability gap; separate audit
+
+**Rollback plan.** `git revert <sha>` — single-file change, no backend, no infra, no schema, no new dependency. Pre-existing AppBar `+` returns; users with existing cliques rediscover the regression.
+
+---
+
+
 
 ## Sign-in 429 from orphaned operation-scope APIM rate-limits — incident #6 — fixed (2026-05-05)
 
@@ -758,7 +797,7 @@ Deploy order: migration 009 → backend → client. Backend silent-push path mus
 | Data models (5 models) | Done | PhotoModel with resilient num/string parsing, EventModel with cliqueName/memberCount |
 | Auth feature (MSAL integration) | Done | `msal_auth` 3.3.0, custom API scope, auto-login on startup, MSAL error recovery, dismiss button |
 | 5-layer token refresh defense | Done | All layers wired; loginHint threaded through Layer 5 |
-| Cliques feature (API, repository, providers, 6 screens) | Done | Dark theme, gradient-bordered cards, gradient-ringed avatars, labeled "Create Clique" FAB, pull-to-refresh + 30s polling on list and detail screens, JoinCliqueScreen with dark theme |
+| Cliques feature (API, repository, providers, 6 screens) | Done | Dark theme, gradient-bordered cards, gradient-ringed avatars, full-width "Create Clique" gradient pill above the list (mirrors Home's `_buildCreateEventCTA` pattern; replaced the prior bare `+` IconButton on 2026-05-05 — see top entry), pull-to-refresh + 30s polling on list and detail screens, JoinCliqueScreen with dark theme |
 | Events feature (API, repository, providers, 4 screens) | Done | Event-first flow, events home screen, dark-themed event detail with hero header, labeled "Create Event" FAB, `listAllEvents` backend endpoint, event cards show photo + video counts, `Wrap`-based layout handles large system font sizes without overflow |
 | Photos feature (API, repository, services, providers, 6 screens/widgets) | Done | `pro_image_editor` for crop/draw/stickers/filters, prominent "Upload to Event" button, step-by-step progress overlay, `uploaded_by_name` in responses, multi-select photo download with progress, debug logging throughout pipeline |
 | Notifications feature (API, repository, providers, 1 screen) | Done | Dark theme, colored icon badges, unread/read styling, `member_joined` type with clique navigation |
