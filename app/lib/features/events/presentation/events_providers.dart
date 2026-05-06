@@ -28,8 +28,25 @@ final allEventsListProvider =
 class AllEventsNotifier extends AsyncNotifier<List<EventModel>> {
   @override
   Future<List<EventModel>> build() async {
+    // Watch the derived currentUserIdProvider (not authStateProvider directly)
+    // so we only rebuild on actual user_id changes — not on every background
+    // verify success that swaps in a refreshed UserModel for the same user.
+    // Combined with the app-root invalidation listener in _CliquePixState,
+    // this gives belt-and-suspenders protection against the sign-out → sign-up
+    // cross-account data leak: the listener clears state on identity change,
+    // and this watch makes the rebuild deterministic.
+    final currentUserId = ref.watch(currentUserIdProvider);
+    if (currentUserId == null) {
+      return const [];
+    }
+
+    final bootstrapUserId = ref.read(bootstrapUserIdProvider);
     final cached = ref.read(eventsBootstrapProvider);
-    if (cached != null) {
+    // Only consume the bootstrap when it was loaded for the SAME user that is
+    // now authenticated. If user B signs in after user A on the same device,
+    // the override still holds user A's events — fall through to a fresh
+    // fetch instead.
+    if (cached != null && bootstrapUserId == currentUserId) {
       // Stale-while-revalidate: return cached list synchronously and kick off
       // a background refresh. The microtask runs after `build` returns so the
       // first paint shows cached data immediately.

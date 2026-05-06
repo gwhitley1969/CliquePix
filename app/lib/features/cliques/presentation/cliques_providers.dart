@@ -28,8 +28,22 @@ final cliquesListProvider =
 class CliquesListNotifier extends AsyncNotifier<List<CliqueModel>> {
   @override
   Future<List<CliqueModel>> build() async {
+    // Watch currentUserIdProvider (derived String?) so we only rebuild on
+    // genuine identity changes, not on every AuthAuthenticated instance churn
+    // from background verify refreshes. Mirrors AllEventsNotifier.build().
+    // See `currentUserIdProvider` doc + the cross-account leak fix plan.
+    final currentUserId = ref.watch(currentUserIdProvider);
+    if (currentUserId == null) {
+      return const [];
+    }
+
+    final bootstrapUserId = ref.read(bootstrapUserIdProvider);
     final cached = ref.read(cliquesBootstrapProvider);
-    if (cached != null) {
+    // Reject the bootstrap when it belongs to a different user (sign-out →
+    // sign-up case). Bootstrap overrides are static for the app lifetime and
+    // cannot be reset mid-session, so the consumer-side comparison is the
+    // load-bearing check.
+    if (cached != null && bootstrapUserId == currentUserId) {
       Future.microtask(_refreshSilently);
       return cached;
     }

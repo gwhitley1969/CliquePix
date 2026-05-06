@@ -406,8 +406,15 @@ ProfileScreen "Sign Out" tap
      ├─ FridayReminderService.cancel()
      └─ _pca = null (forces fresh PCA on next sign-in — prevents stale cached state regression)
   → AuthNotifier.state = AuthUnauthenticated
+  → currentUserIdProvider emits null
+  → ref.listen at app.dart sees previous=userA, next=null → fires _invalidateUserScopedState
+     ├─ Invalidates 16 user-scoped providers (events × 3, cliques × 3, photos × 3,
+     │  videos × 4, notifications × 1, DM × 3 — see app.dart:_invalidateUserScopedState)
+     └─ PaintingBinding.instance.imageCache.clear() + clearLiveImages()
   → GoRouter redirects to /login
 ```
+
+**Why the invalidation step matters (since 2026-05-06):** without it, the Riverpod AsyncNotifiers / FutureProviders that hold User A's events, cliques, photos etc. retain their state across sign-out. If a different User B then signs in on the same device, their first frame reads the cached User A state — User B sees User A's content. This was the cross-account data leak fixed 2026-05-06. The listener uses a derived `currentUserIdProvider` (returning `String?`) so it only fires on actual user_id changes, not on AuthState instance churn from background-verify refreshes of the same user. See `DEPLOYMENT_STATUS.md` "iOS cross-account data leak after sign-out → sign-up" for the full root-cause analysis.
 
 ### Web
 
@@ -452,6 +459,7 @@ For incident-response procedures, see `BETA_OPERATIONS_RUNBOOK.md` §2:
 - **User reports raw `DioException` on the home screen** — coordination between `AuthInterceptor` + `AuthNotifier` + `home_screen.dart` for clean session-expired UX
 - **iOS user reports "app vanishes after sign-in"** — `BGTaskSchedulerPermittedIdentifiers` SIGABRT trap
 - **iPhone account-switch trapped on "Continue as previous user"** — `Broker.msAuthenticator` config check
+- **User reports seeing another user's events / photos after a sign-out → sign-up on the same device** — `currentUserIdProvider` + `_invalidateUserScopedState` listener at `app/lib/app/app.dart`; bootstrap user_id tagging at `list_bootstrap_providers.dart` + `events_providers.dart` + `cliques_providers.dart`. Confirm `[AUTH] invalidating user-scoped state on identity change` debug print fires on sign-out. Fixed 2026-05-06.
 - **User reports stuck "Get Started" spinner** — cold-start health, escape-hatch detection
 - **Photos/videos not loading — SAS errors** — managed identity RBAC, User Delegation SAS expiry
 - **Web users report empty data** — MSAL singleton wiring (PR #4 regression), envelope unwrap (PR #5 regression)
@@ -461,6 +469,18 @@ For developer-side diagnostics: tap the version number 7× on the Profile screen
 ---
 
 ## Migration history
+
+### 2026-05-06: Cross-account data leak on sign-out → sign-up (fixed)
+
+**Trigger:** User reported that on iPhone, signing out as User A and signing up as User B on the same device showed User A's events, cliques, and photos in User B's UI. Reproducible only on iOS in the user's testing; backend was confirmed sound.
+
+**Root cause:** `AuthNotifier.signOut()` did not invalidate any user-scoped Riverpod providers. AsyncNotifiers and FutureProviders holding User A's data (events, cliques, photos, videos, DM threads, notifications) retained their state across the sign-out → sign-in transition. `eventsBootstrapProvider` / `cliquesBootstrapProvider` were also seeded once at `main()` with User A's `userId` and could not be re-evaluated mid-session.
+
+**Fix:** Added a derived `currentUserIdProvider` (returning `String?`) and a `ref.listen` in `_CliquePixState.build()` that invalidates 16 user-scoped providers + the in-memory `imageCache` whenever the authenticated identity changes. Bootstrap providers now carry a sibling `bootstrapUserIdProvider` so consumers can fail-closed when the bootstrap belongs to a different user. Backend was untouched (it was already correctly enforcing membership).
+
+**Migration impact:** Pure client-side change. No DB migration. No backend deploy. Existing users see no behavior change on a normal cold start; the listener only fires when an identity actually changes mid-session.
+
+**Plan + DEPLOYMENT_STATUS reference:** `~/.claude/plans/okay-here-is-the-cozy-shamir.md` and `docs/DEPLOYMENT_STATUS.md` "iOS cross-account data leak after sign-out → sign-up." iOS on-device verified by Gene Whitley 2026-05-06.
 
 ### 2026-05-06: Email OTP → Email + password
 

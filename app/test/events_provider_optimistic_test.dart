@@ -4,10 +4,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:clique_pix/core/cache/last_refresh_error_provider.dart';
 import 'package:clique_pix/core/cache/list_bootstrap_providers.dart';
+import 'package:clique_pix/features/auth/presentation/auth_providers.dart';
 import 'package:clique_pix/features/events/data/events_api.dart';
 import 'package:clique_pix/features/events/domain/events_repository.dart';
 import 'package:clique_pix/features/events/presentation/events_providers.dart';
 import 'package:clique_pix/models/event_model.dart';
+
+const _kTestUserId = 'test-user-id';
 
 EventModel _event(String id) {
   final now = DateTime.utc(2026, 5, 3, 12);
@@ -58,13 +61,30 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
+  // Override `currentUserIdProvider` directly to bypass the auth chain.
+  // These tests exercise the events bootstrap + refresh cache logic, not auth.
+  // The bootstrap user_id must match the current user_id so the bootstrap is
+  // accepted (the fail-closed comparison added to AllEventsNotifier.build for
+  // the cross-account leak fix).
+  List<Override> baseOverrides({
+    required List<EventModel>? bootstrap,
+    required EventsRepository repo,
+    String? currentUserId = _kTestUserId,
+    String? bootstrapUserId = _kTestUserId,
+  }) =>
+      [
+        currentUserIdProvider.overrideWith((ref) => currentUserId),
+        bootstrapUserIdProvider.overrideWithValue(bootstrapUserId),
+        eventsBootstrapProvider.overrideWithValue(bootstrap),
+        eventsRepositoryProvider.overrideWithValue(repo),
+      ];
+
   test('bootstrap-seeded list yields AsyncData on first read', () async {
     final cached = [_event('CACHED-1'), _event('CACHED-2')];
     final repo = _FakeRepo();
-    final container = ProviderContainer(overrides: [
-      eventsBootstrapProvider.overrideWithValue(cached),
-      eventsRepositoryProvider.overrideWithValue(repo),
-    ]);
+    final container = ProviderContainer(
+      overrides: baseOverrides(bootstrap: cached, repo: repo),
+    );
     addTearDown(container.dispose);
 
     final state = await container.read(allEventsListProvider.future);
@@ -75,10 +95,9 @@ void main() {
       () async {
     final cached = [_event('CACHED')];
     final repo = _FakeRepo(shouldFail: true);
-    final container = ProviderContainer(overrides: [
-      eventsBootstrapProvider.overrideWithValue(cached),
-      eventsRepositoryProvider.overrideWithValue(repo),
-    ]);
+    final container = ProviderContainer(
+      overrides: baseOverrides(bootstrap: cached, repo: repo),
+    );
     addTearDown(container.dispose);
 
     // Initial read returns cached.
@@ -99,10 +118,9 @@ void main() {
       () async {
     final cached = [_event('CACHED')];
     final repo = _FakeRepo(freshList: [_event('FRESH-1'), _event('FRESH-2')]);
-    final container = ProviderContainer(overrides: [
-      eventsBootstrapProvider.overrideWithValue(cached),
-      eventsRepositoryProvider.overrideWithValue(repo),
-    ]);
+    final container = ProviderContainer(
+      overrides: baseOverrides(bootstrap: cached, repo: repo),
+    );
     addTearDown(container.dispose);
 
     // Pre-set an error to ensure successful refresh clears it.
@@ -117,5 +135,58 @@ void main() {
     final asyncState = container.read(allEventsListProvider);
     expect(asyncState.value!.map((e) => e.id), ['FRESH-1', 'FRESH-2']);
     expect(container.read(eventsRefreshErrorProvider), isNull);
+  });
+
+  // Cross-account leak regression test (added 2026-05-06):
+  // When the bootstrap was loaded for a different user than the one currently
+  // authenticated (sign-out → sign-up case mid-session), the build() must
+  // reject the bootstrap and fetch fresh — User B never sees User A's events.
+  test(
+    'rejects bootstrap when bootstrapUserId differs from currentUserId',
+    () async {
+      final stale = [_event('USER-A-EVENT')];
+      final repo = _FakeRepo(freshList: []);
+      final container = ProviderContainer(
+        overrides: baseOverrides(
+          bootstrap: stale,
+          repo: repo,
+          currentUserId: 'user-B',
+          bootstrapUserId: 'user-A',
+        ),
+      );
+      addTearDown(container.dispose);
+
+      final state = await container.read(allEventsListProvider.future);
+      // Bootstrap rejected → fresh fetch returned empty list (User B has none)
+      expect(state, isEmpty,
+          reason:
+              'cross-account leak: User B must NOT receive User A\'s cached events');
+      expect(repo.callCount, 1,
+          reason:
+              'a fresh API fetch must be made when bootstrap is rejected');
+    },
+  );
+
+  // Sign-out path: currentUserId becomes null. build() returns const [].
+  test('returns empty list when currentUserId is null (signed out)',
+      () async {
+    final cached = [_event('CACHED')];
+    final repo = _FakeRepo();
+    final container = ProviderContainer(
+      overrides: baseOverrides(
+        bootstrap: cached,
+        repo: repo,
+        currentUserId: null,
+        bootstrapUserId: _kTestUserId,
+      ),
+    );
+    addTearDown(container.dispose);
+
+    final state = await container.read(allEventsListProvider.future);
+    expect(state, isEmpty,
+        reason: 'unauthenticated branch must return empty list, not bootstrap');
+    expect(repo.callCount, 0,
+        reason:
+            'unauthenticated branch must not call the repo (would 401 anyway)');
   });
 }

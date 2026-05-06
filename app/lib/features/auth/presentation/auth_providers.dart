@@ -65,6 +65,29 @@ final authStateProvider =
   );
 });
 
+/// The currently-authenticated user_id, or null when no one is signed in.
+///
+/// Derived from `authStateProvider` so consumers (data providers, the app-root
+/// invalidation listener) can react to genuine identity changes WITHOUT being
+/// thrashed by every transient AuthState mutation. Specifically: every
+/// successful background verify (`_verifyInBackground`) reassigns
+/// `state = AuthAuthenticated(refreshedUser)` with a NEW UserModel instance for
+/// the SAME user. Watching `authStateProvider` directly would treat each of
+/// those as a change (since AuthAuthenticated has no `==` override). Watching
+/// THIS provider — `String?` with value equality — only emits when the user_id
+/// actually changes.
+///
+/// Used by:
+///   - `_CliquePixState.build()` — `ref.listen` invalidates user-scoped state
+///     when the identity changes (sign-out, different sign-in)
+///   - `AllEventsNotifier.build()` and `CliquesListNotifier.build()` —
+///     `ref.watch` to gate the stale-while-revalidate bootstrap and to rebuild
+///     fresh when the identity changes
+final currentUserIdProvider = Provider<String?>((ref) {
+  final auth = ref.watch(authStateProvider);
+  return auth is AuthAuthenticated ? auth.user.id : null;
+}, name: 'currentUserIdProvider');
+
 class AuthNotifier extends StateNotifier<AuthState> {
   final AuthRepository _repository;
   final TokenStorageService _tokenStorage;

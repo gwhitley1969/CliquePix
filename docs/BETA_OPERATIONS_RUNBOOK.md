@@ -68,6 +68,53 @@ Operational procedures for the Clique Pix open beta. Covers incident response, c
 
 ## 2. Common Troubleshooting
 
+### User reports seeing another user's events / photos after a sign-out → sign-up
+
+**Symptoms:** A user reports that after signing out and a different account signing in / signing up on the same device (typical on shared family iPhone or beta-test device), the new user sees the prior user's events, cliques, and photos in their feed and can navigate into events and view photos.
+
+**This is the cross-account data leak fixed 2026-05-06.** If a user reports this on a build dated 2026-05-06 or later, it means the invalidation listener regressed. Treat it as a P0 privacy incident.
+
+**Diagnosis:**
+
+1. Confirm the user's app version. The fix shipped 2026-05-06; pre-fix builds will exhibit the bug by design.
+
+2. On the affected device, capture `flutter logs` (debug builds) or sysdiagnose / `idevicesyslog` (release builds) and search for:
+   ```
+   [AUTH] invalidating user-scoped state on identity change
+   ```
+   This debugPrint fires on every identity transition (sign-out, sign-up as a different user). Expected: exactly one occurrence per sign-out. If absent, the `ref.listen` in `app/lib/app/app.dart:_CliquePixState.build()` is not firing.
+
+3. Verify the listener is wired:
+   ```bash
+   grep -n "ref.listen<String?>(currentUserIdProvider" app/lib/app/app.dart
+   grep -n "_invalidateUserScopedState" app/lib/app/app.dart
+   ```
+   Both should return one match. If either is missing, the fix has been reverted.
+
+4. Verify the bootstrap user_id tagging is in place:
+   ```bash
+   grep -n "bootstrapUserIdProvider" app/lib/main.dart app/lib/core/cache/list_bootstrap_providers.dart
+   grep -n "bootstrapUserId == currentUserId" app/lib/features/events/presentation/events_providers.dart app/lib/features/cliques/presentation/cliques_providers.dart
+   ```
+
+5. Run the regression tests locally:
+   ```bash
+   cd app && flutter test test/events_provider_optimistic_test.dart test/cliques_provider_optimistic_test.dart
+   ```
+   The tests `rejects bootstrap when bootstrapUserId differs from currentUserId` and `returns empty list when currentUserId is null (signed out)` MUST both pass. If they fail, the fail-closed bootstrap logic is regressed.
+
+**Common causes (post-fix regression):**
+- Someone added a new user-scoped `FutureProvider.family` (e.g., a new feature endpoint) and forgot to add it to `_invalidateUserScopedState` in `app.dart`.
+- Someone migrated `AuthNotifier` to a `Notifier` and the `ref.listen` in `app.dart` was incidentally removed.
+- Someone changed the `currentUserIdProvider` definition so it doesn't emit on auth changes (e.g., switched from `ref.watch(authStateProvider)` to a constant).
+
+**Resolution:**
+- Restore the listener + invalidation list per `docs/AUTHENTICATION.md` "Sign out" section and `docs/DEPLOYMENT_STATUS.md` "iOS cross-account data leak after sign-out → sign-up."
+- Add the new provider to `_invalidateUserScopedState` if a feature was added without invalidation.
+- Ship a hotfix immediately. This is a privacy-disclosure regression with App Store / Play Store policy implications.
+
+**Reference:** plan file `~/.claude/plans/okay-here-is-the-cozy-shamir.md`; commit history near 2026-05-06.
+
 ### Video stuck in "Processing..."
 
 **Symptoms:** User uploads a video, card stays in processing state indefinitely.

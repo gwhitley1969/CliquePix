@@ -192,6 +192,13 @@ void main() async {
         authBootstrapStateProvider.overrideWithValue(bootstrapState),
         eventsBootstrapProvider.overrideWithValue(eventsBootstrap),
         cliquesBootstrapProvider.overrideWithValue(cliquesBootstrap),
+        // Tag the bootstrap with the user_id it was loaded for. Consumed by
+        // the events + cliques notifiers in their build() methods to reject
+        // the bootstrap when a different user signs in mid-session (the
+        // sign-out → sign-up cross-account leak fix).
+        bootstrapUserIdProvider.overrideWithValue(
+          bootstrapState is AuthAuthenticated ? bootstrapState.user.id : null,
+        ),
       ],
       child: const CliquePix(),
     ),

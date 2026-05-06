@@ -1,6 +1,60 @@
 # DEPLOYMENT_STATUS.md — Clique Pix v1
 
-Last updated: 2026-05-05 (APIM migrated Developer → Basic v2: `apim-cliquepix-002` decommissioned, `apim-cliquepix-003` Basic v2 active and serving production traffic; ~46 min total wall-clock; 99.95% SLA before App Store / Play Store submission)
+Last updated: 2026-05-06 (iOS cross-account data leak fix: User A's Riverpod state survived sign-out → User B saw User A's events + photos. Fix invalidates user-scoped providers + tags bootstrap with user_id; 87/87 tests pass; iOS on-device verified by Gene Whitley)
+
+## iOS cross-account data leak after sign-out → sign-up — fixed (2026-05-06)
+
+**Status:** ✅ code complete, ✅ `flutter analyze` 54-issue baseline preserved, ✅ `flutter test` 87/87 green (was 82 + 5 new regression tests), ✅ iOS release build green (`Runner.app` 35.3 MB), ✅ **on-device verified on Gene's iPhone (UDID `00008120-001965E014C3601E`, iOS 26.4.2) 2026-05-06** — sign-out → different sign-up correctly shows EMPTY state for the new user; no leakage of the prior user's events / cliques / photos. **Pending:** Android APK release build + Samsung verification, commit + push.
+
+**The user complaint.** On iPhone: User A signed in, created Clique + Event + uploaded a photo, then signed out. A brand-new User B signed up on the SAME device in the SAME app session. User B saw User A's Event in their feed AND could navigate into it AND see User A's photos. **Reproducible only on iOS** in the user's testing — Android did not reproduce. Reported 2026-05-06.
+
+**The real root cause (3 coupled defects, none platform-specific).** The bug is iOS-only in observation but platform-agnostic in principle — verified via grep that there is NO `Platform.isIOS` branch anywhere in the auth/provider/cache layer. Backend was audited end-to-end and found sound (`getPhoto` at `backend/src/functions/photos.ts:478-487` correctly checks membership before signing SAS URLs at line 489; `listAllEvents`, `listPhotos`, `getEvent` all enforce `clique_members.user_id = $authUser.id` membership via INNER JOIN). The leak is **100% client-side state retention**:
+
+1. **`AuthNotifier.signOut()` (`app/lib/features/auth/presentation/auth_providers.dart:226-233`) does NOT call `ref.invalidate()` on any data providers** — only sets `state = AuthUnauthenticated`. `grep -rn "ref.invalidate" app/lib/features/auth/` returned ZERO matches.
+2. **`AllEventsNotifier.build()` (and `CliquesListNotifier.build()`) did not depend on auth state** — once built with User A's events, the AsyncNotifier instance retained them across sign-out → sign-in. `eventPhotosProvider`, `eventVideosProvider`, `eventDetailProvider`, `notificationsListProvider`, DM providers, etc. — all `FutureProvider.family` / `StateNotifierProvider.family` without `autoDispose` — survived sign-out with their User-A-keyed state intact.
+3. **The stale-while-revalidate bootstrap (`eventsBootstrapProvider`, `cliquesBootstrapProvider`) was set ONCE in `main()` via `ProviderScope.overrides`** with User A's events — `ListCacheService.clearAll()` correctly wiped the on-disk cache file but cannot reset the in-memory override. Even after invalidation, the next `build()` would re-read User A's events from the override.
+
+The "iOS-only" observation is most likely Android-specific timing: Android's process management may dispose providers between the sign-out and sign-up steps in ways iOS doesn't. The fix applies universally.
+
+**The fix (4 changes, all client-side, all in `app/lib/`).** See `~/.claude/plans/okay-here-is-the-cozy-shamir.md` for the full plan.
+
+| Change | File | What |
+|---|---|---|
+| 1a | `app/lib/features/auth/presentation/auth_providers.dart` | Added `currentUserIdProvider` — derived `Provider<String?>` from `authStateProvider`. Watchers only emit on actual user_id changes (String `==` value equality), avoiding flicker on every background-verify refresh of the same user |
+| 1b | `app/lib/app/app.dart` | Added `ref.listen<String?>(currentUserIdProvider, ...)` inside `_CliquePixState.build()` with guard `previous != null && previous != next`. On real identity change, calls `_invalidateUserScopedState(ref)` which invalidates 16 user-scoped providers (events × 3, cliques × 3, photos × 3, videos × 4, notifications × 1, DM × 3, including `mediaSelectionProvider` and `localPendingVideosProvider`) plus `PaintingBinding.instance.imageCache.clear()` for in-memory image bytes |
+| 2 | `app/lib/core/cache/list_bootstrap_providers.dart` + `app/lib/main.dart` | Added sibling `bootstrapUserIdProvider` overridden alongside the events + cliques bootstrap providers. Tags the bootstrap with the user_id it was loaded for so consumers can fail-closed |
+| 3a | `app/lib/features/events/presentation/events_providers.dart` | `AllEventsNotifier.build()` now `ref.watch(currentUserIdProvider)`, returns `const []` when null, gates the bootstrap on `bootstrapUserId == currentUserId`. If User B signs in mid-session, the User-A-tagged bootstrap is rejected and `listAllEvents()` is called fresh |
+| 3b | `app/lib/features/cliques/presentation/cliques_providers.dart` | Same fail-closed pattern in `CliquesListNotifier.build()` |
+| 4 | `app/test/events_provider_optimistic_test.dart`, `app/test/cliques_provider_optimistic_test.dart` (new) | 5 new regression tests: cross-account leak path (different user_id rejects bootstrap, fresh fetch made), signed-out empty-state path, same-user bootstrap acceptance |
+
+**Decisions deliberately rejected during planning** (see plan for full rationale):
+- ❌ **Pass `Ref` into `AuthNotifier`** — anti-pattern in Riverpod 2.x; chose `ref.listen` from a Consumer widget at the app root, matching the existing pattern at `login_screen.dart:104`
+- ❌ **Migrate to `IOSOptions(accessibility: first_unlock_this_device)` on `flutter_secure_storage`** — would orphan EXISTING iOS users' Keychain entries written under the prior default, force-logging them out. Defer.
+- ❌ **Disk cache clearing via `flutter_cache_manager`** — would require new direct dep (transitive through `cached_network_image`, which Dart cannot import). With provider invalidation, User B's UI never receives User A's photo IDs, so the disk cache is unreachable in practice.
+- ❌ **Migrating data providers to `autoDispose`** — broader UX change (re-fetches on every screen revisit). Outside the security-fix scope.
+
+| Phase | Status |
+|---|---|
+| Plan written + reviewed (`~/.claude/plans/okay-here-is-the-cozy-shamir.md`) | ✅ |
+| 6 code edits (auth_providers, list_bootstrap_providers, main, events_providers, cliques_providers, app) | ✅ |
+| 5 regression tests (3 in events, 2 in new cliques file) | ✅ |
+| `flutter analyze --no-fatal-infos` — 54-issue baseline preserved | ✅ |
+| `flutter test` — 87/87 green (82 baseline + 5 new) | ✅ |
+| `flutter clean && flutter pub get && flutter build ios --release --no-codesign` — green, 35.3 MB | ✅ |
+| `flutter run --release` deploy on Gene's iPhone (UDID `00008120-001965E014C3601E`, iOS 26.4.2) — Xcode build 27.0s, install + launch 5.0s | ✅ 2026-05-06 |
+| **iOS on-device verification — sign in as User A, create event + photo, sign out, sign up as User B → User B sees EMPTY events / cliques** | ✅ Verified 2026-05-06 by Gene Whitley |
+| APK release build | ⏳ Pending (needs Android SDK env) |
+| Samsung on-device verification — same scenario | ⏳ Pending |
+| Same-user re-sign-in regression check (must NOT break Welcome Back) | ⏳ Pending |
+| Commit + push to main | ⏳ Pending |
+
+**Telemetry to add post-deploy.** A `signout_state_invalidated` event from `_invalidateUserScopedState` (with prev/next user_id 8-char prefixes) should approximately track `auth_verify_success`. Zero events for 24h would mean the listener isn't firing.
+
+**Rollback plan.** `git revert <sha>` — single commit, client-only, no backend / infra / migration. Pre-existing buggy behavior returns. No data corruption possible (changes only clear in-memory state).
+
+---
+
+
 
 ## APIM Developer → Basic v2 migration — executed (2026-05-05)
 
