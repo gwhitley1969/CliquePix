@@ -18,7 +18,15 @@ This is a manual smoke test checklist to run before each beta release. Every ite
 
 ## 1. Authentication
 
-- [ ] **Sign in** — email OTP flow completes, lands on home screen
+- [ ] **Sign in (existing OTP-only account, regression — added 2026-05-06)** — pre-2026-05-06 account signs in via OTP path. Per Microsoft documented behavior, change-in-method only affects new users. Lands on Events.
+- [ ] **Sign up — new account, password (added 2026-05-06)** — Get Started → form asks for email → password + confirm → DOB ≥ 13 → backend `authVerify` returns 200 → lands on Events. App Insights `age_gate_passed`.
+- [ ] **Sign in — email + password (happy path, added 2026-05-06)** — lands on Events.
+- [ ] **Sign in — wrong password (added 2026-05-06)** — retry handled inside the Entra-hosted page, no app crash, no raw MsalException toast. Cancel browser → clean LoginScreen, no error banner.
+- [ ] **Sign in — Google federation (regression, added 2026-05-06)** — lands on Events. Existing Google users unaffected by local-account method change.
+- [ ] **Sign in — Apple federation (regression, added 2026-05-06)** — lands on Events. Critical regression check given iOS `Broker.msAuthenticator` config in `auth_repository.dart:55-59`.
+- [ ] **Forgot password / SSPR (added 2026-05-06)** — hosted sign-in page → "Forgot password?" link → SSPR OTP delivered to email → set new password → sign in succeeds.
+- [ ] **Apple reviewer account (added 2026-05-06)** — `appreview@cliquepix.com` on real iPhone, fresh install → lands on Events with seeded "Apple Review Demo" Clique visible → tap event → sample photos and video render → react ❤️ on a photo → send a DM → sign out and sign back in.
+- [ ] **No raw MSAL leak on browser cancel (added 2026-05-06)** — when user cancels browser mid-sign-in, app does NOT show raw `MsalUserCancelledException` text. Confirms `auth_providers.dart:200` reset-to-`AuthUnauthenticated` path still works.
 - [ ] **iOS post-auth no-crash regression (added 2026-05-01)** — on iOS only: from Profile → Sign Out → force-close the app from the app switcher → relaunch from the home screen → tap Get Started → complete MSAL/Safari auth. App MUST stay foregrounded after Safari dismisses and land on Events. **Failure mode to watch for:** app vanishes back to the iOS home screen the instant Safari closes. Caused historically by `BGTaskSchedulerPermittedIdentifiers` in `app/ios/Runner/Info.plist` declared without a registered launch handler (SIGABRT on the FlutterViewController re-attach). See `BETA_OPERATIONS_RUNBOOK.md` "iOS user reports 'app vanishes the second I sign in'" for diagnostic and `DEPLOYMENT_STATUS.md` "BGTask SIGABRT iOS post-auth crash" for the fix history.
 - [ ] **Cold start — returning user, no splash** — after a successful sign-in, kill the app and reopen. The first frame drawn must be the Events screen. There should be no splash screen, no "Get Started" button flash, and no button-spinner. `cold_start_optimistic_auth` + `background_verification_success` events appear in Token Diagnostics.
 - [ ] **Cold start — first-time user, enabled button** — uninstall and reinstall. Open the app. The first frame drawn must be LoginScreen with the "Get Started" button fully enabled and labeled (no spinner). `cold_start_unauthenticated` event appears.

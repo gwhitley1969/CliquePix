@@ -53,7 +53,7 @@ If a feature does not directly support one of these loops, it does not belong in
 ### Build These
 
 **Core + Photos (existing)**
-- Authentication via Entra External ID (email OTP / magic link, minimal friction)
+- Authentication via Entra External ID (email + password, plus Google + Apple federation, minimal friction; existing pre-2026-05-06 OTP users preserved per Microsoft documented behavior)
 - 5-layer token refresh defense for the Entra 12-hour timeout bug
 - Cliques: create, join via invite link / SMS / QR, list, view members, leave
 - Deep linking for Clique invites (Universal Links on iOS, App Links on Android)
@@ -193,7 +193,7 @@ Do not introduce npm dependencies not listed in `docs/WEB_CLIENT_ARCHITECTURE.md
 | Job dispatch | Azure Storage Queue | Queues video transcoding jobs. Triggered by video upload-confirm endpoint; polled by Container Apps Job |
 | Database | PostgreSQL Flexible Server | Relational data |
 | Object storage | Azure Blob Storage | Photo and video originals, photo thumbnails, HLS segments, MP4 fallbacks, video posters |
-| Identity (consumer) | Microsoft Entra External ID | User auth (email OTP / magic link) |
+| Identity (consumer) | Microsoft Entra External ID | User auth (email + password, Google, Apple) |
 | Identity (infra) | System-assigned managed identity | Function App + Container Apps Job → Blob Storage, Key Vault |
 | Secrets | Azure Key Vault | DB connection string, FCM credentials |
 | Observability | Application Insights | Telemetry, errors, dependencies (shared by Function App and Container Apps Job) |
@@ -1353,6 +1353,7 @@ If all eighteen of these work cleanly on both iOS and Android, v1 is done. (Loca
 |----------|---------|
 | `docs/PRD.md` | Product requirements, feature definitions, UX principles, branding |
 | `docs/ARCHITECTURE.md` | Full technical architecture, data model, security, deployment strategy |
+| `docs/AUTHENTICATION.md` | Single-source orientation doc for auth — providers, end-to-end flow, iOS/Android/web specifics, App Store reviewer demo account, configuration reference, migration history |
 | `docs/ENTRA_REFRESH_TOKEN_WORKAROUND.md` | Complete 5-layer token refresh implementation (code samples, debug tags, test procedures) |
 | `docs/EVENT_DM_CHAT_ARCHITECTURE.md` | Event-centric 1:1 DM design: Web PubSub delivery, schema, auth rules |
 | `docs/CliquePix_Video_Feature_Spec.md` | Generic video feature spec (handoff doc — requirements, acceptance criteria) |

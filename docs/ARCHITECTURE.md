@@ -79,7 +79,7 @@ Why Flutter for Clique Pix:
 | Compute | **Azure Functions** (TypeScript, Node.js) | REST API endpoints, timer-triggered cleanup, thumbnail generation |
 | Database | **PostgreSQL Flexible Server** | Relational data (users, cliques, events, photos, reactions) |
 | Object storage | **Azure Blob Storage** | Photo originals and thumbnails |
-| Identity (consumer) | **Microsoft Entra External ID** | User authentication (Google, Apple, email OTP) |
+| Identity (consumer) | **Microsoft Entra External ID** | User authentication (Google, Apple, email + password) |
 | Identity (infra) | **System-assigned managed identity** | Function App access to Blob Storage, Key Vault |
 | Secrets | **Azure Key Vault** | Database connection string, push notification credentials |
 | Observability | **Application Insights** | API telemetry, error tracking, dependency monitoring |
@@ -156,7 +156,7 @@ Flutter App → GET directly from Blob Storage (SAS URL) → load thumbnail/orig
 **Microsoft Entra External ID** — Azure-native consumer identity (CIAM).
 
 Supports:
-- email-based signup with OTP / magic link
+- email-based signup with password (one-time passcode used only for password reset via SSPR)
 - social providers (Google, Apple) configured via Entra identity providers
 - no Firebase dependency (FCM used for push transport only)
 
@@ -1174,6 +1174,7 @@ The architecture is:
 |----------|---------|
 | `PRD.md` | Product requirements, features, UX principles, branding |
 | `CLAUDE.md` | Development guardrails, locked decisions, implementation rules for Claude Code |
+| `AUTHENTICATION.md` | Single-source orientation doc for auth — start here for "how does sign-in work in this app" |
 | `ENTRA_REFRESH_TOKEN_WORKAROUND.md` | Complete 5-layer token refresh implementation (code samples, debug tags, test procedures) |
 | `EVENT_DM_CHAT_ARCHITECTURE.md` | Event-centric 1:1 DM design: Web PubSub delivery, schema, auth rules |
 | `VIDEO_ARCHITECTURE_DECISIONS.md` | 17 video architecture decisions (transcoder, HLS delivery, stream-copy fast path, local-first playback, iOS HLS bypass, source rotation handling, etc.) |

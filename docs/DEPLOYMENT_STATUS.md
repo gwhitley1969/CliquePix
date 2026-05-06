@@ -961,10 +961,10 @@ Health endpoint confirmed at:
 | Redirect URI (iOS) | Configured | `msauth.com.cliquepix.app://auth` (auto-generated from Bundle ID `com.cliquepix.app`) |
 | Application ID URI | Configured | `api://7db01206-135b-4a34-a4d5-2622d1a888bf` |
 | Exposed API Scope | Configured | `access_as_user` — required for MSAL to return app-scoped access token |
-| Email OTP | Enabled | Primary sign-in method |
+| Email + Password | Enabled | Primary local sign-in (changed from Email OTP on 2026-05-06; existing OTP users preserved per Microsoft documented behavior — see velvety-kindling-dragon plan) |
 | Google Identity Provider | Configured | OAuth client via Google Cloud Console |
 | Apple Identity Provider | Configured | Service ID: `com.cliquepix.app.service`, Key ID: `4NYXZNV9VD` |
-| User Flow | `SignUpSignIn` | Email OTP + Google + Apple, Clique Pix app associated |
+| User Flow | `SignUpSignIn` | Email + Password + Google + Apple, Clique Pix app associated |
 
 ### Firebase Configuration
 

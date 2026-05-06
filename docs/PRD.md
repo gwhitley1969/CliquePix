@@ -57,7 +57,7 @@ A persistent group of people (e.g., “Girls Night Out” or bachelor party)
 ## 5. Core Features (v1.0)
 
 ### 5.1 Authentication
-- Sign in with Google, Apple, or email OTP
+- Sign in with Google, Apple, or email + password
 - Powered by Microsoft Entra External ID (CIAM)
 - Minimal friction onboarding
 - **Stay-signed-in experience.** Users who open the app on a normal cadence (daily, or even every few days) never see a login screen again after the initial sign-in. The app refreshes silently in the background using a combination of server-triggered wake-ups and on-resume checks.
@@ -450,6 +450,8 @@ Everything in this version supports that loop and avoids unnecessary complexity.
 |----------|---------|
 | `ARCHITECTURE.md` | Full technical architecture, data model, security, deployment |
 | `CLAUDE.md` | Development guardrails and locked decisions for Claude Code |
-| `ENTRA_REFRESH_TOKEN_WORKAROUND.md` | Authentication token refresh implementation details |
+| `AUTHENTICATION.md` | Single-source orientation doc for auth: providers, end-to-end flow, platform specifics, demo account, configuration reference, migration history |
+| `ENTRA_REFRESH_TOKEN_WORKAROUND.md` | Authentication token refresh implementation details (5-layer defense for the 12-hour CIAM bug) |
+| `AGE_VERIFICATION_RUNBOOK.md` | 13+ age gate — claim emission, backend validation, troubleshooting |
 | `WEB_CLIENT_ARCHITECTURE.md` | Web client architecture, deployment, CORS/CSP config |
 

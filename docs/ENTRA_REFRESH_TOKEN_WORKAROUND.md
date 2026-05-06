@@ -42,7 +42,7 @@ One flag-ordering bug fixed in the same branch: `AppLifecycleService` now clears
 
 ## Problem summary
 
-Clique Pix uses Microsoft Entra External ID (CIAM) with Google / Apple / email-OTP sign-in. Entra External ID tenants enforce a **hardcoded 12-hour inactivity timeout** on refresh tokens. Standard Entra ID tenants get 90 days; External ID does not, and the setting is not exposed anywhere.
+Clique Pix uses Microsoft Entra External ID (CIAM) with Google / Apple / email + password sign-in. Entra External ID tenants enforce a **hardcoded 12-hour inactivity timeout** on refresh tokens. Standard Entra ID tenants get 90 days; External ID does not, and the setting is not exposed anywhere.
 
 Symptom: after ~12 hours without opening the app, the next silent refresh fails with:
 
