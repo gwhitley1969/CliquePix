@@ -79,9 +79,14 @@
 		<string>remote-notification</string>
 	</array>
 
-	<!-- Associated Domains (for Universal Links) -->
-	<!-- Configure in Xcode: Signing & Capabilities → Associated Domains -->
-	<!-- Add: applinks:clique-pix.com -->
+	<!-- Associated Domains live in Runner.entitlements (applinks:clique-pix.com).
+	     Push Notifications (aps-environment) also in Runner.entitlements. -->
+
+	<!-- Encryption export compliance: only Apple-provided HTTPS/Keychain/URLSession
+	     crypto. Qualifies for ECCN 5D992 exemption. Setting this here suppresses
+	     the App Store Connect prompt on every TestFlight + App Store upload. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 
 	<!-- BGTaskSchedulerPermittedIdentifiers REMOVED 2026-05-01.
 	     The 5-layer Entra refresh-token defense uses Android WorkManager
