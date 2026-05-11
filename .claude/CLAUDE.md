@@ -659,7 +659,7 @@ Microsoft's documented mitigation for this exact scenario (Azure Communication S
 <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 ```
 
-`SCHEDULE_EXACT_ALARM` and `USE_EXACT_ALARM` remain declared but are no longer on the critical path (the notification-based Layer 2 that used them has been deleted).
+`SCHEDULE_EXACT_ALARM` and `USE_EXACT_ALARM` are NOT declared. They were declared by an earlier version of the manifest (back when the notification-based Layer 2 token refresh used `exactAllowWhileIdle`) but that design was deleted. The `flutter_local_notifications` plugin declares both transitively in its own AndroidManifest because the plugin SUPPORTS exact-alarm scheduling — we suppress the plugin's contribution via `<uses-permission ... tools:node="remove" />` markers in our manifest. Reason: Google Play policy restricts `USE_EXACT_ALARM` to alarm-clock / calendar apps; Clique Pix is neither, and Play Console rejects builds that include it. The Friday reminder uses `AndroidScheduleMode.inexactAllowWhileIdle` which requires neither permission.
 
 ### iOS Info.plist
 

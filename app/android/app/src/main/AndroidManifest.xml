@@ -1,11 +1,22 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+          xmlns:tools="http://schemas.android.com/tools">
 
     <!-- 5-Layer Token Refresh Permissions -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
-    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
-    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+
+    <!-- Suppress exact-alarm permissions. The Friday reminder uses
+         AndroidScheduleMode.inexactAllowWhileIdle which does not need either
+         permission. The flutter_local_notifications plugin declares these
+         transitively in its own manifest; tools:node="remove" actively
+         removes them during manifest merge. USE_EXACT_ALARM is restricted by
+         Google Play policy to alarm-clock / calendar apps only — Clique Pix
+         is neither. -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"
+        tools:node="remove" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM"
+        tools:node="remove" />
 
     <!-- Network -->
     <uses-permission android:name="android.permission.INTERNET" />

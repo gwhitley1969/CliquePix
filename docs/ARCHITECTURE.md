@@ -244,8 +244,6 @@ Full implementation details, Kusto queries, and per-layer event names are in `EN
 <uses-permission android:name="android.permission.WAKE_LOCK" />
 <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
-<uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
-<uses-permission android:name="android.permission.USE_EXACT_ALARM" />
 ```
 
 ### iOS Considerations
