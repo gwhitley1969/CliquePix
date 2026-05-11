@@ -3,7 +3,7 @@
     "apps": [],
     "details": [
       {
-        "appIDs": ["4ML27KY869.com.cliquepix.cliquePix"],
+        "appIDs": ["4ML27KY869.com.cliquepix.app"],
         "paths": ["/invite/*"],
         "components": [
           {
