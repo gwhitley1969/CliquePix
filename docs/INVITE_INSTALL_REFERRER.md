@@ -12,15 +12,22 @@ A Clique Pix user generates an invite QR encoding `https://clique-pix.com/invite
 
 ## The Solution
 
-A three-phase design:
+A four-phase design (Phase C split into interim + final after TestFlight confirmation):
 
 | Phase | Platform | What it does | Status |
 |---|---|---|---|
 | **A** | Web | Install banner on `/invite/{code}` + benefit bullets + platform-appropriate Store badge | Shipped 2026-05-13 |
 | **B** | Android | Play Install Referrer carries `invite_code=...` from the Play Store URL → Flutter reads it on first launch → auto-joins after sign-in | Shipped 2026-05-13 |
-| **C** | iOS | Smart App Banner meta tag in `webapp/index.html` (`<meta name="apple-itunes-app">`); native Safari banner with `app-argument` delivered via `NSUserActivity` after install | Gated on iOS App Store listing — pending |
+| **C-interim** | iOS | TestFlight badge on the iOS branch of the install banner → user installs via TestFlight → retaps original invite link from Messages → Universal Link routes into the app and joins | Shipped 2026-05-13 |
+| **C-final** | iOS | Smart App Banner meta tag in `webapp/index.html` (`<meta name="apple-itunes-app">`) + `app-argument` rewrite; native Safari banner delivers the invite URL to the app via `NSUserActivity.webpageURL` post-install | Gated on iOS App Store listing approval |
 
 Each phase ships independently; none blocks the others.
+
+**iOS identifiers (for reference):**
+- Apple ID (numeric, for Smart App Banner `app-id`): `6766294274`
+- Bundle ID: `com.cliquepix.app`
+- TestFlight public link: `https://testflight.apple.com/join/hWznNvJ6`
+- AASA Team ID: `4ML27KY869`
 
 ---
 
@@ -33,12 +40,12 @@ When an unauthenticated user lands on `/invite/{code}`:
 1. `detectPlatform()` returns `'android' | 'ios' | 'desktop'` from `navigator.userAgent` (see `webapp/src/lib/platform.ts`).
 2. `<InstallBanner inviteCode={code} platform={platform} />` renders above the existing "Sign in to accept" CTA:
    - **Android + Desktop:** shows "Get the full Clique Pix experience" + benefit bullets + a `<PlayStoreBadge>` whose `href` is `https://play.google.com/store/apps/details?id=com.cliquepix.clique_pix&referrer={URL-encoded invite_code=CODE}`.
-   - **iOS:** banner is hidden entirely (returns `null`) until the App Store listing is live and Phase C ships. iOS users go straight to the existing web sign-in CTA.
+   - **iOS:** same headline + bullets, but the badge is a `<TestFlightBadge>` pointing at `https://testflight.apple.com/join/hWznNvJ6`. A small caption underneath reads *"iOS is in public beta on TestFlight. After installing, tap your invite link again to join the Clique."* — sets the right expectation since iOS has no deferred-deep-link path post-install.
 3. The existing "Sign in to accept" CTA stays exactly where it was. It's the explicit no-install alternative — anyone can join entirely on the web without ever touching a mobile app.
 
-**Below the CTA**, a small caption nudges install on non-iOS platforms: *"Or install the app above — your invite will be waiting when you sign in."*
+**Below the CTA**, a small caption nudges install on non-iOS platforms: *"Or install the app above — your invite will be waiting when you sign in."* (Android-specific because Play Install Referrer actually preserves the code through install; iOS users see the in-banner caption that sets the correct retap-after-install expectation.)
 
-**No iOS Smart App Banner ships in Phase A.** The `<meta name="apple-itunes-app">` tag requires a real App Store `app-id` and renders a console warning in Safari without one. Phase C activates it when the App Store listing goes live.
+**No iOS Smart App Banner ships in Phase A or C-interim.** The `<meta name="apple-itunes-app">` tag requires a real App Store `app-id` AND a publicly listed app at that ID. The Apple ID `6766294274` exists in App Store Connect today but no public listing is approved yet (verified 2026-05-13 via `https://itunes.apple.com/lookup?id=6766294274` — `resultCount: 0`). Phase C-final activates the meta tag when Apple approves the public listing.
 
 ---
 
@@ -100,29 +107,64 @@ The pending invite code must survive process death between the referrer-read (fi
 
 ---
 
-## Phase C — iOS Smart App Banner (deferred)
+## Phase C-interim — iOS TestFlight badge (shipped)
 
-**Activation steps when the iOS App Store listing goes live:**
+**Files:**
+- `webapp/src/features/landing/components/TestFlightBadge.tsx` (new) — visual chassis matches `AppStoreBadge.tsx` (dark background, Apple icon from `lucide-react`); copy "Get it via / TestFlight". `target="_blank" rel="noopener noreferrer"` so the TestFlight enrollment URL opens cleanly outside the React app.
+- `webapp/src/features/cliques/InstallBanner.tsx` — iOS branch renders `<TestFlightBadge href={TESTFLIGHT_URL}>` + retap-after-install caption.
 
-1. Get the App Store ID for Clique Pix (a numeric value Apple assigns to the listing).
-2. Add to `webapp/index.html` in `<head>`:
+### Flow (iOS, app not installed, pre-public-App-Store)
+
+```
+1. iOS user scans Clique invite QR
+2. Mobile Safari opens https://clique-pix.com/invite/{code}
+3. InstallBanner renders with TestFlightBadge + retap caption
+4. User taps badge → opens https://testflight.apple.com/join/hWznNvJ6 in Safari
+5. If TestFlight app NOT installed: prompt to install TestFlight from App Store
+6. TestFlight app opens → "Accept" Clique Pix beta → install
+7. User opens Clique Pix → signs in → lands on Home (no invite code preserved)
+8. User retaps original invite link from Messages / wherever Person A shared it
+9. Safari sees `clique-pix.com/invite/{code}` cross-domain navigation from Messages
+   ↓ Universal Link via .well-known/apple-app-site-association fires
+   ↓ App opens at JoinCliqueScreen with the code
+10. JoinCliqueScreen auto-joins → user lands in clique detail
+```
+
+### Known iOS limitations (documented in the banner caption)
+
+- **No deferred-deep-link.** No Apple equivalent of Play Install Referrer; the invite code is NOT carried through the TestFlight install.
+- **Retap requirement.** User MUST retap the invite link AFTER install to trigger Universal Link routing. The in-banner caption tells them this explicitly.
+- **TestFlight requires the TestFlight app.** First-time iOS testers install the TestFlight app from the App Store before they can install Clique Pix. ~2 taps of additional friction.
+
+### TestFlight URL constant
+
+Currently hardcoded as `TESTFLIGHT_URL` in `InstallBanner.tsx`. If the TestFlight enrollment link ever rotates (rare — it's tied to the public link Apple generates per-app), update the constant in one place.
+
+---
+
+## Phase C-final — iOS Smart App Banner (deferred, App Store listing dependency)
+
+**Activation steps when the iOS App Store listing goes live (Apple approves the public submission):**
+
+1. Confirm the public listing is live via `https://itunes.apple.com/lookup?id=6766294274` — `resultCount: 1`.
+2. Add to `webapp/index.html` in `<head>` (Apple ID is `6766294274`):
    ```html
-   <meta name="apple-itunes-app" content="app-id=APPSTORE_ID_HERE">
+   <meta name="apple-itunes-app" content="app-id=6766294274">
    ```
-3. In `InviteAcceptScreen.tsx`, add a `useEffect` that rewrites the meta tag's `content` attribute on mount to include `app-argument`:
+3. In `webapp/src/features/cliques/InviteAcceptScreen.tsx`, add a `useEffect` that rewrites the meta tag's `content` attribute on mount to include `app-argument`:
    ```ts
    useEffect(() => {
      if (!code) return;
      const meta = document.querySelector('meta[name="apple-itunes-app"]') as HTMLMetaElement | null;
      if (!meta) return;
      const url = window.location.href; // https://clique-pix.com/invite/CODE
-     meta.content = `app-id=APPSTORE_ID_HERE, app-argument=${url}`;
+     meta.content = `app-id=6766294274, app-argument=${url}`;
    }, [code]);
    ```
-4. On iPhone Safari, the page renders Apple's native install banner at the top. `app-argument` is delivered to the app via `NSUserActivity.webpageURL` when the user taps the banner — handled by the same Universal Link path that already works today.
-5. Remove the `if (platform === 'ios') return null;` early-return in `InstallBanner.tsx` if a secondary in-page App Store badge is desired alongside Apple's banner. Optional.
+4. Swap the `<TestFlightBadge>` in `InstallBanner.tsx` iOS branch for an `<AppStoreBadge href={'https://apps.apple.com/us/app/clique-pix/id6766294274'}>`. Update banner caption to drop the "retap after install" instruction (Smart App Banner's native "OPEN" flow delivers `app-argument` automatically).
+5. On iPhone Safari, the page renders Apple's native install banner at the TOP of the viewport (above our in-page banner). `app-argument` is delivered to the app via `NSUserActivity.webpageURL` when the user taps "OPEN" — handled by the same Universal Link path that already works today.
 
-**Caveat — Universal Links same-domain rule.** Apple's `NSUserActivity` Universal Link does NOT fire when navigating WITHIN `clique-pix.com` in Safari. Don't add an "Open in App" hyperlink on the invite page that points at the same URL — it silently does nothing. The Smart App Banner is the only viable mechanism; OR direct the user to re-tap the original invite link from another app (Messages, Mail, etc.) where the navigation IS cross-domain.
+**Caveat — Universal Links same-domain rule.** Apple's `NSUserActivity` Universal Link does NOT fire when navigating WITHIN `clique-pix.com` in Safari. Don't add an "Open in App" hyperlink on the invite page that points at the same URL — it silently does nothing. The Smart App Banner is the only viable in-page mechanism; OR direct the user to re-tap the original invite link from another app (Messages, Mail, etc.) where the navigation IS cross-domain.
 
 ---
 

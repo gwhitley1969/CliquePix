@@ -1,9 +1,11 @@
 import { useEffect } from 'react';
 import { PlayStoreBadge } from '../landing/components/PlayStoreBadge';
+import { TestFlightBadge } from '../landing/components/TestFlightBadge';
 import { trackEvent } from '../../lib/ai';
 import type { Platform } from '../../lib/platform';
 
 const ANDROID_APP_ID = 'com.cliquepix.clique_pix';
+const TESTFLIGHT_URL = 'https://testflight.apple.com/join/hWznNvJ6';
 
 function buildPlayStoreUrl(inviteCode: string): string {
   const referrer = encodeURIComponent(`invite_code=${inviteCode}`);
@@ -12,12 +14,8 @@ function buildPlayStoreUrl(inviteCode: string): string {
 
 export function InstallBanner({ inviteCode, platform }: { inviteCode: string; platform: Platform }) {
   useEffect(() => {
-    if (platform !== 'ios') {
-      trackEvent('web_invite_install_banner_shown', { platform });
-    }
+    trackEvent('web_invite_install_banner_shown', { platform });
   }, [platform]);
-
-  if (platform === 'ios') return null;
 
   const playStoreUrl = buildPlayStoreUrl(inviteCode);
 
@@ -39,11 +37,23 @@ export function InstallBanner({ inviteCode, platform }: { inviteCode: string; pl
         </li>
       </ul>
       <div className="mt-5 flex flex-wrap items-center gap-3">
-        <PlayStoreBadge
-          href={playStoreUrl}
-          onClick={() => trackEvent('web_invite_install_badge_clicked', { platform: 'android' })}
-        />
+        {platform === 'ios' ? (
+          <TestFlightBadge
+            href={TESTFLIGHT_URL}
+            onClick={() => trackEvent('web_invite_install_badge_clicked', { platform: 'ios' })}
+          />
+        ) : (
+          <PlayStoreBadge
+            href={playStoreUrl}
+            onClick={() => trackEvent('web_invite_install_badge_clicked', { platform: 'android' })}
+          />
+        )}
       </div>
+      {platform === 'ios' && (
+        <p className="mt-3 text-xs text-white/50">
+          iOS is in public beta on TestFlight. After installing, tap your invite link again to join the Clique.
+        </p>
+      )}
     </div>
   );
 }
