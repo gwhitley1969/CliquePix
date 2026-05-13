@@ -883,8 +883,10 @@ Serve from Azure Front Door or a simple static web app. Static JSON files that r
 
 ### Flow
 
-1. **App installed:** open app, route to invite acceptance screen, call `POST /api/cliques/{cliqueId}/join` with invite code
-2. **App not installed:** open App Store / Play Store listing. Deferred deep linking is a post-v1 enhancement.
+1. **App installed:** App Link / Universal Link routes directly into the app, lands on invite acceptance screen, calls `POST /api/cliques/_/join` with the invite code in the body.
+2. **App not installed (Android):** Chrome opens `clique-pix.com/invite/{code}` → `InstallBanner` renders with a "Get on Google Play" badge whose URL carries `?referrer=invite_code%3D{code}` → user installs from Play → on first launch the Flutter app reads the Play Install Referrer via `play_install_referrer` (in `app/lib/services/install_referrer_service.dart`), persists the code to SharedPreferences key `install_referrer_pending_invite_code`, and `_CliquePixState._consumePendingInstallReferrerInvite` (in `app/lib/app/app.dart`) routes to `/invite/{code}` after the first `AuthAuthenticated` transition. JoinCliqueScreen completes the join. See `docs/INVITE_INSTALL_REFERRER.md`.
+3. **App not installed (iOS):** Safari opens `clique-pix.com/invite/{code}` → in-page install banner is HIDDEN until iOS App Store listing goes live → existing "Sign in to accept" CTA handles the web-side join. Once the App Store listing is live, activate Phase C of the install-referrer doc (Smart App Banner meta tag in `webapp/index.html`) for native iOS deferred deep linking via `NSUserActivity.webpageURL`.
+4. **Web-only path:** anyone can join entirely on the web by signing in via the existing "Sign in to accept" CTA — no install ever required.
 
 ---
 
@@ -1116,6 +1118,11 @@ Add new types by extending the type switch in `_connectInternal` and adding a co
 - `token_refresh_success`, `token_refresh_failed` (include layer that triggered it)
 - `account_deleted`
 - `notification_sent`, `notification_send_failed`
+- `install_referrer_read` (with `had_invite_code=true|false` in `errorCode` slot) — Android Play Install Referrer drain via pending-isolate queue
+- `install_referrer_auto_join_attempted` — fires when the auth-state listener consumes a pending invite code and routes to `/invite/{code}`
+- `web_invite_install_banner_shown` (with `platform`) — webapp `InstallBanner`
+- `web_invite_install_badge_clicked` (with `platform`) — webapp `InstallBanner` Play badge click
+- `web_invite_web_signin_clicked` — webapp `InviteAcceptScreen` "Sign in to accept" CTA
 
 **Photos:**
 - `photo_upload_started`, `photo_upload_completed`, `photo_upload_failed`
@@ -1364,3 +1371,4 @@ If all eighteen of these work cleanly on both iOS and Android, v1 is done. (Loca
 | `docs/BETA_TEST_PLAN.md` | Manual smoke test checklist (60+ items) for beta releases — dual-device testing |
 | `docs/BETA_OPERATIONS_RUNBOOK.md` | Incident response, troubleshooting, DB backup/restore, key rotation, cost monitoring. §7 includes avatar telemetry + welcome-prompt funnel KQL queries; §2 adds avatar-specific incident playbooks |
 | `docs/WEB_CLIENT_ARCHITECTURE.md` | Web client architecture, deployment, CORS/CSP config, MSAL.js setup, video upload parity, §8.5 avatar upload + welcome prompt |
+| `docs/INVITE_INSTALL_REFERRER.md` | Install-aware QR invites + deferred deep linking: Phase A (web install banner), Phase B (Android Play Install Referrer), Phase C (iOS Smart App Banner — deferred until App Store listing live), telemetry, verification with `adb shell am broadcast` |

@@ -1,7 +1,7 @@
 name: clique_pix
 description: Private, event-based photo sharing app.
 publish_to: 'none'
-version: 1.0.0+3
+version: 1.0.0+4
 
 environment:
   sdk: '>=3.2.0 <4.0.0'
@@ -55,6 +55,9 @@ dependencies:
   # Background tasks
   workmanager: ^0.9.0
   flutter_local_notifications: ^17.1.2
+
+  # Play Install Referrer (Android-only deferred deep linking for invite codes)
+  play_install_referrer: ^0.5.0
 
   # Sharing & saving
   share_plus: ^12.0.2

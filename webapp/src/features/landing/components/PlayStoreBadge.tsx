@@ -6,17 +6,27 @@ import clsx from 'clsx';
  * (four-color triangle). Replace href with the real Play Store URL when
  * available.
  */
-export function PlayStoreBadge({ href = '#', className }: { href?: string; className?: string }) {
+export function PlayStoreBadge({
+  href = '#',
+  className,
+  onClick,
+}: {
+  href?: string;
+  className?: string;
+  onClick?: () => void;
+}) {
+  const isPlaceholder = href === '#';
   return (
     <a
       href={href}
+      onClick={onClick}
       className={clsx(
         'inline-flex items-center gap-3 rounded-lg bg-black px-5 py-2.5 text-white',
         'border border-white/20 hover:border-white/40 transition-colors',
         'focus:outline-none focus:ring-2 focus:ring-aqua/50',
         className,
       )}
-      aria-label="Get Clique Pix on Google Play (link coming soon)"
+      aria-label={isPlaceholder ? 'Get Clique Pix on Google Play (link coming soon)' : 'Get Clique Pix on Google Play'}
     >
       <svg
         width="24"

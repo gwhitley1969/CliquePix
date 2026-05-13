@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -21,6 +22,7 @@ import 'features/auth/presentation/auth_providers.dart'
     show authBootstrapStateProvider;
 import 'models/clique_model.dart';
 import 'models/event_model.dart';
+import 'services/install_referrer_service.dart';
 import 'services/push_notification_service.dart';
 import 'services/token_storage_service.dart';
 import 'app/app.dart';
@@ -288,6 +290,12 @@ Future<void> performDeferredInit() async {
   // the in-app list.
   FirebaseMessaging.onMessage.listen(_handleForegroundFcmMessage);
   debugPrint('[CliquePix] FCM onMessage listener registered');
+
+  // Read the Play Install Referrer once. If the user installed via the web
+  // invite page's Play Store badge, the referrer contains `invite_code=...`;
+  // the auth listener in `app.dart` consumes it after sign-in and routes the
+  // user directly to the invite-accept screen. Android-only; iOS is a no-op.
+  unawaited(InstallReferrerService.readAndPersistOnce());
 }
 
 /// Read tokens + cached user from secure storage and decide the initial

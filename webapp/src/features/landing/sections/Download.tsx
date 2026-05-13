@@ -32,11 +32,11 @@ export function Download() {
 
             <div className="mt-7 flex flex-wrap items-center gap-3">
               <AppStoreBadge />
-              <PlayStoreBadge />
+              <PlayStoreBadge href="https://play.google.com/store/apps/details?id=com.cliquepix.clique_pix" />
             </div>
             <div className="mt-4 flex items-center gap-2">
               <BetaChip />
-              <span className="text-xs text-white/50">Store listings coming soon</span>
+              <span className="text-xs text-white/50">Android open beta available now • iOS launching soon</span>
             </div>
 
             <div className="mt-8">

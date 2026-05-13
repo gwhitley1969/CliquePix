@@ -4,7 +4,9 @@ import '../core/theme/app_theme.dart';
 import '../core/routing/app_router.dart';
 import '../main.dart' show performDeferredInit;
 import '../services/deep_link_service.dart';
+import '../services/install_referrer_service.dart';
 import '../services/push_notification_service.dart';
+import '../services/telemetry_service.dart';
 import '../features/auth/domain/auth_state.dart';
 import '../features/auth/presentation/auth_providers.dart';
 // Imports below are needed solely for the user-scoped state invalidation that
@@ -27,6 +29,7 @@ class CliquePix extends ConsumerStatefulWidget {
 
 class _CliquePixState extends ConsumerState<CliquePix> {
   bool _pushInitialized = false;
+  bool _inviteAutoJoinChecked = false;
 
   @override
   void initState() {
@@ -44,7 +47,37 @@ class _CliquePixState extends ConsumerState<CliquePix> {
       } catch (e) {
         debugPrint('[CliquePix] deferred init failed: $e');
       }
+      // After deferred init has read the Play Install Referrer into
+      // SharedPreferences, check whether we have a pending invite code to
+      // consume. Handles the bootstrap-already-authenticated case (the
+      // `ref.listen` below would not fire for state that was already set at
+      // construction time).
+      await _consumePendingInstallReferrerInvite();
     });
+  }
+
+  /// If a Play Install Referrer captured an `invite_code=...` for this fresh
+  /// install AND the user is currently signed in, route to the invite-accept
+  /// screen and clear the pending code. JoinCliqueScreen handles the actual
+  /// join + error UX. Idempotent — safe to call multiple times.
+  Future<void> _consumePendingInstallReferrerInvite() async {
+    if (_inviteAutoJoinChecked) return;
+    final auth = ref.read(authStateProvider);
+    if (auth is! AuthAuthenticated) return;
+
+    final code = await InstallReferrerService.readPendingInviteCode();
+    if (code == null || code.isEmpty) return;
+
+    _inviteAutoJoinChecked = true;
+    await InstallReferrerService.clearPendingInviteCode();
+
+    ref.read(telemetryServiceProvider).record(
+          'install_referrer_auto_join_attempted',
+        );
+
+    if (!mounted) return;
+    final router = ref.read(routerProvider);
+    router.go('/invite/$code');
   }
 
   @override
@@ -75,6 +108,19 @@ class _CliquePixState extends ConsumerState<CliquePix> {
     ref.listen<String?>(currentUserIdProvider, (previous, next) {
       if (previous != null && previous != next) {
         _invalidateUserScopedState(ref);
+      }
+    });
+
+    // When the user signs in (or returns from Welcome Back re-login), check
+    // for a pending Play Install Referrer invite code and route to the
+    // invite-accept screen. Listening on AuthState (not currentUserIdProvider)
+    // catches first-time sign-ins where previous user_id was null.
+    ref.listen<AuthState>(authStateProvider, (previous, next) {
+      final wasNotAuthed = previous is! AuthAuthenticated;
+      final isNowAuthed = next is AuthAuthenticated;
+      if (wasNotAuthed && isNowAuthed) {
+        _inviteAutoJoinChecked = false;
+        _consumePendingInstallReferrerInvite();
       }
     });
 
