@@ -397,7 +397,7 @@ Why Flutter for Clique Pix:
 - Printed albums
 - AI highlights / recap
 - ~~Multi-photo download~~ (implemented in v1)
-- Video support
+- ~~Video support~~ (implemented in v1 — capture, upload, transcode, HLS playback, local-first uploader playback, save/share)
 - Premium subscription tier
 
 ---
