@@ -1,6 +1,100 @@
 # DEPLOYMENT_STATUS.md — Clique Pix v1
 
-Last updated: 2026-05-06 (iOS cross-account data leak fix: User A's Riverpod state survived sign-out → User B saw User A's events + photos. Fix invalidates user-scoped providers + tags bootstrap with user_id; 87/87 tests pass; iOS on-device verified by Gene Whitley)
+Last updated: 2026-05-13 (Install-aware QR invites — Phase A web banner + Phase B Android Play Install Referrer + Phase C-interim iOS TestFlight badge shipped in two commits; versionCode bumped 3 → 4 and release AAB built; Phase C-final iOS Smart App Banner gated on App Store listing approval)
+
+## Install-aware QR invites — Phase A/B/C-interim shipped (2026-05-13)
+
+**Status:** ✅ code complete (2 commits, 18 files touched), ✅ pushed to `origin/main` (commits `56ae257` + `0103c87`), ✅ release AAB built (`app-release.aab`, 52.1 MB, versionCode=4, versionName=1.0.0), ✅ packaged manifest verified (`versionCode="4"`, `versionName="1.0.0"`). **Pending:** manual upload of new AAB to Play Console Open Testing; webapp SWA deploy GitHub Actions workflow auto-triggers from the push and rolls Phase A + C-interim to production at `clique-pix.com`.
+
+**The user observation that triggered this work.** Person A scans Person B's Clique invite QR on a phone that doesn't have Clique Pix installed today. The web page at `clique-pix.com/invite/{code}` worked for the no-install path (sign in → join via web), but there was no install upsell AND no way to preserve the invite code across an install → first-launch sequence. The user asked: "Could the QR also direct them to install the app AND preserve the invite context?"
+
+**The four-phase design (Phase A + B + C-interim shipped this session; C-final deferred).** Full architecture in `docs/INVITE_INSTALL_REFERRER.md`.
+
+| Phase | Platform | Mechanism | Shipped |
+|---|---|---|---|
+| **A** | Web | `InstallBanner` on `/invite/{code}` renders platform-appropriate Store badge above the existing sign-in CTA. Benefit bullets ("In-app camera + editor / push notifications / save to camera roll / Full HD video"). Android + Desktop see Google Play badge whose href carries `?referrer=invite_code%3D{code}` URL-encoded. iOS gets a TestFlight badge (see Phase C-interim) | ✅ 2026-05-13 |
+| **B** | Android | `play_install_referrer` Flutter package ^0.5.0 reads the Play Install Referrer once per install. New `InstallReferrerService` parses `invite_code=` out of the URL-decoded referrer string and persists to SharedPreferences key `install_referrer_pending_invite_code`. `_CliquePixState` consumes the pending code on `AuthAuthenticated` transition (via post-frame callback for bootstrap-authed users and `ref.listen<AuthState>` for post-sign-in users) and routes to `/invite/{code}` — `JoinCliqueScreen` auto-joins | ✅ 2026-05-13 (effective once AAB versionCode=4 is approved in Play Open Testing) |
+| **C-interim** | iOS | New `TestFlightBadge` component (visual chassis matches `AppStoreBadge`, copy "Get it via / TestFlight", Apple icon from `lucide-react`). Banner caption sets the correct expectation: *"iOS is in public beta on TestFlight. After installing, tap your invite link again to join the Clique."* — no Apple equivalent of Play Install Referrer exists, so iOS users retap the invite link from Messages post-install to trigger Universal Link routing | ✅ 2026-05-13 |
+| **C-final** | iOS | Smart App Banner meta tag (`<meta name="apple-itunes-app" content="app-id=6766294274, app-argument={current URL}">`) in `webapp/index.html`. Native Safari delivers `app-argument` to the app via `NSUserActivity.webpageURL` after install. Apple ID `6766294274` exists in App Store Connect but no public listing approved yet (verified via `https://itunes.apple.com/lookup?id=6766294274` returning `resultCount: 0`). Activation steps with the concrete Apple ID and copy-paste useEffect snippet documented in `docs/INVITE_INSTALL_REFERRER.md` §"Phase C-final" | ⏳ Gated on App Store listing approval |
+
+**Idempotency invariants for Phase B (critical to get right).**
+
+- **`install_referrer_consumed`** SharedPreferences flag is set after the FIRST read attempt regardless of result. Subsequent cold starts skip the Play API call entirely (saves battery; the Play API is expensive). Self-enforced one-shot semantics.
+- **`install_referrer_pending_invite_code`** is cleared as soon as the auth-state listener consumes it. Force-stop + cold-restart after consumption does NOT re-fire the auto-join.
+- **`_inviteAutoJoinChecked`** in-memory flag in `_CliquePixState` guards against re-firing within the same process. Reset to `false` when the user transitions OUT of `AuthAuthenticated` (sign-out → sign-in as new user) so a new pending invite can still be consumed by a different user without a process restart.
+- **Why SharedPreferences over a Riverpod provider:** the pending code must survive process death between the referrer-read (post-first-frame `performDeferredInit`) and the consume (post-sign-in `AuthAuthenticated`, which may be minutes or days later). A Riverpod provider would be lost on process death; SharedPreferences is the durable primitive.
+
+**Telemetry events added.**
+
+| Event | Properties | Emitter |
+|---|---|---|
+| `web_invite_install_banner_shown` | `platform: 'android'\|'ios'\|'desktop'` | `webapp/src/features/cliques/InstallBanner.tsx` useEffect |
+| `web_invite_install_badge_clicked` | `platform: 'android'\|'ios'` | `InstallBanner.tsx` onClick |
+| `web_invite_web_signin_clicked` | — | `InviteAcceptScreen.tsx` onSignIn |
+| `install_referrer_read` | `had_invite_code=true\|false` (in `errorCode` slot of the pending-isolate queue format) | `app/lib/services/install_referrer_service.dart` |
+| `install_referrer_auto_join_attempted` | — | `_CliquePixState._consumePendingInstallReferrerInvite` |
+
+Success/failure of the actual clique join continues to be tracked by the existing `clique_joined` event in the cliques handler.
+
+**Files touched (18 across 2 commits).**
+
+Commit `56ae257` (Phase A + B + initial Phase C planning, 13 files):
+- `webapp/src/lib/platform.ts` (new — UA detection)
+- `webapp/src/features/cliques/InstallBanner.tsx` (new — platform-aware install upsell)
+- `webapp/src/features/cliques/InviteAcceptScreen.tsx` (compose banner + telemetry)
+- `webapp/src/features/landing/components/PlayStoreBadge.tsx` (add optional `onClick`)
+- `webapp/src/features/landing/sections/Download.tsx` (live Play Store URL)
+- `app/pubspec.yaml` (`play_install_referrer: ^0.5.0`, version `1.0.0+3` → `1.0.0+4`)
+- `app/pubspec.lock` (transitive)
+- `app/lib/services/install_referrer_service.dart` (new)
+- `app/lib/main.dart` (invoke `readAndPersistOnce` in `performDeferredInit`)
+- `app/lib/app/app.dart` (`_consumePendingInstallReferrerInvite` + post-frame + `ref.listen<AuthState>`)
+- `docs/INVITE_INSTALL_REFERRER.md` (new, 192 lines)
+- `docs/BETA_TEST_PLAN.md` (4 new test cases in §2 Cliques)
+- `.claude/CLAUDE.md` (Deep Linking flow rewrite + telemetry list + Companion Documents table)
+
+Commit `0103c87` (Phase C-interim TestFlight, 5 files):
+- `webapp/src/features/landing/components/TestFlightBadge.tsx` (new)
+- `webapp/src/features/cliques/InstallBanner.tsx` (iOS branch renders TestFlightBadge + retap caption)
+- `docs/INVITE_INSTALL_REFERRER.md` (+72 lines for Phase C-interim flow + iOS limitations + C-final activation steps with concrete `app-id=6766294274`)
+- `docs/BETA_TEST_PLAN.md` (iOS install-aware test case rewritten for TestFlight path)
+- `.claude/CLAUDE.md` (Companion Documents row touch-up)
+
+**Build verification.**
+
+| Step | Result |
+|---|---|
+| `flutter clean` | Per `feedback_always_flutter_clean.md` memory — non-negotiable before every release build |
+| `flutter pub get` | Resolved `play_install_referrer ^0.5.0` + transitive deps |
+| `flutter build appbundle --release` | ✅ Succeeded in 290.6s |
+| Output: `app/build/app/outputs/bundle/release/app-release.aab` | 52.1 MB |
+| Packaged manifest check (`aapt dump badging` equivalent via grep) | `versionCode="4"`, `versionName="1.0.0"` confirmed |
+
+**iOS identifiers locked in for Phase C-final activation (single source of truth in `docs/INVITE_INSTALL_REFERRER.md`).**
+- Apple ID (numeric): `6766294274`
+- Bundle ID: `com.cliquepix.app`
+- TestFlight enrollment link: `https://testflight.apple.com/join/hWznNvJ6`
+- AASA Team ID: `4ML27KY869`
+
+**What this is NOT.**
+- ❌ Not a third-party deferred-deep-link service (no Branch.io, AppsFlyer, or Firebase Dynamic Links — the last was deprecated by Google August 2025 anyway).
+- ❌ Not an iOS clipboard hack (Smart App Banner is the native Apple primitive; we don't fight Apple by writing to UIPasteboard from Safari).
+- ❌ Not iOS App Clips (separate Xcode target + Apple review — out of scope for v1).
+- ❌ Not a backend change. Existing `POST /api/cliques/_/join` serves both Phase A (web) and Phase B (Flutter auto-join). No new endpoints, no schema, no migration.
+
+**Operational lesson.** The "Universal Link same-domain rule" caveat — Apple's `NSUserActivity` Universal Link does NOT fire when navigating WITHIN `clique-pix.com` in Safari — is documented prominently in `docs/INVITE_INSTALL_REFERRER.md`. A future agent tempted to add an "Open in App" hyperlink on the invite page pointing at the same URL would silently break the iOS install path; the doc prohibits this explicitly.
+
+**Pending follow-ups.**
+- Upload `app/build/app/outputs/bundle/release/app-release.aab` (versionCode=4) to Play Console Open Testing → release notes drafted → Send for review. Manual user action via Play Console UI; Open Testing approvals typically clear within 24h.
+- Verify webapp SWA deploy GitHub Actions workflow auto-triggered from the push and rolled Phase A + C-interim live at `clique-pix.com/invite/{any-code}`.
+- Phase E real-world Test Plan dry-run after AAB approval (per `docs/BETA_TEST_PLAN.md §2` — 4 new test cases): Android install-aware end-to-end, iOS TestFlight install-aware, desktop browser, `adb shell am broadcast` referrer simulation.
+- Phase C-final activation when Apple approves the public App Store listing — copy-paste the meta tag + useEffect snippet from `docs/INVITE_INSTALL_REFERRER.md` §"Phase C-final". Three-line web edit; no Flutter changes needed (existing Universal Link handler in `AppDelegate.swift` already reads `userActivity.webpageURL`).
+
+**Rollback plan.**
+- Web (Phase A + C-interim): `git revert 0103c87 56ae257` → next SWA deploy reverts the invite page to its pre-banner state. Existing "Sign in to accept" web-join path is untouched and continues to work.
+- Flutter (Phase B): rollback is automatic — versionCode=4 with the referrer integration is OPT-IN at the install-time level. Existing versionCode=3 users keep the pre-Phase-B behavior; new versionCode=4 installs gain auto-join. To explicitly disable post-deploy, ship a versionCode=5 with `InstallReferrerService.readAndPersistOnce()` no-op'd.
+
+---
 
 ## iOS cross-account data leak after sign-out → sign-up — fixed (2026-05-06)
 
