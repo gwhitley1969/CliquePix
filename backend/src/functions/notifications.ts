@@ -1,5 +1,6 @@
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
 import { authenticateRequest } from '../shared/middleware/authMiddleware';
+import { requireActiveEntitlement } from '../shared/middleware/requireActiveEntitlement';
 import { handleError } from '../shared/middleware/errorHandler';
 import { successResponse } from '../shared/utils/response';
 import { query, queryOne, execute } from '../shared/services/dbService';
@@ -9,6 +10,7 @@ import { NotFoundError, ForbiddenError, ValidationError } from '../shared/utils/
 async function listNotifications(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   try {
     const authUser = await authenticateRequest(req);
+    requireActiveEntitlement(authUser);
     const limit = Math.min(parseInt(req.query.get('limit') || '50', 10), 100);
     const cursor = req.query.get('cursor');
 
@@ -37,6 +39,7 @@ async function listNotifications(req: HttpRequest, context: InvocationContext): 
 async function markRead(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   try {
     const authUser = await authenticateRequest(req);
+    requireActiveEntitlement(authUser);
     const notificationId = req.params.notificationId;
     if (!notificationId || !isValidUUID(notificationId)) {
       throw new ValidationError('Invalid notification ID.');
@@ -84,6 +87,7 @@ async function registerPushToken(req: HttpRequest, context: InvocationContext): 
 async function deleteNotification(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   try {
     const authUser = await authenticateRequest(req);
+    requireActiveEntitlement(authUser);
     const notificationId = req.params.notificationId;
     if (!notificationId || !isValidUUID(notificationId)) {
       throw new ValidationError('Invalid notification ID.');
@@ -106,6 +110,7 @@ async function deleteNotification(req: HttpRequest, context: InvocationContext):
 async function clearNotifications(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   try {
     const authUser = await authenticateRequest(req);
+    requireActiveEntitlement(authUser);
     const deleted = await execute('DELETE FROM notifications WHERE user_id = $1', [authUser.id]);
     return successResponse({ message: 'All notifications cleared.', count: deleted });
   } catch (error) {

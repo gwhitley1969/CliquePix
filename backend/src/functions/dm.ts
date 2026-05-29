@@ -1,5 +1,6 @@
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
 import { authenticateRequest } from '../shared/middleware/authMiddleware';
+import { requireActiveEntitlement } from '../shared/middleware/requireActiveEntitlement';
 import { handleError } from '../shared/middleware/errorHandler';
 import { successResponse } from '../shared/utils/response';
 import { query, queryOne, execute } from '../shared/services/dbService';
@@ -31,6 +32,7 @@ function getOtherUserId(thread: DmThread, userId: string): string {
 async function createOrGetDmThread(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   try {
     const authUser = await authenticateRequest(req);
+    requireActiveEntitlement(authUser);
     const eventId = req.params.eventId;
 
     if (!eventId || !isValidUUID(eventId)) {
@@ -124,6 +126,7 @@ async function createOrGetDmThread(req: HttpRequest, context: InvocationContext)
 async function listDmThreads(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   try {
     const authUser = await authenticateRequest(req);
+    requireActiveEntitlement(authUser);
     const eventId = req.params.eventId;
 
     if (!eventId || !isValidUUID(eventId)) {
@@ -192,6 +195,7 @@ async function listDmThreads(req: HttpRequest, context: InvocationContext): Prom
 async function getDmThread(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   try {
     const authUser = await authenticateRequest(req);
+    requireActiveEntitlement(authUser);
     const threadId = req.params.threadId;
 
     if (!threadId || !isValidUUID(threadId)) {
@@ -243,6 +247,7 @@ async function getDmThread(req: HttpRequest, context: InvocationContext): Promis
 async function listDmMessages(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   try {
     const authUser = await authenticateRequest(req);
+    requireActiveEntitlement(authUser);
     const threadId = req.params.threadId;
 
     if (!threadId || !isValidUUID(threadId)) {
@@ -319,6 +324,7 @@ async function listDmMessages(req: HttpRequest, context: InvocationContext): Pro
 async function sendDmMessage(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   try {
     const authUser = await authenticateRequest(req);
+    requireActiveEntitlement(authUser);
     const threadId = req.params.threadId;
 
     if (!threadId || !isValidUUID(threadId)) {
@@ -439,6 +445,7 @@ async function sendDmMessage(req: HttpRequest, context: InvocationContext): Prom
 async function markDmRead(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   try {
     const authUser = await authenticateRequest(req);
+    requireActiveEntitlement(authUser);
     const threadId = req.params.threadId;
 
     if (!threadId || !isValidUUID(threadId)) {
@@ -480,6 +487,7 @@ async function markDmRead(req: HttpRequest, context: InvocationContext): Promise
 async function negotiateDmRealtime(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   try {
     const authUser = await authenticateRequest(req);
+    requireActiveEntitlement(authUser);
     const token = await getClientAccessToken(authUser.id);
 
     return successResponse({ url: token.url });

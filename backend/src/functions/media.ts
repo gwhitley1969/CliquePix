@@ -7,6 +7,7 @@
 
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
 import { authenticateRequest } from '../shared/middleware/authMiddleware';
+import { requireActiveEntitlement } from '../shared/middleware/requireActiveEntitlement';
 import { handleError } from '../shared/middleware/errorHandler';
 import { successResponse } from '../shared/utils/response';
 import { query, queryOne } from '../shared/services/dbService';
@@ -58,6 +59,7 @@ interface MediaFeedItem {
 async function listMedia(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   try {
     const authUser = await authenticateRequest(req);
+    requireActiveEntitlement(authUser);
 
     const eventId = req.params.eventId;
     if (!eventId || !isValidUUID(eventId)) {

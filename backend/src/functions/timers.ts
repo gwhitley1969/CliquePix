@@ -5,6 +5,7 @@ import { sendToMultipleTokens, sendSilentToMultipleTokens } from '../shared/serv
 import { trackEvent } from '../shared/services/telemetryService';
 import { initTelemetry } from '../shared/services/telemetryService';
 import { sweepStaleNotifications } from '../shared/db/notificationCleanup';
+import { findExpiredActive, markExpired } from '../shared/services/entitlementService';
 import * as path from 'path';
 
 // Helper: prefix-delete all blobs under a video's directory
@@ -405,6 +406,45 @@ async function refreshTokenPushTimer(myTimer: Timer, context: InvocationContext)
   );
 }
 
+// ====================================================================================
+// entitlementReconciliationTimer
+// ====================================================================================
+// Defensive sweep for users whose entitlement is still flagged active but
+// whose entitlement_expires_at has already passed. The normal happy path is:
+// RC EXPIRATION webhook → upsertEntitlement → entitlement_active = FALSE.
+// This timer catches the case where RC's webhook never landed (network
+// blip, dashboard config error, our endpoint was down briefly).
+//
+// Runs every 6 hours. Batched LIMIT to keep one invocation bounded; if a
+// large backlog accumulates we still drain it over the next several runs.
+// Idempotent: re-running on already-corrected rows is a no-op because
+// markExpired filters on `entitlement_active = TRUE`.
+async function entitlementReconciliationTimer(
+  _myTimer: Timer,
+  context: InvocationContext,
+): Promise<void> {
+  initTelemetry();
+  const expired = await findExpiredActive(500);
+  if (expired.length === 0) {
+    context.log('entitlementReconciliationTimer: no expired-active rows');
+    return;
+  }
+  let corrected = 0;
+  for (const row of expired) {
+    try {
+      await markExpired(row.id);
+      trackEvent('entitlement_reconciliation_corrected', {
+        userId: row.id,
+        lastEventId: row.last_event_id ?? 'none',
+      });
+      corrected++;
+    } catch (err) {
+      context.error(`entitlementReconciliationTimer: failed for ${row.id}:`, err);
+    }
+  }
+  context.log(`entitlementReconciliationTimer: corrected ${corrected}/${expired.length}`);
+}
+
 app.timer('cleanupExpired', {
   schedule: '0 */15 * * * *',
   handler: cleanupExpired,
@@ -425,4 +465,10 @@ app.timer('notifyExpiring', {
 app.timer('refreshTokenPushTimer', {
   schedule: '0 7,22,37,52 * * * *',
   handler: refreshTokenPushTimer,
+});
+
+// Every 6 hours. Light load (single SELECT + bounded UPDATEs).
+app.timer('entitlementReconciliationTimer', {
+  schedule: '0 12 */6 * * *',
+  handler: entitlementReconciliationTimer,
 });

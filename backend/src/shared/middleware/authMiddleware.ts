@@ -36,6 +36,15 @@ export interface AuthenticatedUser {
   avatarThumbBlobPath: string | null;
   avatarUpdatedAt: Date | null;
   avatarFramePreset: number;
+  // Subscription entitlement snapshot (migration 012). Used by
+  // requireActiveEntitlement to gate paid endpoints. Inactive by default
+  // (column NOT NULL DEFAULT FALSE) so the gate fails closed.
+  entitlementActive: boolean;
+  entitlementProductId: string | null;
+  entitlementPeriodType: string | null;
+  entitlementWillRenew: boolean | null;
+  entitlementExpiresAt: Date | null;
+  entitlementStore: string | null;
 }
 
 export async function authenticateRequest(req: HttpRequest): Promise<AuthenticatedUser> {
@@ -78,7 +87,9 @@ export async function authenticateRequest(req: HttpRequest): Promise<Authenticat
   const user = await queryOne<User>(
     `SELECT id, external_auth_id, display_name, email_or_phone,
             avatar_blob_path, avatar_thumb_blob_path, avatar_updated_at,
-            avatar_frame_preset
+            avatar_frame_preset,
+            entitlement_active, entitlement_product_id, entitlement_period_type,
+            entitlement_will_renew, entitlement_expires_at, entitlement_store
      FROM users WHERE external_auth_id = $1`,
     [externalAuthId],
   );
@@ -109,6 +120,12 @@ export async function authenticateRequest(req: HttpRequest): Promise<Authenticat
     avatarThumbBlobPath: user.avatar_thumb_blob_path ?? null,
     avatarUpdatedAt: user.avatar_updated_at ?? null,
     avatarFramePreset: user.avatar_frame_preset ?? 0,
+    entitlementActive: user.entitlement_active ?? false,
+    entitlementProductId: user.entitlement_product_id ?? null,
+    entitlementPeriodType: user.entitlement_period_type ?? null,
+    entitlementWillRenew: user.entitlement_will_renew ?? null,
+    entitlementExpiresAt: user.entitlement_expires_at ?? null,
+    entitlementStore: user.entitlement_store ?? null,
   };
 }
 

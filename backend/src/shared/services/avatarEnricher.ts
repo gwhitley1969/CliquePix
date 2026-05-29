@@ -100,6 +100,10 @@ export function shouldPromptForAvatar(
  * Minimal user row shape needed to assemble the canonical auth/profile
  * response body. Accepting this instead of the full User type keeps the
  * helper usable from places that build a partial row from a JOIN.
+ *
+ * Entitlement fields (migration 012) are tolerated as optional so callers
+ * that haven't been updated yet still compile — the response just omits
+ * the entitlement block, which the client interprets as "inactive."
  */
 export interface AuthUserRow {
   id: string;
@@ -112,6 +116,45 @@ export interface AuthUserRow {
   avatar_prompt_dismissed: boolean;
   avatar_prompt_snoozed_until: Date | null;
   created_at: Date;
+  // Subscription state — present after migration 012 ships
+  entitlement_active?: boolean;
+  entitlement_product_id?: string | null;
+  entitlement_period_type?: string | null;
+  entitlement_will_renew?: boolean | null;
+  entitlement_expires_at?: Date | null;
+  entitlement_store?: string | null;
+}
+
+/**
+ * Build the `entitlement` object emitted to clients. Always present on the
+ * response; `active: false` for non-subscribers (the hard-paywall router
+ * gate keys off this).
+ */
+export interface EntitlementResponse {
+  active: boolean;
+  product_id: string | null;
+  period_type: string | null;
+  will_renew: boolean | null;
+  expires_at: string | null;
+  store: string | null;
+}
+
+function buildEntitlementResponse(row: AuthUserRow): EntitlementResponse {
+  let expiresAtIso: string | null = null;
+  if (row.entitlement_expires_at) {
+    expiresAtIso =
+      row.entitlement_expires_at instanceof Date
+        ? row.entitlement_expires_at.toISOString()
+        : String(row.entitlement_expires_at);
+  }
+  return {
+    active: row.entitlement_active ?? false,
+    product_id: row.entitlement_product_id ?? null,
+    period_type: row.entitlement_period_type ?? null,
+    will_renew: row.entitlement_will_renew ?? null,
+    expires_at: expiresAtIso,
+    store: row.entitlement_store ?? null,
+  };
 }
 
 /**
@@ -135,6 +178,7 @@ export async function buildAuthUserResponse(row: AuthUserRow): Promise<Record<st
     avatar_updated_at: enriched.avatar_updated_at,
     avatar_frame_preset: enriched.avatar_frame_preset,
     should_prompt_for_avatar: shouldPromptForAvatar(row),
+    entitlement: buildEntitlementResponse(row),
     created_at: row.created_at,
   };
 }

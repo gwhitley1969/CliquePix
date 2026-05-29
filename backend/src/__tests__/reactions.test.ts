@@ -67,7 +67,17 @@ function bodyOf(res: HttpResponseInit): { data?: unknown; error?: unknown } {
 
 beforeEach(() => {
   jest.clearAllMocks();
-  (authenticateRequest as jest.Mock).mockResolvedValue({ id: TEST_USER_ID });
+  // Mock includes entitlementActive: true so requireActiveEntitlement passes.
+  // Mirrors the AuthenticatedUser shape in authMiddleware.ts.
+  (authenticateRequest as jest.Mock).mockResolvedValue({
+    id: TEST_USER_ID,
+    entitlementActive: true,
+    entitlementProductId: 'plus_annual',
+    entitlementPeriodType: 'normal',
+    entitlementWillRenew: true,
+    entitlementExpiresAt: null,
+    entitlementStore: 'APP_STORE',
+  });
   // Default: caller is a clique member of the event for the requested media.
   (queryOne as jest.Mock).mockResolvedValue({ id: PHOTO_ID });
   // Default avatar enrichment: pass-through. Each test can override.

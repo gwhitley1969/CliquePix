@@ -1,5 +1,6 @@
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
 import { authenticateRequest } from '../shared/middleware/authMiddleware';
+import { requireActiveEntitlement } from '../shared/middleware/requireActiveEntitlement';
 import { handleError } from '../shared/middleware/errorHandler';
 import { successResponse } from '../shared/utils/response';
 import { query, queryOne, execute } from '../shared/services/dbService';
@@ -30,6 +31,7 @@ async function addReactionForMedia(
 ): Promise<HttpResponseInit> {
   try {
     const authUser = await authenticateRequest(req);
+    requireActiveEntitlement(authUser);
     if (!mediaId || !isValidUUID(mediaId)) {
       throw new ValidationError(`Invalid ${mediaTypeLabel} ID.`);
     }
@@ -88,6 +90,7 @@ async function listReactionsForMedia(
 ): Promise<HttpResponseInit> {
   try {
     const authUser = await authenticateRequest(req);
+    requireActiveEntitlement(authUser);
     if (!mediaId || !isValidUUID(mediaId)) {
       throw new ValidationError(`Invalid ${mediaTypeLabel} ID.`);
     }
@@ -181,6 +184,7 @@ async function removeReactionForMedia(
 ): Promise<HttpResponseInit> {
   try {
     const authUser = await authenticateRequest(req);
+    requireActiveEntitlement(authUser);
 
     if (!mediaId || !isValidUUID(mediaId) || !reactionId || !isValidUUID(reactionId)) {
       throw new ValidationError('Invalid ID.');

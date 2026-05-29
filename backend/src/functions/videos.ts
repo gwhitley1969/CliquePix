@@ -1,6 +1,7 @@
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
 import { v4 as uuidv4 } from 'uuid';
 import { authenticateRequest } from '../shared/middleware/authMiddleware';
+import { requireActiveEntitlement } from '../shared/middleware/requireActiveEntitlement';
 import { handleError } from '../shared/middleware/errorHandler';
 import { successResponse } from '../shared/utils/response';
 import { query, queryOne, execute } from '../shared/services/dbService';
@@ -389,6 +390,7 @@ async function getVideoUploadUrl(
 ): Promise<HttpResponseInit> {
   try {
     const authUser = await authenticateRequest(req);
+    requireActiveEntitlement(authUser);
 
     const eventId = req.params.eventId;
     if (!eventId || !isValidUUID(eventId)) {
@@ -488,6 +490,7 @@ async function commitVideoUpload(
 ): Promise<HttpResponseInit> {
   try {
     const authUser = await authenticateRequest(req);
+    requireActiveEntitlement(authUser);
 
     const eventId = req.params.eventId;
     if (!eventId || !isValidUUID(eventId)) {
@@ -640,6 +643,7 @@ async function commitVideoUpload(
 async function listVideos(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   try {
     const authUser = await authenticateRequest(req);
+    requireActiveEntitlement(authUser);
 
     const eventId = req.params.eventId;
     if (!eventId || !isValidUUID(eventId)) {
@@ -676,6 +680,7 @@ async function listVideos(req: HttpRequest, context: InvocationContext): Promise
 async function getVideo(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   try {
     const authUser = await authenticateRequest(req);
+    requireActiveEntitlement(authUser);
 
     const videoId = req.params.videoId;
     if (!videoId || !isValidUUID(videoId)) {
@@ -712,6 +717,7 @@ async function getVideoPlayback(
 ): Promise<HttpResponseInit> {
   try {
     const authUser = await authenticateRequest(req);
+    requireActiveEntitlement(authUser);
 
     const videoId = req.params.videoId;
     if (!videoId || !isValidUUID(videoId)) {
@@ -766,6 +772,7 @@ async function getVideoPlayback(
 async function deleteVideo(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   try {
     const authUser = await authenticateRequest(req);
+    requireActiveEntitlement(authUser);
 
     const videoId = req.params.videoId;
     if (!videoId || !isValidUUID(videoId)) {

@@ -1,5 +1,6 @@
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
 import { authenticateRequest } from '../shared/middleware/authMiddleware';
+import { requireActiveEntitlement } from '../shared/middleware/requireActiveEntitlement';
 import { handleError } from '../shared/middleware/errorHandler';
 import { successResponse } from '../shared/utils/response';
 import { query, queryOne, execute } from '../shared/services/dbService';
@@ -78,6 +79,7 @@ async function checkCliqueMembership(cliqueId: string, userId: string): Promise<
 async function createEvent(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   try {
     const authUser = await authenticateRequest(req);
+    requireActiveEntitlement(authUser);
     const cliqueId = req.params.cliqueId;
 
     if (!cliqueId || !isValidUUID(cliqueId)) {
@@ -255,6 +257,7 @@ async function pushNewEvent(
 async function listEvents(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   try {
     const authUser = await authenticateRequest(req);
+    requireActiveEntitlement(authUser);
     const cliqueId = req.params.cliqueId;
 
     if (!cliqueId || !isValidUUID(cliqueId)) {
@@ -293,6 +296,7 @@ async function listEvents(req: HttpRequest, context: InvocationContext): Promise
 async function getEvent(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   try {
     const authUser = await authenticateRequest(req);
+    requireActiveEntitlement(authUser);
     const eventId = req.params.eventId;
 
     if (!eventId || !isValidUUID(eventId)) {
@@ -327,6 +331,7 @@ async function getEvent(req: HttpRequest, context: InvocationContext): Promise<H
 async function listAllEvents(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   try {
     const authUser = await authenticateRequest(req);
+    requireActiveEntitlement(authUser);
 
     const events = await query<EventRowWithCliqueAndCreator>(
       `SELECT e.*,
@@ -356,6 +361,7 @@ async function listAllEvents(req: HttpRequest, context: InvocationContext): Prom
 async function deleteEvent(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   try {
     const authUser = await authenticateRequest(req);
+    requireActiveEntitlement(authUser);
     const eventId = req.params.eventId;
 
     if (!eventId || !isValidUUID(eventId)) {

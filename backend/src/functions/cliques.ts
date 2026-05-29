@@ -1,5 +1,6 @@
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
 import { authenticateRequest } from '../shared/middleware/authMiddleware';
+import { requireActiveEntitlement } from '../shared/middleware/requireActiveEntitlement';
 import { handleError } from '../shared/middleware/errorHandler';
 import { successResponse } from '../shared/utils/response';
 import { query, queryOne, execute } from '../shared/services/dbService';
@@ -20,6 +21,7 @@ function generateInviteCode(): string {
 async function createClique(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   try {
     const authUser = await authenticateRequest(req);
+    requireActiveEntitlement(authUser);
 
     const body = await req.json() as Record<string, unknown>;
     const name = validateRequiredString(body.name, 'name', 100);
@@ -53,6 +55,7 @@ async function createClique(req: HttpRequest, context: InvocationContext): Promi
 async function listCliques(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   try {
     const authUser = await authenticateRequest(req);
+    requireActiveEntitlement(authUser);
 
     const cliques = await query<CliqueWithMemberCount>(
       `SELECT c.*,
@@ -74,6 +77,7 @@ async function listCliques(req: HttpRequest, context: InvocationContext): Promis
 async function getClique(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   try {
     const authUser = await authenticateRequest(req);
+    requireActiveEntitlement(authUser);
 
     const cliqueId = req.params.cliqueId;
     if (!cliqueId || !isValidUUID(cliqueId)) {
@@ -104,6 +108,7 @@ async function getClique(req: HttpRequest, context: InvocationContext): Promise<
 async function getInviteInfo(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   try {
     const authUser = await authenticateRequest(req);
+    requireActiveEntitlement(authUser);
 
     const cliqueId = req.params.cliqueId;
     if (!cliqueId || !isValidUUID(cliqueId)) {
@@ -136,6 +141,7 @@ async function getInviteInfo(req: HttpRequest, context: InvocationContext): Prom
 async function joinClique(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   try {
     const authUser = await authenticateRequest(req);
+    requireActiveEntitlement(authUser);
 
     const body = await req.json() as Record<string, unknown>;
     const inviteCode = validateRequiredString(body.invite_code, 'invite_code', 20);
@@ -226,6 +232,7 @@ async function joinClique(req: HttpRequest, context: InvocationContext): Promise
 async function listMembers(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   try {
     const authUser = await authenticateRequest(req);
+    requireActiveEntitlement(authUser);
 
     const cliqueId = req.params.cliqueId;
     if (!cliqueId || !isValidUUID(cliqueId)) {
@@ -300,6 +307,7 @@ async function listMembers(req: HttpRequest, context: InvocationContext): Promis
 async function leaveClique(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   try {
     const authUser = await authenticateRequest(req);
+    requireActiveEntitlement(authUser);
 
     const cliqueId = req.params.cliqueId;
     if (!cliqueId || !isValidUUID(cliqueId)) {
@@ -362,6 +370,7 @@ async function leaveClique(req: HttpRequest, context: InvocationContext): Promis
 async function removeMember(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   try {
     const authUser = await authenticateRequest(req);
+    requireActiveEntitlement(authUser);
 
     const cliqueId = req.params.cliqueId;
     const userId = req.params.userId;

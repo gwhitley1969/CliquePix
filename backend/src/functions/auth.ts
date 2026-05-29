@@ -11,6 +11,8 @@ import { User } from '../shared/models/user';
 import { MIN_AGE, ageBucket, calculateAge, parseDob } from '../shared/utils/ageUtils';
 import { deleteEntraUserByOid } from '../shared/auth/entraGraphClient';
 import { buildAuthUserResponse } from '../shared/services/avatarEnricher';
+import { deleteSubscriberFromRc } from '../shared/services/revenuecatRestClient';
+import { forceSyncFromRcApi } from '../shared/services/entitlementService';
 
 const TENANT_ID = process.env.ENTRA_TENANT_ID || '';
 const CLIENT_ID = process.env.ENTRA_CLIENT_ID || '';
@@ -227,13 +229,73 @@ async function deleteMe(req: HttpRequest, context: InvocationContext): Promise<H
     await deleteBlob(`avatars/${authUser.id}/original.jpg`);
     await deleteBlob(`avatars/${authUser.id}/thumb.jpg`);
 
-    // 5. Delete user record (CASCADE: clique_members, reactions, push_tokens, notifications)
+    // 5. GDPR/CCPA "right to be forgotten" — remove from RevenueCat too.
+    //    Best-effort: failure logs but does NOT block the account delete.
+    //    The user's local DB row is the source of truth for our app; an RC
+    //    orphan customer is a side effect, not a blocker.
+    const rcDeleted = await deleteSubscriberFromRc(authUser.id);
+    if (!rcDeleted) {
+      trackEvent('rc_subscriber_delete_failed', { userId: authUser.id });
+    }
+
+    // 6. Delete user record (CASCADE: clique_members, reactions, push_tokens, notifications)
     // (SET NULL via migration 004: cliques.created_by_user_id, events.created_by_user_id)
     await execute('DELETE FROM users WHERE id = $1', [authUser.id]);
 
     trackEvent('account_deleted', { userId: authUser.id });
 
     return successResponse({ message: 'Account deleted.' });
+  } catch (error) {
+    return handleError(error, context.invocationId);
+  }
+}
+
+// ============================================================================
+// POST /api/users/me/entitlement/refresh
+// ============================================================================
+// Manual force-sync of entitlement state from RevenueCat's REST API. Used
+// in two paths:
+//   1. User-initiated: Profile → "Refresh Subscription" tile (visible after
+//      the version-tap-7-times diagnostics unlock).
+//   2. Client auto-recovery: 30s after a successful purchase, if the
+//      backend webhook hasn't landed yet, the client calls this so the
+//      paywall finally dismisses.
+//
+// Throttled to 1 call per minute per user via the same fire-and-forget
+// approach authMiddleware uses for last_activity_at — we don't want a
+// stuck user retrying constantly to hammer RC's API.
+const lastRefreshCallByUser = new Map<string, number>();
+const REFRESH_THROTTLE_MS = 60_000;
+
+async function entitlementRefresh(
+  req: HttpRequest,
+  context: InvocationContext,
+): Promise<HttpResponseInit> {
+  try {
+    const authUser = await authenticateRequest(req);
+
+    const now = Date.now();
+    const last = lastRefreshCallByUser.get(authUser.id) ?? 0;
+    if (now - last < REFRESH_THROTTLE_MS) {
+      return errorResponse(
+        'RATE_LIMITED',
+        'Please wait a moment before refreshing your subscription again.',
+        429,
+      );
+    }
+    lastRefreshCallByUser.set(authUser.id, now);
+
+    await forceSyncFromRcApi(authUser.id);
+
+    // Re-read the user row + emit the full enriched response so the client
+    // can drop it straight into AuthState without an extra round-trip.
+    const user = await queryOne<User>('SELECT * FROM users WHERE id = $1', [authUser.id]);
+    if (!user) {
+      return errorResponse('USER_NOT_FOUND', 'User not found.', 404);
+    }
+
+    trackEvent('entitlement_refresh_invoked', { userId: authUser.id });
+    return successResponse(await buildAuthUserResponse(user));
   } catch (error) {
     return handleError(error, context.invocationId);
   }
@@ -258,4 +320,11 @@ app.http('deleteMe', {
   authLevel: 'anonymous',
   route: 'users/me',
   handler: deleteMe,
+});
+
+app.http('entitlementRefresh', {
+  methods: ['POST'],
+  authLevel: 'anonymous',
+  route: 'users/me/entitlement/refresh',
+  handler: entitlementRefresh,
 });

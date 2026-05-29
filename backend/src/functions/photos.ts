@@ -1,6 +1,7 @@
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
 import { v4 as uuidv4 } from 'uuid';
 import { authenticateRequest } from '../shared/middleware/authMiddleware';
+import { requireActiveEntitlement } from '../shared/middleware/requireActiveEntitlement';
 import { handleError } from '../shared/middleware/errorHandler';
 import { successResponse } from '../shared/utils/response';
 import { query, queryOne, execute } from '../shared/services/dbService';
@@ -130,6 +131,7 @@ async function generateThumbnailAsync(blobPath: string, photoId: string): Promis
 async function getUploadUrl(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   try {
     const authUser = await authenticateRequest(req);
+    requireActiveEntitlement(authUser);
 
     const eventId = req.params.eventId;
     if (!eventId || !isValidUUID(eventId)) {
@@ -170,6 +172,7 @@ async function getUploadUrl(req: HttpRequest, context: InvocationContext): Promi
 async function confirmUpload(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   try {
     const authUser = await authenticateRequest(req);
+    requireActiveEntitlement(authUser);
 
     const eventId = req.params.eventId;
     if (!eventId || !isValidUUID(eventId)) {
@@ -322,6 +325,7 @@ async function confirmUpload(req: HttpRequest, context: InvocationContext): Prom
 async function listPhotos(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   try {
     const authUser = await authenticateRequest(req);
+    requireActiveEntitlement(authUser);
 
     const eventId = req.params.eventId;
     if (!eventId || !isValidUUID(eventId)) {
@@ -456,6 +460,7 @@ async function listPhotos(req: HttpRequest, context: InvocationContext): Promise
 async function getPhoto(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   try {
     const authUser = await authenticateRequest(req);
+    requireActiveEntitlement(authUser);
 
     const photoId = req.params.photoId;
     if (!photoId || !isValidUUID(photoId)) {
@@ -498,6 +503,7 @@ async function getPhoto(req: HttpRequest, context: InvocationContext): Promise<H
 async function deletePhoto(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   try {
     const authUser = await authenticateRequest(req);
+    requireActiveEntitlement(authUser);
 
     const photoId = req.params.photoId;
     if (!photoId || !isValidUUID(photoId)) {
