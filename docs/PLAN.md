@@ -13,7 +13,8 @@ Monetization is now **in scope for v1**. We are shipping a hard paywall fronted 
 - ✅ **Design spec** approved + committed.
 - ✅ **5 implementation plans** written + committed.
 - ✅ **Plan 1 (backend trial) — code complete, reviewed (spec ✅ + quality ✅), 174/174 tests green, build clean.** NOT yet deployed.
-- ⏳ **Plans 2–5** not started. **Gene’s manual config + Task 6 deploy gate most of them** (see Dependencies).
+- ✅ **Plan 5 (docs/legal/pricing) — edits complete + committed** (CLAUDE.md, PRD §5.16/§5.17/§13, ARCHITECTURE, privacy + terms HTML, repo `$39.99` sweep). Remaining: Gene's store-side price change + **Task 7 web deploy** of the legal pages before App Store submission.
+- ⏳ **Plans 2–4** not started. **Gene’s manual config + Task 6 deploy gate most of them** (see Dependencies).
 
 ---
 
@@ -110,8 +111,9 @@ All to be executed subagent-driven on this branch, two-stage review per task (sp
 ### Plan 4 — Web subscription gating  ⏳ code now, verify after Task 6
 - `User.entitlement` (camelCase post-camelize), `EntitlementGuard` → `/subscribe`, `SubscribeInAppScreen`, route wiring (`/profile` + `/subscribe` exempt), Profile "Manage Subscription" link.
 
-### Plan 5 — Docs / legal / pricing $39.99  ✅ READY NOW (no blockers, but legal pages have a deadline)
+### Plan 5 — Docs / legal / pricing $39.99  ✅ DONE (edits committed 2026-06-02; web deploy + store price change pending)
 - CLAUDE.md (remove "no monetization", add paywall section + guardrail + review-prompt note), PRD §5.16/§5.17/§13, ARCHITECTURE users table + auth-response section, **privacy.html + terms.html subscription disclosures**, repo-wide `$29.99 → $39.99` sweep.
+- **Status:** all doc/HTML edits committed (see "Done so far"). NOT yet deployed — **Task 7 (SWA deploy of legal pages)** + App Store Connect `plus_annual` price change remain (both ops/Gene).
 - **Deadline:** privacy/terms pages MUST be deployed to `clique-pix.com/docs/*` BEFORE the gated mobile build is submitted (Apple checks the URLs).
 
 ---
@@ -160,6 +162,17 @@ Plans that parallelize freely: Plan 3 + Plan 5 can run now alongside Gene's conf
 - `a78ee28` review nits (fixtures, boundary tests, comments)
 
 **Backend trial: 174/174 jest green, `npm run build` clean. Not deployed.**
+
+**Plan 5 (docs/legal/pricing) — 2026-06-02:**
+- `8bf253e` CLAUDE.md — monetization in scope (paywall + trial + review prompts)
+- `fb658ec` PRD — subscription + free trial + rate-the-app; roadmap
+- `2ad674b` ARCHITECTURE — entitlement + trial_ends_at columns + auth response
+- `432e4f5` privacy.html — subscription + RevenueCat subprocessor disclosure
+- `83aaafd` terms.html — subscription disclosures ($3.99/$39.99)
+- `c1e7cfa` annual price $29.99 → $39.99 sweep (docs/GENE.md)
+- (`b61b7d2` separately: CLAUDE.md trim of 5 reference sections — unrelated to Plan 5)
+
+**Plan 5 docs/HTML: complete + committed. NOT deployed (Task 7 SWA deploy pending).**
 
 ---
 
