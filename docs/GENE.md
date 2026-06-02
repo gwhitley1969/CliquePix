@@ -28,7 +28,7 @@ When that's done, packages are wired and the paywall has products to render.
 - ✅ Paid Apps Agreement Active
 - ✅ Subscription Group: `Clique Pix Plus`
 - ✅ `plus_monthly` Ready to Submit ($3.99 / mo, Family Sharing OFF, 5 English-speaking countries)
-- ✅ `plus_annual` Ready to Submit ($29.99 / yr, 7-day free trial intro offer, Family Sharing OFF)
+- ✅ `plus_annual` Ready to Submit ($39.99 / yr, 7-day free trial intro offer, Family Sharing OFF)
 - ✅ App Store Connect API key (`AuthKey_TP9C6PA769.p8` in `secrets/`)
 - ✅ In-App Purchase Subscription Key (`SubscriptionKey_7K28U2Z2B2.p8` in `secrets/`)
 - ✅ App Privacy updated: Purchases / Purchase History declared
@@ -75,7 +75,7 @@ Blocked on Payments profile verification. Two issues stacked:
 ### Once Payments is Active
 
 - [ ] Create subscription `plus_monthly` (Base plan: monthly, $3.99, auto-renewing, 5 English-speaking countries)
-- [ ] Create subscription `plus_annual` (Base plan: annual, $29.99, auto-renewing, 5 countries)
+- [ ] Create subscription `plus_annual` (Base plan: annual, $39.99, auto-renewing, 5 countries)
   - [ ] Add offer: `free-trial`, 7-day free trial, eligibility "Developer determined" → new subscribers only
 - [ ] Activate base plans (toggle — easy to miss!)
 - [ ] App content → Data Safety → declare `Financial info → Purchase history`, list RevenueCat as partner
@@ -232,7 +232,7 @@ Required by Apple Guideline 3.1.2 + Google Play Subscriptions policy. Must ship 
   - Subscription billing data section
   - RevenueCat as subprocessor (with link to `revenuecat.com/privacy/`)
 - [ ] Update `website/docs/terms.html`:
-  - Subscription title (Clique Pix Plus), length (Monthly / Annual), price ($3.99 / $29.99)
+  - Subscription title (Clique Pix Plus), length (Monthly / Annual), price ($3.99 / $39.99)
   - 7-day free trial on annual for new subscribers
   - Auto-renewal language ("renews unless canceled at least 24 hours before...")
   - "Payment will be charged to your Apple ID / Google Account at confirmation of purchase"
