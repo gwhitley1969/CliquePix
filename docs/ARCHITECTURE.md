@@ -378,6 +378,18 @@ Error:
 
 `request_id` is the Azure Functions `invocationId` — included in every error response for correlation with App Insights logs. Use consistent error codes. Never return raw exception messages or stack traces to the client.
 
+### Entitlement + trial in the auth response
+
+`buildAuthUserResponse` (the canonical user shape from `/api/auth/verify`, `/api/users/me`, and avatar endpoints) includes an `entitlement` object:
+
+```json
+{ "active": false, "product_id": null, "period_type": null, "will_renew": null,
+  "expires_at": null, "store": null, "in_trial": true,
+  "trial_ends_at": "2026-06-09T00:00:00.000Z", "effective_active": true }
+```
+
+`effective_active = active || in_trial` is the value clients gate on. The trial is time-based and computed live; only subscription expiry has a reconciliation timer (6h). `requireActiveEntitlement` 402s `SUBSCRIPTION_REQUIRED` unless `effective_active`. See `docs/superpowers/specs/2026-06-01-paywall-trial-and-review-prompts-design.md` and the base RevenueCat plan.
+
 ---
 
 # 7. Data Architecture
@@ -405,6 +417,16 @@ Relational model fits the cliques/events/memberships domain cleanly. Predictable
 | age_verified_at | TIMESTAMPTZ | Nullable. Stamped on first successful auth via age-gate claim check |
 | last_activity_at | TIMESTAMPTZ | Nullable. Fire-and-forget update by authMiddleware, capped 1/min/user |
 | last_refresh_push_sent_at | TIMESTAMPTZ | Nullable. Written by refreshTokenPushTimer; enforces 6h dedup |
+| revenuecat_customer_id | TEXT | Nullable. RevenueCat App User ID (usually = users.id). Migration 012 |
+| entitlement_active | BOOLEAN | NOT NULL DEFAULT FALSE. Subscription gate (migration 012) |
+| entitlement_product_id | TEXT | Nullable. `plus_monthly` / `plus_annual` |
+| entitlement_period_type | TEXT | Nullable. `trial`/`intro`/`normal`/`promotional` |
+| entitlement_will_renew | BOOLEAN | Nullable |
+| entitlement_expires_at | TIMESTAMPTZ | Nullable. Subscription period end |
+| entitlement_store | TEXT | Nullable. `APP_STORE`/`PLAY_STORE`/`PROMOTIONAL` |
+| entitlement_last_event_id | TEXT | Nullable. Webhook idempotency |
+| entitlement_updated_at | TIMESTAMPTZ | Nullable. Last webhook upsert |
+| trial_ends_at | TIMESTAMPTZ | Nullable. App-granted 7-day free trial end (migration 013). Set NOW()+7d at first sign-in, COALESCE-preserved |
 | created_at | TIMESTAMPTZ | |
 | updated_at | TIMESTAMPTZ | |
 
