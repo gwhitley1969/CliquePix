@@ -60,3 +60,63 @@ describe('buildEntitlementResponse — trial', () => {
     expect(r.effective_active).toBe(false);
   });
 });
+
+import { requireActiveEntitlement } from '../shared/middleware/requireActiveEntitlement';
+import type { AuthenticatedUser } from '../shared/middleware/authMiddleware';
+import { SubscriptionRequiredError } from '../shared/utils/errors';
+
+// Minimal AuthenticatedUser — requireActiveEntitlement only reads two fields.
+function authUser(overrides: Partial<AuthenticatedUser> = {}): AuthenticatedUser {
+  return {
+    id: 'u1',
+    externalAuthId: 'ext1',
+    displayName: 'Test',
+    emailOrPhone: 't@example.com',
+    avatarBlobPath: null,
+    avatarThumbBlobPath: null,
+    avatarUpdatedAt: null,
+    avatarFramePreset: 0,
+    entitlementActive: false,
+    entitlementProductId: null,
+    entitlementPeriodType: null,
+    entitlementWillRenew: null,
+    entitlementExpiresAt: null,
+    entitlementStore: null,
+    trialEndsAt: null,
+    ...overrides,
+  };
+}
+
+const NOW2 = new Date('2026-06-10T00:00:00Z');
+
+describe('requireActiveEntitlement — trial', () => {
+  it('passes a subscribed user', () => {
+    expect(() =>
+      requireActiveEntitlement(authUser({ entitlementActive: true }), NOW2),
+    ).not.toThrow();
+  });
+
+  it('passes a user within the trial window', () => {
+    expect(() =>
+      requireActiveEntitlement(
+        authUser({ trialEndsAt: new Date('2026-06-15T00:00:00Z') }),
+        NOW2,
+      ),
+    ).not.toThrow();
+  });
+
+  it('throws for an unsubscribed user with an expired trial', () => {
+    expect(() =>
+      requireActiveEntitlement(
+        authUser({ trialEndsAt: new Date('2026-06-05T00:00:00Z') }),
+        NOW2,
+      ),
+    ).toThrow(SubscriptionRequiredError);
+  });
+
+  it('throws for an unsubscribed user with no trial stamped', () => {
+    expect(() => requireActiveEntitlement(authUser(), NOW2)).toThrow(
+      SubscriptionRequiredError,
+    );
+  });
+});
