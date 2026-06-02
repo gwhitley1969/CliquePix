@@ -152,14 +152,14 @@ All to be executed subagent-driven on this branch, two-stage review per task (sp
 - [ ] App Store Connect review notes: explain promo grant + sandbox tester path. (Reviewer needs BOTH: promo grant to see the app, sandbox tester to exercise the IAP.)
 - [ ] Document grants in `docs/BETA_OPERATIONS_RUNBOOK.md`.
 
-> **Hard rule:** promo grants MUST be in place BEFORE the gated build reaches TestFlight/Play Internal, or existing testers get locked out of their own beta.
+> **Hard rule (CORRECTED 2026-06-02):** A promo grant requires the RevenueCat **customer to already exist**, and a customer is only created when the account runs the SDK build and signs in (`Purchases.logIn(users.id)`). So you **cannot** grant before the gated build ships — a grant to a never-seen App User ID returns **404 `resource_missing`** (verified). Correct order: **ship the gated build → reviewer + testers sign in once (the backfilled 7-day trial covers them, zero lockout) → grant the promo within that 7-day window.** Reviewer UUID already resolved: `vwhitley1967@gmail.com` → `users.id 325e4455-b1b8-461e-a844-6f158cffaf84`.
 
 ---
 
 ## Hard sequencing constraints (the three that can bite)
 
 1. **Backend (012 + 013) deploys BEFORE the Plan 2 mobile build hits TestFlight/Play.** (Else null-crash.)
-2. **Promo grants (Plan 6) in place BEFORE the gated build reaches testers.** (Else testers locked out.)
+2. **Promo grants (Plan 6) land WITHIN each tester's 7-day trial window AFTER first sign-in on the gated build** — NOT before the build ships. RevenueCat 404s a grant to a customer it has never seen (the customer is created by the SDK's `Purchases.logIn`), so pre-grant is impossible; the backfilled 7-day trial is the buffer that prevents lockout.
 3. **Legal pages (Plan 5) live on `clique-pix.com` BEFORE App Store submission.** (Apple checks during review.)
 4. Production promotion gated on a full paywall test pass on BOTH iOS and Android (real money — effectively irreversible).
 
