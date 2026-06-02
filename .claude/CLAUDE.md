@@ -545,31 +545,15 @@ photos/{cliqueId}/{eventId}/{videoId}/poster.jpg           # video poster frame
 
 ## Age Gate (13+) — Claim-based backend enforcement
 
-Clique Pix enforces a 13+ minimum using a claim-based backend check. **DOB is collected by the Entra External ID signup form once**, stored on the Entra user principal, and emitted as a `dateOfBirth` claim on every access token. Our backend (`authVerify` in `backend/src/functions/auth.ts`) reads the claim on first login, computes age server-side, and branches: ≥13 upserts the user with `age_verified_at = NOW()`; <13 returns HTTP 403 and best-effort deletes the Entra account via Microsoft Graph. Returning users are never re-prompted — Entra holds DOB, claim rides the token, backend sees `age_verified_at` is already set and fast-paths.
+13+ minimum enforced by a **claim-based backend check** — NOT a Custom Authentication Extension (Microsoft docs state age gating isn't supported in External ID; the CAE-on-`OnAttributeCollectionSubmit` approach was tried and reverted 2026-04-18 as unsupported/opaque). DOB is collected once by the Entra-hosted signup form, stored on the user principal, emitted as a `dateOfBirth` claim. `authVerify` (`backend/src/functions/auth.ts`) reads it on first login, computes age server-side: ≥13 upserts `age_verified_at = NOW()`; <13 returns HTTP 403 `AGE_VERIFICATION_FAILED` and best-effort deletes the Entra account via Graph. Returning users fast-path (claim + `age_verified_at` already set; never re-prompted).
 
-**Why not a Custom Authentication Extension?** Microsoft's own migration docs state plainly: *"Age gating isn't currently supported in Microsoft Entra External ID."* We tried the CAE-on-`OnAttributeCollectionSubmit` pattern (MAB's approach) and burned multiple days fighting opaque EasyAuth rejections, token `iss` disagreements with Microsoft's own documented format, and the generic "Something went wrong" page with no diagnostics. The claim-based path uses officially-supported Entra features and runs inside code we own, so failures are debuggable. See `docs/AGE_VERIFICATION_RUNBOOK.md` → "Deprecated" appendix for the CAE failure modes.
+**Hard rules:**
+- `MIN_AGE = 13` lives in `backend/src/shared/utils/ageUtils.ts`. If policy changes, **three files move together**: `ageUtils.ts`, `website/privacy.html` (§11), `website/terms.html` (§2).
+- **No login-screen DOB picker in the client** — the login screen is just the "Get Started" MSAL button. On a 403, `AuthNotifier.signIn` reads `error.message`, calls `resetSession()` to clear the MSAL cache (so the invalid token isn't reused), and emits `AuthError(serverMessage)` rendered as a red banner.
+- Postgres `users` stores only `age_verified_at` (a timestamp), **never DOB** (Entra holds DOB). Upsert uses `COALESCE` so a grandfathered user's original timestamp is never overwritten.
+- Telemetry never logs raw DOB or precise age — only coarse `ageBucket` (`age_gate_passed` / `age_gate_denied_under_13` / `age_gate_entra_delete_failed`).
 
-**The Clique Pix client has NO login-screen DOB picker.** The login screen is unchanged — just the "Get Started" button that triggers MSAL. DOB collection happens inside the Entra-hosted signup form. When the backend returns HTTP 403 `AGE_VERIFICATION_FAILED`, `app/lib/features/auth/presentation/auth_providers.dart:AuthNotifier.signIn` catches the structured `DioException`, reads `error.message` from the response body, calls `resetSession()` to clear the MSAL cache (so subsequent attempts don't re-use the now-invalid token), and emits `AuthError(serverMessage)` — which the login screen renders as a red banner reading *"You must be at least 13 years old to use Clique Pix."*
-
-Backend pieces (CliquePix-controlled):
-- `backend/src/functions/auth.ts` — `decideAgeGate(payload, now?)` (pure function, exported for tests), `extractDobFromClaims` (handles GUID-prefixed `extension_<b2cAppId>_dateOfBirth` key form via case-insensitive substring match), `parseAnyDob` (YYYY-MM-DD, MM/DD/YYYY, MMDDYYYY). The `authVerify` handler calls `decideAgeGate` between JWT validation and user upsert; blocks under-13 with HTTP 403 `AGE_VERIFICATION_FAILED`.
-- `backend/src/shared/auth/entraGraphClient.ts` — thin Graph client with `deleteEntraUserByOid(oid)`. Uses `DefaultAzureCredential` for managed-identity token acquisition. Best-effort: failure logged as `age_gate_entra_delete_failed` but does not block the 403 response.
-- `backend/src/shared/utils/ageUtils.ts` — shared `MIN_AGE = 13`, `parseDob`, `calculateAge`, `ageBucket`. 20 unit tests in `backend/src/__tests__/ageUtils.test.ts`; 16 additional tests for the auth.ts helpers in `backend/src/__tests__/auth.test.ts`.
-- `backend/src/shared/db/migrations/008_user_age_verification.sql` — adds `users.age_verified_at TIMESTAMPTZ`. Null for grandfathered pre-age-gate users; upsert uses `COALESCE` so the original timestamp is never overwritten.
-
-Entra portal pieces (manual, one-time — see `docs/AGE_VERIFICATION_RUNBOOK.md`):
-- Custom user attribute `dateOfBirth` (string) — collected by the `SignUpSignIn` user flow as required.
-- Clique Pix Enterprise App → Single sign-on → Attributes & Claims → add `dateOfBirth` claim (source: Directory schema extension from `b2c-extensions-app`).
-- Clique Pix app manifest: `acceptMappedClaims: true`, `accessTokenAcceptedVersion: 2` (required for extension claims to appear in tokens).
-- Function App `func-cliquepix-fresh` managed identity: `User.ReadWrite.All` application permission on Microsoft Graph, admin-consented (for the under-13 cleanup delete).
-
-Privacy posture: Clique Pix's Postgres `users` table stores only `age_verified_at` (a timestamp), never DOB. Entra stores DOB on the user principal (same as email + displayName). Users can delete their Entra account to remove all traces. Privacy Policy §2.2 + §11 (`website/privacy.html`) describe this accurately.
-
-Policy constant: `MIN_AGE = 13` in `backend/src/shared/utils/ageUtils.ts`. Terms §2 (`website/terms.html`) + Privacy Policy §11 declare the minimum. If policy ever changes, three files move together: `ageUtils.ts`, `privacy.html`, `terms.html`.
-
-Telemetry: `authVerify` fires `age_gate_passed` (with coarse `ageBucket`), `age_gate_denied_under_13`, `age_gate_entra_delete_failed` — never logs raw DOB or precise age. `auth_verify_success` continues to fire for the normal login path.
-
-History note: two prior attempts were reverted. (1) A client-side login-screen DatePicker + `auth.ts` validation, reverted because email-bound client caching leaked sign-in to unverified users in sign-out → different-new-user scenarios. (2) An Entra Custom Authentication Extension on `OnAttributeCollectionSubmit`, reverted on 2026-04-18 after multi-day debugging confirmed the approach is unsupported and inherently opaque. The current claim-based approach is the third iteration.
+Key code: `decideAgeGate` / `extractDobFromClaims` (GUID-prefixed `extension_<b2cAppId>_dateOfBirth`) / `parseAnyDob` in `auth.ts`; `deleteEntraUserByOid` in `entraGraphClient.ts`; migration `008_user_age_verification.sql`. Entra portal setup (custom attribute, claim mapping, manifest `acceptMappedClaims` + `accessTokenAcceptedVersion: 2`, Graph `User.ReadWrite.All` consent), full flow, CAE failure modes, and reverted-attempt history: **`docs/AGE_VERIFICATION_RUNBOOK.md`**.
 
 ---
 
@@ -609,47 +593,16 @@ Microsoft's documented mitigation for this exact scenario (Azure Communication S
 | 4 | WorkManager periodic task | Every ~8h, network connected | Android | Best-effort backup |
 | 5 | Graceful re-login via Welcome Back | Silent refresh fails (AADSTS700082 / AADSTS500210 / no cached account) | both | One-tap re-auth with `loginHint` pre-fill |
 
-### Layer Details
+### Critical invariants (full per-layer mechanics in the doc)
 
-**Layer 1 — Battery Optimization Exemption (Android)**
-- `Permission.ignoreBatteryOptimizations.request()` at runtime — the manifest-only declaration is not sufficient on API 23+
-- Dialog shown once on the first frame of the home screen after login; `BatteryOptimizationService.requestExemptionIfNeeded(context)` self-gates on the `battery_dialog_shown` SharedPreferences key
-- Without this, Samsung/Xiaomi/Huawei kill background processes and Layer 4 becomes unreliable
-
-**Layer 2 — Server-triggered silent FCM push**
-- Backend timer `refreshTokenPushTimer` (CRON `0 7,22,37,52 * * * *`) selects users with `last_activity_at BETWEEN NOW() - INTERVAL '11 hours' AND NOW() - INTERVAL '9 hours'` AND `last_refresh_push_sent_at < NOW() - INTERVAL '6 hours'`
-- `sendSilentToMultipleTokens(tokens, { type: 'token_refresh', userId })` → FCM v1 with NO `notification` block; `apns-push-type: background`, `apns-priority: 5`, `apns-topic: com.cliquepix.app`, `apns.payload.aps.content-available: 1`, `android.priority: high`
-- Client `_firebaseMessagingBackgroundHandler` (main.dart) branches on `message.data['type'] == 'token_refresh'`, creates a fresh `SingleAccountPca` from `MsalConstants`, calls `acquireTokenSilent`, saves the access token
-- On iOS, if `msal_auth` isn't usable in the background isolate, fall back to writing `pendingRefreshFlagKey` into SharedPreferences; Layer 3 picks up the flag on next foreground
-- Authoritative doc: `docs/ENTRA_REFRESH_TOKEN_WORKAROUND.md`
-
-**Layer 3 — Foreground Refresh (both platforms, primary)**
-- `AppLifecycleService` implements `WidgetsBindingObserver`; on `AppLifecycleState.resumed` it checks `TokenStorageService.isTokenStale()` (≥ 6h since `lastRefreshTime`) AND the `pendingRefreshFlagKey` fallback flag
-- If either is true, calls `AuthRepository.refreshToken()` (MSAL silent acquisition)
-- On success, calls optional `_onRefreshSuccess` hook
-- On failure, invokes `_reloginCallback` → Layer 5
-- Wired in `auth_providers.dart` — `AuthNotifier` starts the observer on `AuthAuthenticated` and stops it on sign-out / unauth
-
-**Layer 4 — WorkManager (Android backup)**
-- `Workmanager().registerPeriodicTask` every 8h (`AppConstants.workManagerIntervalHours`), `NetworkType.connected`
-- `callbackDispatcher` now runs the full MSAL silent refresh in the WorkManager isolate: creates `SingleAccountPca` from `MsalConstants`, calls `acquireTokenSilent`, writes to `TokenStorageService`
-- Isolate-safe because the MSAL cache (Android EncryptedSharedPreferences / iOS Keychain) is process-wide
-- Telemetry is queued into a SharedPreferences ring buffer the main isolate drains on next foreground
-
-**Layer 5 — Graceful Re-Login UX**
-- `AuthState` adds `AuthReloginRequired(email?, displayName?)`
-- `AuthNotifier.checkAuthStatus` detects `AADSTS700082` / `AADSTS500210` / `no account in the cache` on cold start and, if `lastKnownUser.email` is set, emits `AuthReloginRequired` instead of `AuthUnauthenticated`
-- `AuthNotifier._triggerWelcomeBack` does the same on Layer-3 refresh failure during an active session
-- **`AuthInterceptor` ALSO triggers Layer 5 (since 2026-05-03):** when an in-flight 401's refresh fails with a session-expired pattern (`AADSTS700082` / `AADSTS500210` / `no_account_found`), the interceptor calls `AuthNotifier.triggerWelcomeBackOnSessionExpiry(reason: errorCode)` fire-and-forget. Without this hook, the 401 propagated as AsyncError to whichever screen made the call — and `home_screen.dart` rendered the raw `DioException` toString verbatim before the parallel `_verifyInBackground` could transition state. The new path races the AsyncError to the screen and wins. Telemetry split via `welcome_back_shown { source: 'interceptor' | 'lifecycle' }` measures effectiveness. **Three sites must stay in sync** on the session-expired regex: `AuthInterceptor._isSessionExpired`, `AuthRepository._extractAadstsCode`, `AuthNotifier._handleSilentSignInFailure`. Comment on each notes the others
-- `LoginScreen` listens on `authStateProvider` and calls `WelcomeBackDialog.show` with `loginHint = email`
-- **Never render `error.toString()` for AsyncError on bootstrap-path screens.** Use `core/utils/api_error_messages.dart::friendlyApiErrorMessage(err, resourceLabel: ...)` which explicitly never returns raw `DioException` toString. The home screen (`home_screen.dart:289-310`) is the canonical example — narrow-scope SnackBars on local actions (delete photo, share video) are fine with `'Failed to X: $e'` messaging since users only see them after explicit interaction
-
-### Known unknowns and honest limits
-
-- **APNs throttles background pushes.** Silent-push deliverability will be < 100%. The `refresh_push_timer_ran.sent` vs. `silent_push_received` ratio in App Insights is the ground truth.
-- **Force-killed iOS apps don't receive silent pushes.** iOS platform policy. Layer 5 is the only recourse.
-- **iOS Background App Refresh disabled.** Layer 2 is dead for that user; Layer 5 still works.
-- **`msal_auth` in iOS background isolate.** Plugin-channel registration may fail. The fallback-flag path (Layer 2 → Layer 3) keeps us correct even then.
+The rules that bite if violated — step-by-step layer implementation lives in `docs/ENTRA_REFRESH_TOKEN_WORKAROUND.md`:
+- **Layer 1** battery-optimization exemption (`Permission.ignoreBatteryOptimizations`, gated on `battery_dialog_shown`) is required on API 23+ or Samsung/Xiaomi/Huawei kill Layer 4.
+- **Layer 2 silent push** (`refreshTokenPushTimer`, CRON `0 7,22,37,52 * * * *`, users inactive 9–11h, 6h dedup) sends FCM with **NO `notification` block** (`apns-push-type: background`, `content-available: 1`, `android.priority: high`). iOS fallback when the isolate can't run MSAL: write `pendingRefreshFlagKey`; Layer 3 consumes it.
+- **Layer 3 (primary)**: on `AppLifecycleState.resumed`, refresh if token ≥6h stale OR pending flag set. `pendingRefreshFlagKey` is cleared **before** awaiting the refresh, so a hung refresh can't poison every future resume.
+- **Layer 4 (Android only)**: WorkManager (~8h) runs full MSAL silent refresh in-isolate — safe because the MSAL cache is process-wide.
+- **Layer 5**: cold-start + active-session + interceptor all route session-expired to `WelcomeBackDialog` with `loginHint`. **Three sites must stay in sync** on the session-expired regex (`AADSTS700082` / `AADSTS500210` / `no_account_found`): `AuthInterceptor._isSessionExpired`, `AuthRepository._extractAadstsCode`, `AuthNotifier._handleSilentSignInFailure`.
+- **Never render `error.toString()` for AsyncError on bootstrap-path screens** — use `core/utils/api_error_messages.dart::friendlyApiErrorMessage(...)` (`home_screen.dart` is canonical). Narrow-scope SnackBars on explicit local actions may use `'Failed to X: $e'`.
+- **Honest limits:** APNs throttles background pushes (<100% delivery); force-killed iOS apps and disabled Background App Refresh get no silent push — Layer 5 is the only recourse there.
 
 ### Android Permissions
 
@@ -659,197 +612,73 @@ Microsoft's documented mitigation for this exact scenario (Azure Communication S
 <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 ```
 
-`SCHEDULE_EXACT_ALARM` and `USE_EXACT_ALARM` are NOT declared. They were declared by an earlier version of the manifest (back when the notification-based Layer 2 token refresh used `exactAllowWhileIdle`) but that design was deleted. The `flutter_local_notifications` plugin declares both transitively in its own AndroidManifest because the plugin SUPPORTS exact-alarm scheduling — we suppress the plugin's contribution via `<uses-permission ... tools:node="remove" />` markers in our manifest. Reason: Google Play policy restricts `USE_EXACT_ALARM` to alarm-clock / calendar apps; Clique Pix is neither, and Play Console rejects builds that include it. The Friday reminder uses `AndroidScheduleMode.inexactAllowWhileIdle` which requires neither permission.
+**`SCHEDULE_EXACT_ALARM` / `USE_EXACT_ALARM` are NOT declared.** Google Play restricts `USE_EXACT_ALARM` to alarm-clock/calendar apps and rejects builds that include it, so we suppress `flutter_local_notifications`' transitive contribution via `<uses-permission ... tools:node="remove" />`. The Friday reminder uses `AndroidScheduleMode.inexactAllowWhileIdle` (needs neither).
 
 ### iOS Info.plist
 
-`UIBackgroundModes` must contain `remote-notification` for silent pushes to wake the app. Already set.
+`UIBackgroundModes` must contain `remote-notification` (already set) for silent pushes to wake the app.
 
-**Do NOT declare `BGTaskSchedulerPermittedIdentifiers` in `app/ios/Runner/Info.plist`.** Layer 4 is Android-only — there is no iOS-native `BGTaskScheduler` path in this codebase. iOS 13+ requires every identifier in that array to have a corresponding `BGTaskScheduler.shared.register(forTaskWithIdentifier:using:launchHandler:)` call in `AppDelegate.swift`'s `application(_:didFinishLaunchingWithOptions:)`. A declaration without a registered handler causes `NSInternalInconsistencyException: 'No launch handler registered for task with identifier <ID>'` and SIGABRT — typically the moment the FlutterViewController re-attaches after `SFSafariViewController` dismisses, producing the symptom "app vanishes after MSAL/Safari sign-in." A `com.cliquepix.tokenRefresh` declaration was removed 2026-05-01; the constant of that name in `app/lib/features/auth/domain/background_token_service.dart:18` is the WorkManager (Android) task identifier and unrelated to iOS BGTaskScheduler.
+**Do NOT declare `BGTaskSchedulerPermittedIdentifiers`.** Layer 4 is Android-only — there is no iOS `BGTaskScheduler.shared.register(...)` handler. A declaration without a matching registered handler throws `NSInternalInconsistencyException` + SIGABRT (symptom: "app vanishes after MSAL/Safari sign-in"). The `com.cliquepix.tokenRefresh` constant in `background_token_service.dart:18` is the WorkManager (Android) task id — unrelated to iOS BGTaskScheduler.
 
-### Token Storage
+### Token Storage & Key Timing
 
-- Auth tokens: `flutter_secure_storage` only — never `shared_preferences`
-- `lastRefreshTime`: written atomically in `TokenStorageService.saveTokens`; staleness threshold is `AppConstants.tokenStaleThresholdHours` (6h)
-- `lastKnownUser`: stored on `verifyAndGetUser` success, read by Layer 5
-- `pendingRefreshFlagKey` (SharedPreferences, not secure): bridge between Layer 2 isolate and Layer 3 main isolate
-- Clear all on logout; cancel WorkManager task
+- Auth/refresh tokens in `flutter_secure_storage` **only** — never `shared_preferences`. `pendingRefreshFlagKey` (SharedPreferences) bridges Layer 2 → Layer 3. `lastRefreshTime` written atomically in `TokenStorageService.saveTokens`. Clear all on logout; cancel WorkManager.
+- Timings: Microsoft inactivity **12h** (hardcoded) · silent-push window inactive **9–11h** · Layer 3 stale **6h** · Layer 4 interval **8h** · silent-push dedup **6h**/user.
+- Backend (migration `009_user_activity_tracking.sql`, partial index on non-null): `users.last_activity_at` (updated fire-and-forget by `authMiddleware`, capped 1/min, feeds Layer-2 timer) + `users.last_refresh_push_sent_at` (enforces 6h dedup).
+- Diagnostics: tap the Profile version number 7× to unlock Token Diagnostics (refresh age, pending-flag, battery-exempt, 50-event ring buffer). Telemetry posts to `/api/telemetry/auth` (accepts expired-but-valid JWTs via `verifyJwtAllowExpired`).
 
-### Key Timing
-
-- Microsoft inactivity timeout: **12h** (hardcoded)
-- Silent-push window: user inactive **9-11h**
-- Layer 3 stale threshold: **6h**
-- Layer 4 WorkManager interval: **8h**
-- Silent-push dedup: **6h** per user
-
-### Backend — tables touched
-
-| Column | Table | Purpose |
-|--------|-------|---------|
-| `last_activity_at` | users | Updated fire-and-forget by `authMiddleware`, capped 1/min/user; feeds Layer-2 timer |
-| `last_refresh_push_sent_at` | users | Updated by `refreshTokenPushTimer`; enforces 6h dedup |
-
-Both added in migration `009_user_activity_tracking.sql`. Partial index on `last_activity_at WHERE last_activity_at IS NOT NULL`.
-
-### Telemetry + diagnostics
-
-- Events flow through `telemetry_service.dart` (client) → `POST /api/telemetry/auth` → `trackEvent` → App Insights
-- Endpoint accepts JWTs whose signature is valid even if `exp` has passed — this endpoint exists specifically to hear from clients with expiring/expired tokens. `authMiddleware.verifyJwtAllowExpired` powers it
-- Events: `battery_exempt_prompted/_granted`, `silent_push_received/_refresh_success/_refresh_failed/_fallback_flag_set`, `foreground_stale_check/_refresh_success/_refresh_failed`, `wm_task_fired/_refresh_success/_refresh_failed`, `welcome_back_shown/_continue/_switch_account`, `cold_start_relogin_required`, `refresh_push_timer_ran`
-- Tap the version number 7 times in the Profile screen to unlock Token Diagnostics — shows last refresh time, age, pending-flag state, battery-exempt status, and the 50-event ring buffer
-
-### Reference
-
-Full implementation details, architecture diagrams, and Kusto queries: `docs/ENTRA_REFRESH_TOKEN_WORKAROUND.md`.
+**Full implementation, telemetry event list, architecture diagrams, and Kusto queries: `docs/ENTRA_REFRESH_TOKEN_WORKAROUND.md`.**
 
 ---
 
 ## Media Handling Pipeline
 
-Media uploads are the most performance-critical path in Clique Pix. Photos and videos have radically different shapes — photos can be compressed cheaply client-side to 500KB–1.5MB, while videos are 50–150MB even after sensible encoding and must be transcoded server-side. Avatars are a third shape — small, square, per-user fixed paths, and the only media type where the backend runs synchronous thumbnail generation at confirm time.
+Photos compress cheaply client-side (500KB–1.5MB); videos (50–150MB) transcode server-side; avatars are small square per-user fixed paths with synchronous thumb gen. Step-by-step upload flows are under **API Design** above; full FFmpeg invocations + parameter rationale live in **`docs/VIDEO_ARCHITECTURE_DECISIONS.md`** (Decision 3, Decisions 8–12).
 
-### Photo Pipeline — Client Side (Before Upload)
-1. User selects or captures photo
-2. Strip EXIF data (removes GPS coordinates, device info, timestamps)
-3. Resize: longest edge max 2048px, maintain aspect ratio
-4. Compress: JPEG quality 80
-5. Convert HEIC to JPEG on-device before upload
-6. Reject files over 10MB after compression (safety net)
-7. Use `flutter_image_compress` for this pipeline
+### Photo Pipeline — locked numbers
 
-### Photo Pipeline — Why These Numbers
+Client (`flutter_image_compress`): strip EXIF → resize longest edge ≤2048px → JPEG q80 → HEIC→JPEG → reject >10MB. Server at confirm (Function never touches bytes mid-upload): verify blob, validate content-type **JPEG/PNG only** + size (reject >15MB), then fire-and-forget `sharp` thumbnail (400px longest edge, JPEG q70, ~30–80KB → `thumbnail_blob_path`; feed falls back to original on failure). See `backend/src/functions/photos.ts`.
 
 | Setting | Value | Rationale |
 |---------|-------|-----------|
-| Max dimension | 2048px | Covers all current phone screens. This is a group photo app, not a stock photography service. |
-| JPEG quality | 80 | Industry standard for "visually indistinguishable." Quality 90+ wastes bytes; quality 70 shows artifacts on gradients and skin tones. |
-| Max file size | 10MB | Post-compression safety net. At 2048px / quality 80, photos land around 500KB–1.5MB. |
-| Format | JPEG | Universal compatibility. HEIC converted client-side. |
+| Max dimension | 2048px | Covers all phone screens; group-photo app, not stock photography. |
+| JPEG quality | 80 | "Visually indistinguishable." 90+ wastes bytes; 70 shows artifacts on gradients/skin. |
+| Max file size | 10MB | Post-compression safety net (typical 500KB–1.5MB). |
+| Format | JPEG | Universal; HEIC converted client-side. |
 
-### Photo Pipeline — Server Side (After Client Upload to Blob)
+### Video Pipeline — locked numbers
 
-The Function never touches photo bytes during the upload flow. At the confirmation step:
-
-1. Verify blob exists at expected path via managed identity
-2. Read blob properties to validate content type (JPEG, PNG only) and file size (reject > 15MB)
-3. Update photo metadata in PostgreSQL
-4. Trigger async thumbnail generation
-
-### Photo Thumbnail Generation
-
-- Triggered inline (fire-and-forget async) inside the upload-confirm endpoint — see `backend/src/functions/photos.ts`
-- Function reads original blob via managed identity (`DefaultAzureCredential`), uses `sharp` to generate a 400px longest edge / JPEG quality 70 thumbnail, writes it back to Blob Storage
-- Updates `thumbnail_blob_path` in the record
-- Target thumbnail size: ~30–80KB
-- If thumbnail generation fails, the feed falls back to loading the original (slower but not broken)
-
-### Video Pipeline — Client Side (Before Upload)
-
-Videos cannot be meaningfully compressed on the client (mobile transcoding is slow, battery-killing, and unpredictable). The client's job is validation only.
-
-1. User selects or records video
-2. Extract basic metadata: extension, approximate duration, file size
-3. Reject if extension is not MP4 or MOV
-4. Reject if duration exceeds 5 minutes
-5. Show estimated upload time to the user ("~3 min on WiFi, ~12 min on LTE") before starting
-6. No EXIF-equivalent stripping in v1 — video metadata isn't stripped client-side (could be added later)
-
-### Video Pipeline — Why These Numbers
+Client does **validation only** (no meaningful client compression): extension MP4/MOV, duration ≤5min, file-size estimate, show upload-time estimate. Server: ffprobe authoritative validation → `canStreamCopy(probeResult)` picks **fast path** (`-c copy` tee remux, ~2–5s) vs **slow path** (libx264 re-encode + HDR→SDR `zscale`/`tonemap=hable`). Both emit HLS + MP4 from a **single tee-muxer invocation**; poster extracted separately; original master set to Cool tier. KEDA polling 5s, min-executions=1.
 
 | Setting | Value | Rationale |
 |---------|-------|-----------|
-| Max duration | 5 minutes | Matches the spec. Balances "long enough for meaningful moments" against transcoding cost and storage. |
-| Accepted containers | MP4, MOV | Covers 99% of phone captures. iPhone records MOV (QuickTime), Android records MP4. |
-| Accepted source codecs | H.264, HEVC | Modern phones default to H.264 or HEVC. Other codecs (VP9, AV1) rejected server-side. |
-| Max output resolution | 1080p | No 4K delivery in v1. Source above 1080p is downscaled; source below is not upscaled. |
-| Output codec | H.264 | Best compatibility across `video_player` platforms and HLS clients. |
-| HDR policy | Normalize to SDR | Consistent playback across devices; HDR preservation is a post-v1 concern. |
+| Max duration | 5 minutes | Spec; balances meaningful moments vs transcoding/storage cost. |
+| Accepted containers | MP4, MOV | iPhone MOV, Android MP4. |
+| Accepted source codecs | H.264, HEVC | Others (VP9, AV1) rejected server-side. |
+| Max output resolution | 1080p | No 4K in v1; downscale only, never upscale. |
+| Output codec | H.264 | Best `video_player`/HLS compatibility. |
+| HDR policy | Normalize to SDR | Consistent playback; HDR preservation is post-v1. |
 
-### Video Pipeline — Server Side (After Client Commits Upload)
+**Locked FFmpeg parameters (do not change without measuring):** preset `veryfast` (slow path only — fast path is `-c copy`) · CRF 23 · AAC 128k · HLS segments 4s · **`-pix_fmt yuv420p` REQUIRED on slow path** (or HDR yields undecodable 10-bit High10 H.264) · profile/level high/4.0 · color metadata bt709. Rotation is **autorotate-baked** — do NOT add `-noautorotate` without an explicit `transpose` (see Decision 16). Callback reports `processing_mode: 'transcode' | 'stream_copy'` + `fast_path_failure_reason` for telemetry.
 
-1. Function verifies all blocks committed successfully (blob exists with expected size)
-2. Function generates a 15-min read SAS for the original blob and returns it as `preview_url` in the commit response (instant preview for the uploader — Decision 9)
-3. Function enqueues a transcoding job on Azure Storage Queue
-4. **Container Apps Job** picks up the queue message (KEDA polling 5s, min-executions=1) and runs FFmpeg:
-   - ffprobe first: authoritative validation of container/codec/duration/HDR. Reject if invalid.
-   - `canStreamCopy(probeResult)` predicate decides between fast and slow path:
-     - **Fast path (`remuxHlsAndMp4`)** for H.264 SDR ≤1080p mp4/mov AAC sources: `ffmpeg -c copy -c:a copy -map 0:v:0 -map 0:a:0? -f tee "[f=hls...]manifest.m3u8|[f=mp4:movflags=+faststart]fallback.mp4"` — bit-exact remux, ~2-5s wall-clock, no re-encode. On failure, falls through to slow path.
-     - **Slow path (`transcodeHlsAndMp4`)** for HDR / HEVC / >1080p / non-AAC: `-c:v libx264 -preset veryfast -crf 23 -profile:v high -level 4.0 -pix_fmt yuv420p -colorspace bt709 -color_primaries bt709 -color_trc bt709 -c:a aac -b:a 128k -vf "<HDR_CHAIN>scale=-2:min(ih\,1080),format=yuv420p" -map 0:v? -map 0:a? -f tee "[f=hls...]manifest.m3u8|[f=mp4:movflags=+faststart]fallback.mp4"`. The HDR chain is `zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,` (only when `probeResult.isHdr`; empty for SDR).
-   - Both paths produce HLS manifest + segments + MP4 fallback from a SINGLE FFmpeg invocation via the tee muxer.
-   - Extract poster frame separately (`-ss 1 -vframes 1`).
-5. Container Apps Job writes all outputs to blob storage via managed identity, plus a separate call to set the original master to Cool tier
-6. Container Apps Job calls `POST /api/internal/video-processing-complete` with results, including `processing_mode: 'transcode' | 'stream_copy'` and `fast_path_failure_reason?: string | null` for telemetry
-7. Function updates video row, pushes `video_ready` via Web PubSub to ALL clique members **including the uploader** (so their instant-preview card upgrades) + FCM push to OTHER members only
+### Avatar Pipeline (migration 010)
 
-**Locked parameters (do not change without measuring):**
-- libx264 preset: `veryfast` (slow path only — fast path uses `-c copy`)
-- CRF: 23
-- AAC bitrate: 128k
-- HLS segment duration: 4 seconds (variable in fast path, exactly 4 in slow path)
-- Forced 8-bit output: `-pix_fmt yuv420p` — REQUIRED on the slow path or HDR sources produce 10-bit High10 H.264 that mobile devices can't decode
-- Profile/level: high/4.0 — universal mobile compatibility from ~2015+
-- Color metadata: bt709 — explicit SDR tags in the H.264 VUI parameters
+Headshots replace the initials-gradient-ring fallback everywhere a user is surfaced. Per-user fixed paths `avatars/{userId}/original.jpg` (512×512 q85) + `thumb.jpg` (128×128 q75, `sharp` at confirm). Client: pick → square crop (native) → optional filter (Original/B&W/Warm/Cool, **identical matrices Flutter+web**) → 512px q85 → upload-url SAS (write+create) → confirm (≤3MB, JPEG/PNG, stamps `avatar_updated_at`, returns enriched `User`).
 
-The full ffmpeg invocations and parameter rationale live in `docs/VIDEO_ARCHITECTURE_DECISIONS.md` Decision 3 (post-launch state) and Decisions 8-12.
+**Hard rules:**
+- **1-hour view SAS** (`generateViewSas(path, 3600)`) — longer than photo (5min) / video (15min) because avatars render on every screen.
+- **Cache key stability:** `cacheKey: 'avatar_${userId}_v${avatar_updated_at.ms}'` (Flutter) / `?_v=` param (web). URL churns hourly; cache key only churns on actual change — without this `cached_network_image` thrashes.
+- All 14 user-denormalizing handlers run `enrichUserAvatar` (`avatarEnricher.ts`, single SAS-signing source); `buildAuthUserResponse` is the one canonical auth-user shape → one `UserModel.fromJson`.
+- `AuthNotifier.updateUserAvatar` is a **pure in-memory swap — MUST NOT trigger token refresh** (would disturb the 5-layer Entra counters).
+- Frame presets `0..4`: `0` = auto-gradient from `displayName.hashCode`; `1..4` explicit palette matching mobile `AvatarWidget._palette` / web `Avatar.palettes` 1:1. `PATCH /api/users/me/avatar/frame` (affects the initials ring too).
+- First-sign-in prompt: `should_prompt_for_avatar = avatar_blob_path IS NULL AND NOT avatar_prompt_dismissed AND (snoozed_until IS NULL OR < NOW())`. Yes / Maybe Later (`snooze` → +7d) / No Thanks (`dismiss` → never). Back/tap-outside = snooze.
+- Account deletion (`deleteMe`) deletes both blobs first, idempotent (`deleteIfExists`).
 
-### Feed Display
+Full pipeline + schema: `docs/VIDEO_ARCHITECTURE_DECISIONS.md`, `docs/WEB_CLIENT_ARCHITECTURE.md §8.5`, `docs/ARCHITECTURE.md §7`.
 
-**Photos:**
-- Feed cards load thumbnails only
-- Full-size loads on photo detail view / full-screen tap
-- Use `cached_network_image` for client-side image caching
-- Placeholder shimmer animation while images load
+### ⚠️ APIM rate-limiting — DO NOT re-add
 
-**Videos:**
-- Feed cards load posters only + duration overlay + play icon
-- Tap opens the in-app player (`video_player` + `chewie`)
-- While processing, card shows a placeholder with a spinner and "Processing…" label; transitions to the poster state when `video_ready` arrives (via Web PubSub or feed refresh)
-- Player prefers HLS; falls back to MP4 on HLS failure
-
-### Avatar Pipeline (added 2026-04-24, migration 010)
-
-User headshots that replace the initials-in-a-gradient-ring fallback everywhere a user is surfaced (Profile hero, photo/video feed cards, clique member lists, DM threads + chat headers). Single blob container (`photos`, name historical) with per-user fixed paths under the `avatars/` virtual prefix — each new upload supersedes the prior one, no accumulation, no orphan tracking.
-
-**Blob paths (fixed per user):**
-```
-avatars/{userId}/original.jpg     # 512×512 JPEG q85
-avatars/{userId}/thumb.jpg        # 128×128 JPEG q75 (sharp, generated at confirm time)
-```
-
-**Client pipeline (both Flutter and web):**
-1. Pick source (camera or gallery / file input)
-2. Square crop via native cropper (`image_cropper` TOCropViewController/uCrop on mobile; `react-easy-crop` on web)
-3. Optional filter — Original / B&W / Warm / Cool. Baked via `Canvas` + `ColorFilter.matrix` (Flutter) or `getImageData` + matrix loop (web). Identical matrices across platforms
-4. Compress to 512px JPEG quality 85 (`flutter_image_compress` / `browser-image-compression`)
-5. `POST /api/users/me/avatar/upload-url` → 5-min User Delegation SAS (write+create) → direct PUT to blob
-6. `POST /api/users/me/avatar` → backend verifies blob, size ≤ 3MB, content-type JPEG/PNG; runs `sharp` inline to produce 128px thumb; stamps `avatar_updated_at = NOW()`; returns enriched `User`
-
-**Backend propagation rules:**
-- 1-hour view SAS via `generateViewSas(path, 3600)` (longer than photos' 5-min / videos' 15-min — avatars render on every screen; shorter expiry would thrash `cached_network_image`)
-- **Cache key stability:** clients must set `cacheKey: 'avatar_${userId}_v${avatar_updated_at.ms}'` on `CachedNetworkImageProvider` (Flutter) / append as `?_v=` query param (web). URL churns every hour; cache key only churns when the user actually changes their avatar
-- Every response that carries user denormalization (14 handlers: auth, photos, videos, events, cliques, dm) runs `enrichUserAvatar` from `backend/src/shared/services/avatarEnricher.ts` — single source of truth for SAS signing
-- `buildAuthUserResponse` in the same helper is the canonical shape emitted by `authVerify` / `getMe` / all avatar-mutation endpoints. Single shape → one Flutter `UserModel.fromJson` deserializer
-
-**First-sign-in welcome prompt (migration 010 added the state):**
-Backend computes `should_prompt_for_avatar` on every auth response as `avatar_blob_path IS NULL AND NOT avatar_prompt_dismissed AND (avatar_prompt_snoozed_until IS NULL OR avatar_prompt_snoozed_until < NOW())`. Flutter triggers `AvatarWelcomePrompt` on `HomeScreen.initState` once per session when true; web mounts `AvatarWelcomePromptGate` in `AppLayout`. Three actions:
-- **Yes** — opens the same picker/editor pipeline used from Profile. Upload success implicitly clears the flag via `avatar_blob_path IS NOT NULL`
-- **Maybe Later** — `POST /api/users/me/avatar-prompt {action: 'snooze'}` → sets `avatar_prompt_snoozed_until = NOW() + 7 days`
-- **No Thanks** — `POST /api/users/me/avatar-prompt {action: 'dismiss'}` → sets `avatar_prompt_dismissed = TRUE`, never re-prompts
-- Back-button / tap-outside behaves like "Maybe Later" (safer default than permanent dismiss from accidental fat-finger)
-
-**Frame presets (0..4):**
-- `0` = auto-gradient from `displayName.hashCode` — the historical default that still ships for users who never touch the preset picker
-- `1..4` = explicit palette indices. Palette matches mobile `AvatarWidget._palette` and web `Avatar.palettes` 1:1 so the same user renders the same gradient on every platform
-- Updated via `PATCH /api/users/me/avatar/frame` — takes effect on the initials-fallback ring too, not just the uploaded-photo ring
-
-**AuthNotifier rule:** client-side `AuthNotifier.updateUserAvatar(UserModel)` is a pure in-memory state swap. It MUST NOT trigger a token refresh — spurious refresh calls would disturb the 5-layer Entra defense's counters. The backend's confirm response already returns a fresh enriched user; just drop it into `AuthAuthenticated(user)`.
-
-**Rate limiting:** removed entirely from APIM after FIVE consecutive user-blocking 429 incidents (4 on 2026-04-27, 1 on 2026-04-29). The 2026-04-29 incident reproduced because the prior cleanup only addressed the **API**-scope policy — APIM has FOUR policy scopes (Global, Product, API, Operation) and a rate-limit at any one of them produces the same 429 body. The actual culprit on 2026-04-29 was APIM's **default `starter` Product policy** containing `<rate-limit calls="5" renewal-period="60" />` plus `<quota calls="100" renewal-period="604800" />` — auto-created when the service was first provisioned, never touched, never inspected. New users auto-subscribe to `starter` and got slammed at 5/min on first sign-in. Fix: PUT a `<base />`-only policy at the starter product scope. **When diagnosing any 429, audit ALL FOUR APIM policy scopes via the script in `docs/BETA_OPERATIONS_RUNBOOK.md` §2 — not just the API scope.** Abuse protection lives at the application layer: JWT auth, event-membership checks, User Delegation SAS expiry (5 min photo / 30 min video block), orphan cleanup timer. The Azure Monitor alert `apim-429-detected` fires within 5 min of any APIM 429. Client-side `silentRetryOn429` (`app/lib/core/utils/upload_url_silent_retry.dart`) is a defense-in-depth safety net that absorbs a single 429 per 5-min window per device — it is wired into the photo and video upload-URL calls so a future regression doesn't immediately surface to users. **Do not re-add `<rate-limit-by-key>` OR `<rate-limit>` OR `<quota>` at ANY APIM scope** until APIM is migrated off Developer tier (Standard v2 has a distributed cache and an SLA). See `apim_policy.xml` in-file comment for the full 5-incident history.
-
-**Account deletion:** `deleteMe` in `auth.ts` deletes both avatar blobs before the cascade row delete. Idempotent (`deleteIfExists`), so missing blobs don't block the flow.
-
-**Out of scope (for v1):** animated/video avatars, Gravatar/social imports, multiple avatars per user, per-clique avatar overrides, reactions on avatars, AI-generated avatars.
+Rate limiting was **removed entirely from APIM** after FIVE user-blocking 429 incidents (4 on 2026-04-27, 1 on 2026-04-29). APIM has **FOUR policy scopes** (Global, Product, API, Operation) and a limit at any one produces the same 429 body; the 2026-04-29 culprit was the auto-provisioned default `starter` **Product** policy (`<rate-limit calls="5"/>` + `<quota calls="100"/>`), which the prior API-scope-only cleanup missed. **Do not re-add `<rate-limit-by-key>` / `<rate-limit>` / `<quota>` at ANY scope** until APIM moves off Developer tier. When diagnosing any 429, audit **all four scopes** (`docs/BETA_OPERATIONS_RUNBOOK.md §2`). Abuse protection is application-layer (JWT, membership checks, SAS expiry, orphan cleanup); client `silentRetryOn429` absorbs one 429/5-min/device. Full 5-incident history: `apim_policy.xml`.
 
 ---
 
@@ -1007,46 +836,13 @@ FCM (Firebase Cloud Messaging) for push delivery to both Android and iOS. FCM is
 
 See `pushVideoReady` in `backend/src/functions/videos.ts:284-348` and `docs/VIDEO_ARCHITECTURE_DECISIONS.md` Decision 10.
 
-### Backend Flow
+### Flows & wiring (full detail: `docs/NOTIFICATION_SYSTEM.md`)
 
-1. Backend action (photo upload, clique join, timer) queries relevant members' push tokens
-2. Function sends push via FCM HTTP v1 API using `sendToMultipleTokens()` with `notification` + `data` payloads
-3. Function creates notification records in `notifications` table for in-app display
-4. Failed token sends trigger stale token cleanup
-
-### Client Flow
-
-| App State | Handler Location | Display |
-|-----------|-----------------|---------|
-| **Foreground** | `main.dart` → `FirebaseMessaging.onMessage` | `flutter_local_notifications.show()` heads-up banner |
-| **Background** | OS auto-displays from FCM `notification` payload | `onMessageOpenedApp` → GoRouter navigation on tap |
-| **Terminated** | OS auto-displays from FCM `notification` payload | `getInitialMessage()` → GoRouter navigation on tap |
-
-**Key pattern:** The `onMessage` listener is set up in `main.dart` immediately after `flutter_local_notifications` plugin initialization — not in a separate service class. This ensures the plugin is always ready when `show()` is called.
-
-### Notification Channel
-
-Created programmatically in `main.dart` at startup:
-- `cliquepix_default` — HIGH importance heads-up banners. All FCM-driven pushes (photos, videos, DMs, member joins, event lifecycle) flow through this channel. Referenced in AndroidManifest.
-- `cliquepix_reminders` — DEFAULT importance. Only the weekly Friday reminder uses this channel. Separated so users can mute reminders via OS Settings without muting photo/video pushes.
-- Android 13+ permission requested once via `requestNotificationsPermission()` covers both channels.
-
-### Token Management
-
-- `PushNotificationService` initializes after auth — gets FCM token, registers via `POST /api/push-tokens`
-- Listens to `FirebaseMessaging.instance.onTokenRefresh` and re-registers when tokens rotate
-- Backend upserts on conflict (same token → update timestamp)
-- Remove on logout
-- Failed sends remove stale tokens via `DELETE FROM push_tokens WHERE token = ANY($1)`
-
-### Notification Tap Navigation
-
-All taps navigate via GoRouter using `data` payload:
-- `event_id` → `router.push('/events/$eventId')`
-- `clique_id` → `router.push('/cliques/$cliqueId')`
-- `video_id` + `event_id` (from `video_ready`) → `router.push('/events/$eventId?mediaId=$videoId')` (deep-links into the event feed scrolled to the video)
-
-Foreground taps use a static callback: `main.dart` `onDidReceiveNotificationResponse` → `PushNotificationService.onNotificationTap` → GoRouter
+- **Backend:** query members' push tokens → FCM HTTP v1 `sendToMultipleTokens()` (`notification` + `data`) → write `notifications` rows for the in-app list → failed sends purge stale tokens (`DELETE FROM push_tokens WHERE token = ANY($1)`).
+- **Client display:** Foreground → `main.dart` `FirebaseMessaging.onMessage` → `flutter_local_notifications.show()` heads-up. Background/Terminated → OS auto-displays from the `notification` payload; tap → `onMessageOpenedApp` / `getInitialMessage()`. The `onMessage` listener is wired in `main.dart` **right after plugin init** so `show()` is always ready.
+- **Channels** (created in `main.dart`): `cliquepix_default` (HIGH — all pushes) + `cliquepix_reminders` (DEFAULT — Friday reminder only, separately mutable). Android 13+ permission requested once.
+- **Tokens:** `PushNotificationService` registers the FCM token post-auth via `POST /api/push-tokens`, re-registers on `onTokenRefresh`, removes on logout (backend upserts on conflict).
+- **Tap nav (GoRouter via `data`):** `event_id` → `/events/$id` · `clique_id` → `/cliques/$id` · `video_id`+`event_id` (from `video_ready`) → `/events/$eventId?mediaId=$videoId`. Foreground taps: `onDidReceiveNotificationResponse` → `PushNotificationService.onNotificationTap`.
 
 ---
 
@@ -1330,27 +1126,7 @@ Bicep is preferred but must not delay the MVP. Manual deployment is acceptable f
 
 ## What v1 Success Looks Like
 
-A user can:
-1. Sign up and log in with minimal friction
-2. Create a Clique and invite friends via link, SMS, or QR code
-3. Tap an invite link and land in the app at the right screen
-4. Start an Event with a chosen duration (24h / 3 days / 7 days)
-5. Take a photo or record a video, or pick either from their gallery
-6. See the photo appear in the event feed within seconds
-7. See the video upload reliably (even with connection drops), show a processing placeholder, then transition to playable within ~15-25s for compatible sources or ~55-65s for HDR HEVC sources
-8. **Tap their own video card immediately and play from the local device file** — zero wait, zero network. The local pending card appears in the feed the moment the user taps "Upload", before any Azure communication begins
-9. Play back a video cleanly via HLS with MP4 fallback
-10. React to others' photos and videos
-11. Save a photo or video to their device — individually via the detail/player screen, or in bulk via multi-select download (photos and videos together, with progress)
-12. Share a photo or video externally via the OS share sheet
-13. **Delete their own photo or video** via the 3-dot menu on the feed card (visible to the uploader only, on all three video states) or the PopupMenu on the photo detail / video player AppBar (works even when the video player fails to init on a broken blob). Shared `confirmDestructive` helper backs all 7 destructive-confirm dialogs in the app with identical dark-theme styling.
-14. Receive push notifications when new photos are added and when videos finish processing (uploader gets the Web PubSub signal but NOT the FCM push for their own video)
-15. See backend error codes mapped to friendly messages on the upload screen (`VIDEO_LIMIT_REACHED`, `DURATION_EXCEEDED`, etc. — read from `e.response.data.error.code` on a `DioException`)
-16. See photos and videos automatically disappear from the cloud when the event expires
-17. **Upload a profile picture** (headshot) that replaces their initials everywhere — Profile hero, their own photo/video feed cards, DM threads. Tap the gradient ring → bottom sheet → crop → filter → frame → Save. Other clique members see the uploader's headshot on their cards on the next feed poll
-18. **Get a branded welcome prompt on first sign-in** asking if they want to add a photo now, with Yes / Maybe Later (7-day snooze) / No Thanks (never re-prompt) options. Choice persists server-side so it's honored across reinstall + cross-device
-
-If all eighteen of these work cleanly on both iOS and Android, v1 is done. (Local-first uploader playback replaces the preview_url-based instant preview as the primary uploader UX — see `docs/VIDEO_LOCAL_FIRST_UPLOADER_ARCHITECTURE.md`.)
+The full 18-point acceptance checklist lives in **`docs/PRD.md`**. In short, v1 is done when, cleanly on both iOS and Android, a user can: sign in → create a Clique + invite (link/SMS/QR, deep-linked) → start an Event (24h/3d/7d) → capture or pick a **photo or video** → see photos in seconds and videos upload reliably with a processing placeholder, while **playing their own video instantly from the local device file** → play others' videos via HLS+MP4 fallback → react, save (single + bulk multi-select), share, and **delete their own media** → receive the right push notifications (uploader gets the Web PubSub `video_ready` but not the FCM push for their own video) → see media auto-expire from the cloud → **upload a profile picture** that replaces initials everywhere → and get the first-sign-in **avatar welcome prompt** (Yes / Maybe Later / No Thanks, persisted server-side).
 
 ---
 
