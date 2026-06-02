@@ -16,7 +16,8 @@ Monetization is now **in scope for v1**. We are shipping a hard paywall fronted 
 - ✅ **Plan 3 (store review prompts) — complete + committed** (5 commits; 91/91 tests, release APK built).
 - ✅ **Plan 5 (docs/legal/pricing) — edits complete + committed.** Remaining: **Task 7 web deploy** of the legal pages before App Store submission.
 - ✅ **RevenueCat + Azure config — largely done this session** (see "Session 2026-06-02" below).
-- ⏳ **Plan 2 (Flutter paywall) now UNBLOCKED** (backend live + iOS SDK key captured) — not started. **Plan 4 (web)** not started. **Plan 6 promo grants** not done — **7-day trial clock is now running.**
+- ✅ **Plan 2 (Flutter paywall + trial gate) — code complete + committed (6 commits), analyze 54, 96/96 tests, release APK green.** iOS SDK key wired; Android `goog_` still placeholder (Play blocked). Remaining: on-device smoke + paywall publish.
+- ⏳ **Plan 4 (web)** not started. **Plan 6 promo grants** not done — **7-day trial clock is now running.**
 
 ---
 
@@ -124,8 +125,10 @@ Deployed live by the assistant (Azure + RC MCP). Both migration 012 and 013 appl
 
 All to be executed subagent-driven on this branch, two-stage review per task (spec → quality), same as Plan 1.
 
-### Plan 2 — Flutter paywall + trial gate  🟢 UNBLOCKED (ready to start)
-- **Was blocked by** Task 6 deploy + RC SDK keys — **both now satisfied**: backend live, iOS key `appl_OvhNypnojnQSEebpQtBikJYTHBa` captured. (Android `goog_` still pending → iOS-only build until Play unblocks.)
+### Plan 2 — Flutter paywall + trial gate  ✅ DONE 2026-06-02 (6 commits; analyze 54, 96/96 tests, release APK green)
+- SDK **v10** (`purchases_flutter`/`purchases_ui_flutter`). `EntitlementState` on `UserModel`; `RevenueCatService`; hosted paywall at `/paywall`; router gates on `effective_active` (allowlist `/paywall`,`/profile`,`/login`); nav hidden off-access; RC logIn/logOut in auth lifecycle; `refreshEntitlement` + optimistic-flag/30s reconcile (in a `StateNotifier`); Profile Manage/Restore + diagnostics. Version `1.0.0+5`.
+- **Deviations from the plan (review):** v10 has no `showManageSubscriptions()` → `managementURL` + `url_launcher`; `AuthNotifier` has no `Ref` → constructor-injected RC (`revenueCatServiceProvider` in `revenuecat_service.dart` to avoid an import cycle); optimistic reconcile moved out of the screen `State` into a `StateNotifier`; `UserModel.toJson` serializes entitlement (no cold-start paywall flash); `_configured` static; corrected `auth_state.dart` import path.
+- **Remaining (not code):** on-device smoke (device + published paywall + Apple sandbox tester); Android `goog_` SDK key still placeholder in `revenuecat_constants.dart` (Play blocked) → iOS-first.
 - Scope: `purchases_flutter` + `purchases_ui_flutter`, `EntitlementState` model + `UserModel.entitlement` parsing, `RevenueCatService` (configure/logIn/logOut/presentPaywall/restore/manage), paywall screen, **router gate on `effective_active`** (allowlist `/paywall`,`/profile`,`/login`), hide bottom nav off-access, lifecycle login/logout + `resetSession` logout, `Purchases.configure` in `performDeferredInit`, Profile Manage/Restore tiles + diagnostics section, **purchase-success optimistic flag + 30s auto-recovery**. Version bump `1.0.0+5`.
 
 ### Plan 3 — Flutter store review prompts  ✅ DONE 2026-06-02 (5 commits; 91/91 tests, analyze 54, release APK built)
@@ -203,6 +206,14 @@ Plans that parallelize freely: Plan 3 + Plan 5 can run now alongside Gene's conf
 - `268af53` prompt after successful photo upload
 - `0aaeb6a` prompt after successful video upload
 - `c6db13c` manual "Rate Clique Pix" Profile tile
+
+**Plan 2 (Flutter paywall + trial gate) — 2026-06-02:**
+- `4cdbcb3` RevenueCat deps + SDK key constants, bump to 1.0.0+5
+- `06a96db` EntitlementState model + UserModel parsing
+- `be705fe` RevenueCatService lifecycle wrapper (v10)
+- `ed01c85` paywall providers/screen + RC login-logout in auth lifecycle + refreshEntitlement
+- `9f8e5d2` router gate + /paywall route, hide nav off-access, configure RC at deferred init
+- `765fcc9` Profile Manage/Restore tiles + entitlement diagnostics section
 
 **Backend DEPLOYED live 2026-06-02** (no new commit — `func publish` of the committed branch + prod DB migrations 012/013). RevenueCat + Azure config changes are dashboard/cloud-side (no repo commits).
 

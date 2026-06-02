@@ -174,9 +174,14 @@ Blocked on Payments profile verification. Two issues stacked:
 
 ---
 
-## Phase 3 — Flutter mobile
+## Phase 3 — Flutter mobile ✅ DONE 2026-06-02 (Plan 2)
 
-Once Phase 1c keys are captured + Phase 2 backend deployed.
+Implemented + committed (6 commits): SDK v10, `EntitlementState` on `UserModel`, `RevenueCatService`, hosted paywall at `/paywall`, router gate on `effective_active`, nav hidden off-access, RC logIn/logOut in the auth lifecycle, `refreshEntitlement` + optimistic-flag/30s reconcile, Profile Manage/Restore + diagnostics, `version: 1.0.0+5`. **analyze 54 baseline · 96/96 tests · release APK green.**
+- ✅ iOS public SDK key wired into `app/lib/core/constants/revenuecat_constants.dart` (`appl_OvhNypnojnQSEebpQtBikJYTHBa`).
+- [ ] **Android `goog_` SDK key** — still a placeholder in `revenuecat_constants.dart` (Play blocked). iOS-first until then.
+- [ ] **On-device smoke** + `flutter build ipa --release` — needs a device + the published paywall + an Apple sandbox tester.
+
+Original checklist (all implemented unless noted above):
 
 - [ ] `flutter pub add purchases_flutter purchases_ui_flutter` (in `app/`)
 - [ ] Bump `version: 1.0.0+5` in `pubspec.yaml`
