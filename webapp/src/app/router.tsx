@@ -16,6 +16,8 @@ import { ThreadScreen } from '../features/messages/ThreadScreen';
 import { NotificationsScreen } from '../features/notifications/NotificationsScreen';
 import { ProfileScreen } from '../features/profile/ProfileScreen';
 import { NotFoundScreen } from './NotFoundScreen';
+import { EntitlementGuard } from '../auth/EntitlementGuard';
+import { SubscribeInAppScreen } from '../features/paywall/SubscribeInAppScreen';
 
 export const router = createBrowserRouter([
   // Public marketing surface. No auth check — shows "My Events →" in the nav
@@ -37,11 +39,24 @@ export const router = createBrowserRouter([
     ),
   },
 
-  // Authenticated app shell — pathless parent so children keep their full paths.
+  // Subscribe screen — authed but NOT entitlement-gated (this is where the
+  // EntitlementGuard sends users without effective access).
+  {
+    path: '/subscribe',
+    element: (
+      <AuthGuard>
+        <SubscribeInAppScreen />
+      </AuthGuard>
+    ),
+  },
+
+  // Authenticated app shell — entitlement-gated. Trial/subscribed users only.
   {
     element: (
       <AuthGuard>
-        <AppLayout />
+        <EntitlementGuard>
+          <AppLayout />
+        </EntitlementGuard>
       </AuthGuard>
     ),
     children: [
@@ -53,8 +68,18 @@ export const router = createBrowserRouter([
       { path: '/cliques', element: <CliquesListScreen /> },
       { path: '/cliques/:id', element: <CliqueDetailScreen /> },
       { path: '/notifications', element: <NotificationsScreen /> },
-      { path: '/profile', element: <ProfileScreen /> },
     ],
+  },
+
+  // Profile stays reachable WITHOUT entitlement (account self-service) — inside
+  // AuthGuard + AppLayout but outside EntitlementGuard.
+  {
+    element: (
+      <AuthGuard>
+        <AppLayout />
+      </AuthGuard>
+    ),
+    children: [{ path: '/profile', element: <ProfileScreen /> }],
   },
 
   { path: '*', element: <NotFoundScreen /> },
