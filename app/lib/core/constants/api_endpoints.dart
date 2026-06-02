@@ -4,6 +4,7 @@ class ApiEndpoints {
   // Auth
   static const authVerify = '/api/auth/verify';
   static const usersMe = '/api/users/me';
+  static const usersMeEntitlementRefresh = '/api/users/me/entitlement/refresh';
 
   // Avatar (profile picture)
   static const avatarUploadUrl = '/api/users/me/avatar/upload-url';

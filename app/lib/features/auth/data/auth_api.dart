@@ -18,4 +18,11 @@ class AuthApi {
   Future<void> deleteAccount() async {
     await dio.delete(ApiEndpoints.usersMe);
   }
+
+  /// POST /api/users/me/entitlement/refresh — backend re-syncs entitlement
+  /// from RevenueCat's REST API and returns the enriched user.
+  Future<Map<String, dynamic>> refreshEntitlement() async {
+    final response = await dio.post(ApiEndpoints.usersMeEntitlementRefresh);
+    return response.data['data'] as Map<String, dynamic>;
+  }
 }

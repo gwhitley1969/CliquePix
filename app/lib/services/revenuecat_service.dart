@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
 import 'package:purchases_ui_flutter/purchases_ui_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:clique_pix/core/constants/revenuecat_constants.dart';
 
 /// Thin wrapper over the RevenueCat SDK (v10). Lifecycle mirrors
@@ -98,3 +99,9 @@ class RevenueCatService {
     }
   }
 }
+
+/// Single shared RevenueCatService instance. Defined here (not in
+/// paywall_providers) so `auth_providers` can inject it without creating a
+/// circular import between the auth and paywall layers.
+final revenueCatServiceProvider =
+    Provider<RevenueCatService>((ref) => RevenueCatService());
