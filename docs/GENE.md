@@ -4,22 +4,26 @@ Personal tracking file for Gene. Pick up here when resuming the Clique Pix Plus 
 
 Full plan lives at `C:\Users\genew\.claude\plans\okay-this-is-what-inherited-deer.md`.
 
-Last updated mid-session, working on Phase 1c (RevenueCat dashboard).
+Last updated **2026-06-02** — backend deployed live + most RevenueCat/Azure config done this session (via MCP). See session summary below.
 
 ---
 
-## Where we are RIGHT NOW
+## ✅ Session 2026-06-02 — what the assistant completed
 
-Wiring the imported Apple products into the RevenueCat **`default` offering** so the SDK can find them.
+- **Backend DEPLOYED live:** migrations 012+013 applied to `pg-cliquepixdb` (14 users backfilled, `trial_null=0`), `func publish` succeeded, `/api/health` 200, webhook verified 200. The paywall gate is **live** now → existing users ride a 7-day trial; **Phase 6 promo grants must land within 7 days.**
+- **RevenueCat:** offering packages wired (`plus_monthly` → `$rc_monthly`, `plus_annual` → `$rc_annual`); webhook `whintgr721b9e5264` created + verified; iOS SDK key `appl_OvhNypnojnQSEebpQtBikJYTHBa` captured; `plus_annual` set to **$39.99 + 7-day intro offer** (live ASC had actually still been $29.99 with no intro offer until now); paywall AI **draft** `pw9ac01d9e31184633` created.
+- **Azure:** KV secrets + Function App settings (`REVENUECAT_WEBHOOK_SECRET`, `REVENUECAT_SECRET_API_KEY`) wired as Key Vault references and verified.
 
-### Immediate next step
+## Where we are RIGHT NOW — next clicks for Gene (all dashboard/store, no code)
 
-- [ ] **Product catalog → Offerings → `default`** → attach Apple products to packages
-  - Monthly package → `plus_monthly` (Clique Pix App Store)
-  - Annual / Yearly package → `plus_annual` (Clique Pix App Store)
-  - Replace any Test Store placeholders that the wizard pre-attached
-
-When that's done, packages are wired and the paywall has products to render.
+1. **Publish + attach the paywall draft** `pw9ac01d9e31184633` to the `default` offering (open the editor → Publish). RC has no API for this.
+   - Editor: https://app.revenuecat.com/projects/04f5314d/paywalls/pw9ac01d9e31184633/builder
+2. **Verify Transfer Behavior = "Keep with previous App User ID"** (Project Settings → General). The API can't read it.
+3. **Fix test-store prices**: `monthly` $9.99 → $3.99, `yearly` $79.99 → $39.99 (Products → Test Store). Real-device prices already come from the App Store products and are correct.
+4. **Submit** both IAPs (still `READY_TO_SUBMIT`) on the app version page.
+5. **Phase 6 promo grants** (reviewer + 4 testers) — urgent, 7-day clock.
+6. **Deploy legal pages** (Phase 5 — `webapp/public/docs/*` edited + committed; GH Actions deploy pending).
+7. **Android** (Phase 1b) — still blocked on the W-9/IRS item.
 
 ---
 
@@ -109,29 +113,14 @@ Blocked on Payments profile verification. Two issues stacked:
 - ✅ Both Apple products attached to `plus` entitlement
 - ✅ Apple Server Notification URL generated (paste back into Apple)
 
-### Still TODO on the iOS side
+### iOS side — status (updated 2026-06-02)
 
-- [ ] **Attach `plus_monthly` to the Monthly package** in the `default` offering ← current step
-- [ ] **Attach `plus_annual` to the Annual (Yearly) package** in the `default` offering
-- [ ] **Verify Transfer Behavior = "Keep with previous App User ID"** (Project Settings → General). If it's still "Transfer to new App User ID", change it. Critical — preserves the KEEP_ATTRIBUTION model for shared Apple ID families
-- [ ] **Configure webhook** (Project Settings → Webhooks → Add webhook):
-  - URL: `https://api.clique-pix.com/api/internal/revenuecat-webhook`
-  - Authorization header: `Bearer <generate random 32+ char secret>`
-  - Save that secret — it becomes Azure Key Vault `revenuecat-webhook-secret` in Phase 1d
-- [ ] **Generate Secret API Key** (Project Settings → API Keys → Secret keys → + Create):
-  - Name: `Clique Pix backend`
-  - Permissions: Read & Write on Subscribers + Entitlements
-  - Save the key (`sk_...`) — becomes Azure Key Vault `revenuecat-secret-api-key` in Phase 1d
-  - **Shown ONCE** — same as Apple's .p8
-- [ ] **Capture production iOS public SDK key** (`appl_...`) from API Keys page
-  - Goes into `app/lib/core/constants/revenuecat_constants.dart` in Phase 3
-- [ ] **Design Paywalls v2 paywall** (Paywalls → Create):
-  - Background dark `#0E1525`, gradient header `#00C2D1 → #2563EB → #7C3AED`
-  - Headline "Clique Pix Plus", subhead "Unlimited private group sharing"
-  - Package buttons (annual highlighted as "Best Value — 7-Day Free Trial")
-  - Required disclaimer block (auto-renew language + Terms + Privacy links)
-  - Restore Purchases button
-  - Hero image: `app/assets/icon.png` or a screenshot
+- [x] **Attach `plus_monthly` → Monthly package** + **`plus_annual` → Annual (Yearly) package** in the `default` offering. *(done via MCP — App Store products attached alongside the test-store ones)*
+- [ ] **Verify Transfer Behavior = "Keep with previous App User ID"** (Project Settings → General). **← STILL TODO; the API can't read this, so Gene must check the dashboard.**
+- [x] **Webhook configured** → `https://api.clique-pix.com/api/internal/revenuecat-webhook`, `Bearer <secret>` (secret in Key Vault). Verified **200**. *(`whintgr721b9e5264`)*
+- [x] **Secret API Key** generated → Key Vault `revenuecat-secret-api-key`.
+- [x] **iOS public SDK key** captured → `appl_OvhNypnojnQSEebpQtBikJYTHBa`. *(still must land in `app/lib/core/constants/revenuecat_constants.dart`, Phase 3)*
+- [~] **Paywalls v2 paywall** — AI **draft `pw9ac01d9e31184633`** created (dark `#0E1525`, gradient header/CTA, annual "Best Value — 7-Day Free Trial" badge, benefits list, auto-renew disclaimer, Restore). **← STILL TODO: review + Publish + attach to the `default` offering in the dashboard (no publish API).**
 
 ### Android side (do after Google Play Payments is Active and service account ready)
 
@@ -143,18 +132,12 @@ Blocked on Payments profile verification. Two issues stacked:
 
 ---
 
-## Phase 1d — Azure Key Vault + Function App settings
+## Phase 1d — Azure Key Vault + Function App settings ✅ DONE 2026-06-02
 
-Once Phase 1c gives us the webhook secret + Secret API Key:
-
-- [ ] Add to Key Vault `kv-cliquepix-prod`:
-  - `revenuecat-webhook-secret` (the random bearer value pasted into RC webhook config)
-  - `revenuecat-secret-api-key` (the `sk_...` from RC)
-- [ ] Add app settings to Function App `func-cliquepix-fresh` as Key Vault references:
-  - `REVENUECAT_WEBHOOK_SECRET`
-  - `REVENUECAT_SECRET_API_KEY`
-- [ ] Restart Function App to pick up the new settings
-- [ ] Smoke test: in RC dashboard → Webhooks → "Send test event" → verify 200 OK + DB row updated
+- [x] Key Vault `kv-cliquepix-prod`: `revenuecat-webhook-secret` + `revenuecat-secret-api-key` present.
+- [x] Function App `func-cliquepix-fresh` settings as Key Vault references: `REVENUECAT_WEBHOOK_SECRET`, `REVENUECAT_SECRET_API_KEY`. MI confirmed `Key Vault Secrets User` on the vault → references resolve.
+- [x] Restarted (the app-setting change triggers a restart).
+- [x] Smoke verified via self-sent curl (`--ssl-no-revoke`): webhook **200** on correct Bearer, **401** on bad/missing. *(Optional: also click RC "Send test event" to confirm RC-side delivery.)*
 
 ---
 
@@ -175,19 +158,19 @@ Once Phase 1c gives us the webhook secret + Secret API Key:
 - ✅ `POST /api/users/me/entitlement/refresh` endpoint
 - ✅ 164/164 existing tests still green, tsc clean
 
-### Still TODO
+### Deploy — DONE 2026-06-02
 
-- [ ] Write new jest tests for webhook + entitlement service (`backend/src/__tests__/revenuecatWebhook.test.ts`)
-  - 9 event types + unknown-fallback + idempotency dedup + out-of-order timestamp + auth-fail
-- [ ] Add 2 new operation declarations to `bicep/apim/main.bicep`:
-  - `POST /api/internal/revenuecat-webhook`
-  - `POST /api/users/me/entitlement/refresh`
-  - **NO** rate-limit (per the 6-incident history)
-- [ ] Run `npm run build && npm test` — target ~190/190 green
-- [ ] Deploy backend: `func azure functionapp publish func-cliquepix-fresh`
-- [ ] Apply migration 012 to `pg-cliquepixdb`
+- [x] **Deploy backend**: `func azure functionapp publish func-cliquepix-fresh` — app **Running**.
+- [x] **Apply migration 012 (+ 013)** to `pg-cliquepixdb` — 14 users backfilled, `trial_null=0`.
+- [x] `npm run build && npm test` — **174/174** green, tsc clean.
+- [x] Webhook route confirmed live through `api.clique-pix.com` (200 on correct Bearer).
 
-**Deploy order rule: backend deploys BEFORE mobile build hits TestFlight**, otherwise old backend returns no `entitlement` field and mobile crashes on null.
+### Still TODO (non-blocking)
+
+- [ ] Extra jest tests for webhook event types + idempotency dedup + out-of-order + auth-fail (`revenuecatWebhook.test.ts`).
+- [ ] Add 2 operation declarations to `bicep/apim/main.bicep` (`/internal/revenuecat-webhook`, `/users/me/entitlement/refresh`) for IaC parity — **NO** rate-limit (6-incident history). APIM already routes them.
+
+**Deploy order rule (satisfied): backend deployed BEFORE the Plan 2 mobile build hits TestFlight**, so the `entitlement` field exists and mobile won't null-crash.
 
 ---
 
@@ -224,21 +207,13 @@ Once Phase 1c keys are captured + Phase 2 backend deployed.
 
 ---
 
-## Phase 5 — Privacy + Terms
+## Phase 5 — Privacy + Terms ✅ EDITED + COMMITTED 2026-06-02 (deploy pending)
 
-Required by Apple Guideline 3.1.2 + Google Play Subscriptions policy. Must ship to `clique-pix.com` BEFORE App Store / Play Store review.
+Required by Apple Guideline 3.1.2 + Google Play Subscriptions policy. Must ship to `clique-pix.com` BEFORE App Store / Play Store review. **Files are `webapp/public/docs/*` (not `website/docs/*`).**
 
-- [ ] Update `website/docs/privacy.html`:
-  - Subscription billing data section
-  - RevenueCat as subprocessor (with link to `revenuecat.com/privacy/`)
-- [ ] Update `website/docs/terms.html`:
-  - Subscription title (Clique Pix Plus), length (Monthly / Annual), price ($3.99 / $39.99)
-  - 7-day free trial on annual for new subscribers
-  - Auto-renewal language ("renews unless canceled at least 24 hours before...")
-  - "Payment will be charged to your Apple ID / Google Account at confirmation of purchase"
-  - "Account will be charged for renewal within 24 hours prior to the end of the current period"
-  - "Manage and cancel in App Store / Google Play settings"
-- [ ] Deploy webapp via GH Actions
+- [x] `webapp/public/docs/privacy.html`: subscription/billing data section + RevenueCat subprocessor link (commit `432e4f5`).
+- [x] `webapp/public/docs/terms.html`: subscription terms — Clique Pix Plus, $3.99/$39.99, 7-day trial, auto-renew/charge/cancel disclosures (commit `83aaafd`). Effective dates bumped to 2026-06-02.
+- [ ] **Deploy webapp via GH Actions** (= PLAN.md Task 7) — **← STILL TODO; must be live on `clique-pix.com/docs/*` BEFORE App Store submission (Apple checks the URLs).**
 
 ---
 

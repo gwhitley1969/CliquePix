@@ -12,9 +12,35 @@ Monetization is now **in scope for v1**. We are shipping a hard paywall fronted 
 
 - ✅ **Design spec** approved + committed.
 - ✅ **5 implementation plans** written + committed.
-- ✅ **Plan 1 (backend trial) — code complete, reviewed (spec ✅ + quality ✅), 174/174 tests green, build clean.** NOT yet deployed.
-- ✅ **Plan 5 (docs/legal/pricing) — edits complete + committed** (CLAUDE.md, PRD §5.16/§5.17/§13, ARCHITECTURE, privacy + terms HTML, repo `$39.99` sweep). Remaining: Gene's store-side price change + **Task 7 web deploy** of the legal pages before App Store submission.
-- ⏳ **Plans 2–4** not started. **Gene’s manual config + Task 6 deploy gate most of them** (see Dependencies).
+- ✅ **Plan 1 (backend trial) — code complete AND DEPLOYED LIVE 2026-06-02.** Migrations 012+013 applied to prod (14 users backfilled, `trial_null=0`), `func publish` succeeded, `/api/health` 200, webhook verified. 174/174 tests.
+- ✅ **Plan 3 (store review prompts) — complete + committed** (5 commits; 91/91 tests, release APK built).
+- ✅ **Plan 5 (docs/legal/pricing) — edits complete + committed.** Remaining: **Task 7 web deploy** of the legal pages before App Store submission.
+- ✅ **RevenueCat + Azure config — largely done this session** (see "Session 2026-06-02" below).
+- ⏳ **Plan 2 (Flutter paywall) now UNBLOCKED** (backend live + iOS SDK key captured) — not started. **Plan 4 (web)** not started. **Plan 6 promo grants** not done — **7-day trial clock is now running.**
+
+---
+
+## ✅ Session 2026-06-02 — completed (assistant, via Azure + RevenueCat MCP)
+
+**Backend deploy (Task 6 / Phase 2 deploy) — DONE & verified live:**
+- Migrations **012 + 013** applied to `pg-cliquepixdb` (14 users backfilled → `trial_null = 0`; nobody locked out).
+- `npm run build` clean, **174/174** jest, `func azure functionapp publish func-cliquepix-fresh` succeeded, app **Running**.
+- Smoke: `GET /api/health` → 200; webhook 401 on bad/missing auth, **200** on correct Bearer (KV secret resolves). (Used a self-sent curl with `--ssl-no-revoke` instead of the dashboard "Send test event".)
+- ⚠️ The paywall gate is **live** now — every existing user rides the backfilled 7-day trial. **Plan 6 promo grants must land within 7 days** or testers hit 402s.
+
+**Azure (Function App + Key Vault) — DONE:**
+- KV secrets present: `revenuecat-webhook-secret`, `revenuecat-secret-api-key` (Gene added).
+- Function App `func-cliquepix-fresh` settings wired as Key Vault references: `REVENUECAT_WEBHOOK_SECRET`, `REVENUECAT_SECRET_API_KEY`. MI confirmed `Key Vault Secrets User`.
+
+**RevenueCat (project `proj04f5314d`) — DONE:**
+- `plus_monthly` → `$rc_monthly`, `plus_annual` → `$rc_annual` attached in `default` offering (App Store products, alongside test-store).
+- Webhook `whintgr721b9e5264` → `api.clique-pix.com/api/internal/revenuecat-webhook` (all envs/events, Bearer secret) — verified 200.
+- iOS public SDK key captured: `appl_OvhNypnojnQSEebpQtBikJYTHBa`.
+- `plus_annual` price **$29.99 → $39.99** (US + 6 available territories equalized) **+ 7-day intro offer added** — both were wrong/missing in live App Store Connect; fixed via MCP.
+- Paywall AI **draft** `pw9ac01d9e31184633` created on `default` offering — **UNATTACHED; Gene must publish + attach in the dashboard** (RC has no publish/attach API).
+
+**Still REMAINING (all dashboard/store, no code):** publish + attach the paywall; verify **Transfer Behavior = KEEP_ATTRIBUTION** (API can't read it); **submit** both IAPs; **Plan 6 promo grants** (urgent); fix **test-store prices** ($9.99/$79.99 → $3.99/$39.99); **Task 7** deploy legal pages; **Android** Play setup (blocked on W-9).
+**Code remaining:** **Plan 2** (Flutter paywall, now unblocked) + **Plan 4** (web gating).
 
 ---
 
@@ -54,25 +80,25 @@ Monetization is now **in scope for v1**. We are shipping a hard paywall fronted 
 ## GENE'S MANUAL CONFIG (in progress / required) — no code can replace these
 
 ### A. Environment Gene is setting up now
-- [ ] **Add RevenueCat MCP server** (so the assistant can help inspect/verify dashboard state).
-- [ ] **Log into the Azure subscription** (so the assistant can run/verify the Task 6 deploy + DB migration).
+- [x] **Add RevenueCat MCP server** — done (assistant used it this session).
+- [x] **Log into the Azure subscription** — done (assistant ran Task 6 + verified).
 
-### B. RevenueCat dashboard — Phase 1c (from `docs/GENE.md`, IN PROGRESS)
-- [ ] Attach `plus_monthly` → Monthly package and `plus_annual` → Annual package in the `default` offering.
-- [ ] Verify Transfer Behavior = **Keep with previous App User ID** (`KEEP_ATTRIBUTION`).
-- [ ] Configure webhook → `https://api.clique-pix.com/api/internal/revenuecat-webhook` with a `Bearer <secret>`; save the secret for Key Vault.
-- [ ] Generate **Secret API Key** (`sk_...`) → save for Key Vault.
-- [ ] Capture **iOS public SDK key** (`appl_...`) and (later) **Android public SDK key** (`goog_...`) → these go into `app/lib/core/constants/revenuecat_constants.dart` (Plan 2, Task 1).
-- [ ] Design the Paywalls v2 paywall (dark `#0E1525`, brand gradient header, annual highlighted "Best Value — 7-Day Free Trial", disclaimer block, Restore button).
+### B. RevenueCat dashboard — Phase 1c
+- [x] Attach `plus_monthly` → Monthly package and `plus_annual` → Annual package in the `default` offering. **(done via MCP)**
+- [ ] Verify Transfer Behavior = **Keep with previous App User ID** (`KEEP_ATTRIBUTION`). **← STILL TODO — the API can't read this; Gene must check Project Settings.**
+- [x] Configure webhook → `https://api.clique-pix.com/api/internal/revenuecat-webhook` with `Bearer <secret>`. **(webhook `whintgr721b9e5264` created + verified 200; secret in Key Vault)**
+- [x] Generate **Secret API Key** (`sk_...`) → saved to Key Vault as `revenuecat-secret-api-key`.
+- [x] Capture **iOS public SDK key** → `appl_OvhNypnojnQSEebpQtBikJYTHBa` (still needs to land in `revenuecat_constants.dart`, Plan 2). Android `goog_...` later (blocked).
+- [~] Paywalls v2 paywall — **AI draft `pw9ac01d9e31184633` created** (dark, gradient, annual badge, disclaimer, Restore). **← Gene must publish + attach to `default` offering in the dashboard.**
 
-### C. Pricing change (cheap now — do before App Store submission)
-- [ ] App Store Connect → `plus_annual` price **$29.99 → $39.99** (it's "Ready to Submit," not live).
-- [ ] When the Play subscription is created, set annual to **$39.99** from the start.
+### C. Pricing change
+- [x] `plus_annual` price **$29.99 → $39.99** + **7-day intro offer** — done via MCP (US + 6 territories equalized). Live ASC was actually still $29.99 with no intro offer; now fixed.
+- [ ] When the Play subscription is created, set annual to **$39.99** from the start. (blocked on Play)
 
-### D. Azure Key Vault + Function App (Phase 1d — after RC webhook secret + Secret API Key exist)
-- [ ] Add to `kv-cliquepix-prod`: `revenuecat-webhook-secret`, `revenuecat-secret-api-key`.
-- [ ] Add Function App `func-cliquepix-fresh` settings (Key Vault refs): `REVENUECAT_WEBHOOK_SECRET`, `REVENUECAT_SECRET_API_KEY`. Restart.
-- [ ] Smoke: RC dashboard → "Send test event" → 200 OK + DB row updated.
+### D. Azure Key Vault + Function App (Phase 1d) — DONE
+- [x] Key Vault `kv-cliquepix-prod`: `revenuecat-webhook-secret`, `revenuecat-secret-api-key` present.
+- [x] Function App `func-cliquepix-fresh` settings (Key Vault refs): `REVENUECAT_WEBHOOK_SECRET`, `REVENUECAT_SECRET_API_KEY`. Restarted.
+- [x] Smoke verified (self-sent curl): webhook 200 on correct Bearer, 401 on bad. (Optional: also click RC "Send test event" for RC-side delivery confirmation.)
 
 ### E. Google Play (Phase 1b — PAUSED on payments/tax verification, per GENE.md)
 - [ ] Resolve IRS/EIN name mismatch (call IRS Business line, get Form 147c) OR submit W-9 as `BlueBuildApps, LLC` to unblock.
@@ -82,15 +108,13 @@ Monetization is now **in scope for v1**. We are shipping a hard paywall fronted 
 
 ---
 
-## TASK 6 — Backend deploy (ops; needs Azure login from step A)
+## TASK 6 — Backend deploy ✅ DONE 2026-06-02
 
-Plan 1 code is committed but NOT live. Once Azure is reachable:
-- [ ] Apply `backend/src/shared/db/migrations/013_user_trial.sql` to `pg-cliquepixdb`. Verify:
-  - `trial_ends_at` column exists on `users`.
-  - `SELECT count(*) FROM users WHERE trial_ends_at IS NULL;` → **0** (backfill covered everyone).
-- [ ] Deploy: from `backend/`, `func azure functionapp publish func-cliquepix-fresh`. Confirm `GET https://api.clique-pix.com/api/health` → 200.
-- [ ] Smoke: `GET /api/users/me` with a trial-user token → `entitlement.in_trial: true`, `effective_active: true`; a gated endpoint (e.g. `GET /api/events`) returns 200 (not 402).
-- [ ] **Also deploy the already-built RevenueCat backend (migration 012 + webhook)** if it isn't live yet — Plan 1 assumed 012 ships with/before 013. Verify migration 012 is applied too.
+Deployed live by the assistant (Azure + RC MCP). Both migration 012 and 013 applied; full backend (entitlement + webhook + trial) published.
+- [x] Migrations **012 + 013** applied to `pg-cliquepixdb`. `trial_ends_at` present; `SELECT count(*) WHERE trial_ends_at IS NULL` → **0** (14 users backfilled).
+- [x] Deployed: `func azure functionapp publish func-cliquepix-fresh`; `GET https://api.clique-pix.com/api/health` → **200**; app **Running**.
+- [x] Smoke: webhook 401 on bad/missing auth, **200** on correct Bearer. (The `/api/users/me` trial-token check is left for Gene on-device — needs a real user JWT.)
+- [x] Migration 012 (RevenueCat columns) confirmed applied alongside 013.
 
 > **Hard rule:** backend (012 + 013) MUST be deployed BEFORE the Plan 2 mobile build reaches TestFlight/Play. Old backend returns no `entitlement` object → mobile null-crash.
 
@@ -100,15 +124,14 @@ Plan 1 code is committed but NOT live. Once Azure is reachable:
 
 All to be executed subagent-driven on this branch, two-stage review per task (spec → quality), same as Plan 1.
 
-### Plan 2 — Flutter paywall + trial gate  ⏳ BLOCKED
-- **Blocked by:** Task 6 deploy live **and** RC public SDK keys captured (Config B).
-- Code can be drafted with placeholder keys (`appl_...`/`goog_...` in `revenuecat_constants.dart`), but cannot build a real binary or be verified until keys land.
+### Plan 2 — Flutter paywall + trial gate  🟢 UNBLOCKED (ready to start)
+- **Was blocked by** Task 6 deploy + RC SDK keys — **both now satisfied**: backend live, iOS key `appl_OvhNypnojnQSEebpQtBikJYTHBa` captured. (Android `goog_` still pending → iOS-only build until Play unblocks.)
 - Scope: `purchases_flutter` + `purchases_ui_flutter`, `EntitlementState` model + `UserModel.entitlement` parsing, `RevenueCatService` (configure/logIn/logOut/presentPaywall/restore/manage), paywall screen, **router gate on `effective_active`** (allowlist `/paywall`,`/profile`,`/login`), hide bottom nav off-access, lifecycle login/logout + `resetSession` logout, `Purchases.configure` in `performDeferredInit`, Profile Manage/Restore tiles + diagnostics section, **purchase-success optimistic flag + 30s auto-recovery**. Version bump `1.0.0+5`.
 
-### Plan 3 — Flutter store review prompts  ✅ READY NOW (no blockers)
+### Plan 3 — Flutter store review prompts  ✅ DONE 2026-06-02 (5 commits; 91/91 tests, analyze 54, release APK built)
 - Add `in_app_review`; `ReviewPromptService` (unit-tested eligibility); hook photo (`camera_capture_screen.dart` after `confirmUpload`) + video (`video_upload_screen.dart` after `notifier.succeed`); "Rate Clique Pix" Profile tile; telemetry.
 
-### Plan 4 — Web subscription gating  ⏳ code now, verify after Task 6
+### Plan 4 — Web subscription gating  🟢 UNBLOCKED (backend live — can build + verify now)
 - `User.entitlement` (camelCase post-camelize), `EntitlementGuard` → `/subscribe`, `SubscribeInAppScreen`, route wiring (`/profile` + `/subscribe` exempt), Profile "Manage Subscription" link.
 
 ### Plan 5 — Docs / legal / pricing $39.99  ✅ DONE (edits committed 2026-06-02; web deploy + store price change pending)
@@ -173,6 +196,15 @@ Plans that parallelize freely: Plan 3 + Plan 5 can run now alongside Gene's conf
 - (`b61b7d2` separately: CLAUDE.md trim of 5 reference sections — unrelated to Plan 5)
 
 **Plan 5 docs/HTML: complete + committed. NOT deployed (Task 7 SWA deploy pending).**
+
+**Plan 3 (store review prompts) — 2026-06-02:**
+- `41c7403` add in_app_review dependency
+- `c04f504` ReviewPromptService + unit-tested eligibility
+- `268af53` prompt after successful photo upload
+- `0aaeb6a` prompt after successful video upload
+- `c6db13c` manual "Rate Clique Pix" Profile tile
+
+**Backend DEPLOYED live 2026-06-02** (no new commit — `func publish` of the committed branch + prod DB migrations 012/013). RevenueCat + Azure config changes are dashboard/cloud-side (no repo commits).
 
 ---
 
