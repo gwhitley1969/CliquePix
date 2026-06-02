@@ -104,6 +104,7 @@ export function shouldPromptForAvatar(
  * Entitlement fields (migration 012) are tolerated as optional so callers
  * that haven't been updated yet still compile — the response just omits
  * the entitlement block, which the client interprets as "inactive."
+ * `trial_ends_at` (migration 013) is likewise optional for the same reason.
  */
 export interface AuthUserRow {
   id: string;

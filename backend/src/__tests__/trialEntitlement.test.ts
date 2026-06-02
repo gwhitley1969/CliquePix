@@ -1,4 +1,7 @@
 import { buildEntitlementResponse, AuthUserRow } from '../shared/services/avatarEnricher';
+import { requireActiveEntitlement } from '../shared/middleware/requireActiveEntitlement';
+import type { AuthenticatedUser } from '../shared/middleware/authMiddleware';
+import { SubscriptionRequiredError } from '../shared/utils/errors';
 
 // Minimal row factory — only the fields buildEntitlementResponse reads.
 function row(overrides: Partial<AuthUserRow> = {}): AuthUserRow {
@@ -59,11 +62,13 @@ describe('buildEntitlementResponse — trial', () => {
     expect(r.trial_ends_at).toBeNull();
     expect(r.effective_active).toBe(false);
   });
-});
 
-import { requireActiveEntitlement } from '../shared/middleware/requireActiveEntitlement';
-import type { AuthenticatedUser } from '../shared/middleware/authMiddleware';
-import { SubscriptionRequiredError } from '../shared/utils/errors';
+  it('treats trial_ends_at equal to now as expired', () => {
+    const r = buildEntitlementResponse(row({ trial_ends_at: NOW }), NOW);
+    expect(r.in_trial).toBe(false);
+    expect(r.effective_active).toBe(false);
+  });
+});
 
 // Minimal AuthenticatedUser — requireActiveEntitlement only reads two fields.
 function authUser(overrides: Partial<AuthenticatedUser> = {}): AuthenticatedUser {
@@ -118,5 +123,10 @@ describe('requireActiveEntitlement — trial', () => {
     expect(() => requireActiveEntitlement(authUser(), NOW2)).toThrow(
       SubscriptionRequiredError,
     );
+  });
+
+  it('throws when trial_ends_at equals now (boundary closed)', () => {
+    expect(() => requireActiveEntitlement(authUser({ trialEndsAt: NOW2 }), NOW2))
+      .toThrow(SubscriptionRequiredError);
   });
 });
