@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -7,6 +8,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/upload_url_silent_retry.dart';
 import '../../../services/telemetry_service.dart';
+import '../../../services/review_prompt_service.dart';
 import '../domain/local_pending_video.dart';
 import 'videos_providers.dart';
 
@@ -92,6 +94,10 @@ class _VideoUploadScreenState extends ConsumerState<VideoUploadScreen> {
         },
       );
       notifier.succeed(result.videoId, previewUrl: result.previewUrl);
+      unawaited(ReviewPromptService.recordSuccessfulUploadAndMaybePrompt(
+        track: (event, {extra}) =>
+            ref.read(telemetryServiceProvider).record(event, extra: extra),
+      ));
       localNotifier.updateStage(
         widget.localTempId,
         UploadStage.processing,
