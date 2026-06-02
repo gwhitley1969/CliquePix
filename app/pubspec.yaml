@@ -1,7 +1,7 @@
 name: clique_pix
 description: Private, event-based photo sharing app.
 publish_to: 'none'
-version: 1.0.0+4
+version: 1.0.0+5
 
 environment:
   sdk: '>=3.2.0 <4.0.0'
@@ -82,6 +82,8 @@ dependencies:
   timezone: ^0.9.3
   flutter_timezone: ^4.0.0
   in_app_review: ^2.0.12
+  purchases_flutter: ^10.2.0
+  purchases_ui_flutter: ^10.2.0
 
 dev_dependencies:
   flutter_test:
