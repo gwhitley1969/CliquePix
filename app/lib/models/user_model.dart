@@ -1,3 +1,5 @@
+import 'package:clique_pix/features/paywall/domain/entitlement_state.dart';
+
 class UserModel {
   final String id;
   final String displayName;
@@ -8,6 +10,7 @@ class UserModel {
   final int avatarFramePreset;
   final bool shouldPromptForAvatar;
   final DateTime createdAt;
+  final EntitlementState entitlement;
 
   const UserModel({
     required this.id,
@@ -19,6 +22,7 @@ class UserModel {
     this.avatarFramePreset = 0,
     this.shouldPromptForAvatar = false,
     required this.createdAt,
+    this.entitlement = EntitlementState.none,
   });
 
   /// Stable cache key for `CachedNetworkImageProvider` so the 1-hour SAS
@@ -42,6 +46,9 @@ class UserModel {
       avatarFramePreset: (json['avatar_frame_preset'] as num?)?.toInt() ?? 0,
       shouldPromptForAvatar: (json['should_prompt_for_avatar'] as bool?) ?? false,
       createdAt: DateTime.parse(json['created_at'] as String),
+      entitlement: json['entitlement'] == null
+          ? EntitlementState.none
+          : EntitlementState.fromJson(json['entitlement'] as Map<String, dynamic>),
     );
   }
 
@@ -55,6 +62,7 @@ class UserModel {
     'avatar_frame_preset': avatarFramePreset,
     'should_prompt_for_avatar': shouldPromptForAvatar,
     'created_at': createdAt.toIso8601String(),
+    'entitlement': entitlement.toJson(),
   };
 
   UserModel copyWith({
@@ -67,6 +75,7 @@ class UserModel {
     int? avatarFramePreset,
     bool? shouldPromptForAvatar,
     DateTime? createdAt,
+    EntitlementState? entitlement,
     bool clearAvatar = false,
   }) {
     return UserModel(
@@ -79,6 +88,7 @@ class UserModel {
       avatarFramePreset: avatarFramePreset ?? this.avatarFramePreset,
       shouldPromptForAvatar: shouldPromptForAvatar ?? this.shouldPromptForAvatar,
       createdAt: createdAt ?? this.createdAt,
+      entitlement: entitlement ?? this.entitlement,
     );
   }
 }
