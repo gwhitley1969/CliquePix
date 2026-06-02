@@ -17,7 +17,8 @@ Monetization is now **in scope for v1**. We are shipping a hard paywall fronted 
 - ✅ **Plan 5 (docs/legal/pricing) — edits complete + committed.** Remaining: **Task 7 web deploy** of the legal pages before App Store submission.
 - ✅ **RevenueCat + Azure config — largely done this session** (see "Session 2026-06-02" below).
 - ✅ **Plan 2 (Flutter paywall + trial gate) — code complete + committed (6 commits), analyze 54, 96/96 tests, release APK green.** iOS SDK key wired; Android `goog_` still placeholder (Play blocked). Remaining: on-device smoke + paywall publish.
-- ⏳ **Plan 4 (web)** not started. **Plan 6 promo grants** not done — **7-day trial clock is now running.**
+- ✅ **Plan 4 (web subscription gating) — done + committed (3 commits), lint clean, build green.**
+- ⏳ **Plan 6 promo grants** not done — **7-day trial clock is now running.** **All 5 implementation plans (1–5) are now complete**; only Plan 6 + manual store/dashboard steps remain.
 
 ---
 
@@ -134,8 +135,9 @@ All to be executed subagent-driven on this branch, two-stage review per task (sp
 ### Plan 3 — Flutter store review prompts  ✅ DONE 2026-06-02 (5 commits; 91/91 tests, analyze 54, release APK built)
 - Add `in_app_review`; `ReviewPromptService` (unit-tested eligibility); hook photo (`camera_capture_screen.dart` after `confirmUpload`) + video (`video_upload_screen.dart` after `notifier.succeed`); "Rate Clique Pix" Profile tile; telemetry.
 
-### Plan 4 — Web subscription gating  🟢 UNBLOCKED (backend live — can build + verify now)
-- `User.entitlement` (camelCase post-camelize), `EntitlementGuard` → `/subscribe`, `SubscribeInAppScreen`, route wiring (`/profile` + `/subscribe` exempt), Profile "Manage Subscription" link.
+### Plan 4 — Web subscription gating  ✅ DONE 2026-06-02 (3 commits; lint clean, build green)
+- `User.entitlement` (camelCase), `EntitlementGuard` → `/subscribe`, `SubscribeInAppScreen` (store badges + "subscribe in the mobile app"), router split (entitlement-gated shell + ungated `/profile` + `/subscribe`), Profile "Manage Subscription" link. No web purchase flow.
+- Allowlist: `/subscribe`, `/profile`, `/login`, `/docs/*`, `/`. **Remaining:** ships with the web client (Task 7 SWA deploy).
 
 ### Plan 5 — Docs / legal / pricing $39.99  ✅ DONE (edits committed 2026-06-02; web deploy + store price change pending)
 - CLAUDE.md (remove "no monetization", add paywall section + guardrail + review-prompt note), PRD §5.16/§5.17/§13, ARCHITECTURE users table + auth-response section, **privacy.html + terms.html subscription disclosures**, repo-wide `$29.99 → $39.99` sweep.
@@ -214,6 +216,11 @@ Plans that parallelize freely: Plan 3 + Plan 5 can run now alongside Gene's conf
 - `ed01c85` paywall providers/screen + RC login-logout in auth lifecycle + refreshEntitlement
 - `9f8e5d2` router gate + /paywall route, hide nav off-access, configure RC at deferred init
 - `765fcc9` Profile Manage/Restore tiles + entitlement diagnostics section
+
+**Plan 4 (web subscription gating) — 2026-06-02:**
+- `81d0256` entitlement on User + EntitlementGuard + SubscribeInAppScreen
+- `ce4ad6e` gate app shell on entitlement; /profile + /subscribe exempt
+- `9b03a75` Manage Subscription link in Profile
 
 **Backend DEPLOYED live 2026-06-02** (no new commit — `func publish` of the committed branch + prod DB migrations 012/013). RevenueCat + Azure config changes are dashboard/cloud-side (no repo commits).
 

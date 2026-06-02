@@ -203,12 +203,13 @@ Original checklist (all implemented unless noted above):
 
 ---
 
-## Phase 4 — Web client (minimal, mobile-first)
+## Phase 4 — Web client (minimal, mobile-first) ✅ DONE 2026-06-02 (Plan 4)
 
-- [ ] Update `webapp/src/models/index.ts` (add `entitlement`)
-- [ ] Create `webapp/src/features/paywall/SubscribeInAppScreen.tsx`
-- [ ] Update web router (redirect to `/subscribe` if `!entitlement.active`)
-- [ ] Update `webapp/src/features/profile/ProfileScreen.tsx` (Manage Subscription link)
+- [x] `webapp/src/models/index.ts` — added `Entitlement` + `entitlement?` (camelCase).
+- [x] `webapp/src/auth/EntitlementGuard.tsx` + `webapp/src/features/paywall/SubscribeInAppScreen.tsx` created.
+- [x] Web router gates the app shell on `effective_active`; `/profile` + `/subscribe` exempt; allowlist `/subscribe`,`/profile`,`/login`,`/docs/*`,`/`.
+- [x] `ProfileScreen.tsx` — "Manage Subscription" link.
+- lint clean, build green. **Deploys with the web client (Task 7 SWA deploy).**
 
 ---
 
