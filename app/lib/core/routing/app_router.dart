@@ -26,20 +26,23 @@ import '../../features/dm/presentation/dm_member_picker.dart';
 import '../../app/shell_screen.dart';
 import '../../features/auth/domain/auth_state.dart';
 import '../../features/auth/presentation/auth_providers.dart';
+import '../../features/paywall/presentation/paywall_screen.dart';
+import '../../features/paywall/presentation/paywall_providers.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   final authState = ref.watch(authStateProvider);
+  final hasAccess = ref.watch(hasAppAccessProvider);
 
   return GoRouter(
     initialLocation: '/events',
     redirect: (context, state) {
       final isAuthenticated = authState is AuthAuthenticated;
-      final isLoginRoute = state.matchedLocation == '/login';
+      final loc = state.matchedLocation;
+      final isLoginRoute = loc == '/login';
 
       if (!isAuthenticated && !isLoginRoute) {
-        final redirect = state.matchedLocation;
-        if (redirect != '/events') {
-          return '/login?redirect=$redirect';
+        if (loc != '/events') {
+          return '/login?redirect=$loc';
         }
         return '/login';
       }
@@ -47,12 +50,28 @@ final routerProvider = Provider<GoRouter>((ref) {
         final redirect = state.uri.queryParameters['redirect'];
         return redirect ?? '/events';
       }
+
+      // Paywall gate: authenticated but no access (trial lapsed + unsubscribed)
+      // → paywall, except the allowlist. Trial/subscribed users (effective
+      // access) pass through, preserving the invite loop during the trial.
+      const allowlist = {'/paywall', '/profile', '/login'};
+      if (isAuthenticated && !hasAccess && !allowlist.contains(loc)) {
+        return '/paywall';
+      }
+      // Access regained while sitting on the paywall → into the app.
+      if (isAuthenticated && hasAccess && loc == '/paywall') {
+        return '/events';
+      }
       return null;
     },
     routes: [
       GoRoute(
         path: '/login',
         builder: (context, state) => const LoginScreen(),
+      ),
+      GoRoute(
+        path: '/paywall',
+        builder: (context, state) => const PaywallScreen(),
       ),
       GoRoute(
         path: '/invite/:inviteCode',

@@ -11,7 +11,10 @@ import 'package:clique_pix/core/constants/revenuecat_constants.dart';
 /// AuthAuthenticated; logOut() on sign-out / resetSession. Never throws to
 /// callers — failures are logged.
 class RevenueCatService {
-  bool _configured = false;
+  // Global SDK config state — static so configure() is idempotent even when a
+  // throwaway instance (e.g. main.dart's deferred init) configures before the
+  // provider's instance does. Mirrors the global `Purchases.configure` state.
+  static bool _configured = false;
 
   Future<void> configure() async {
     if (_configured) return;
