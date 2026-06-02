@@ -104,6 +104,15 @@ If a feature does not directly support one of these loops, it does not belong in
 - `AuthNotifier.updateUserAvatar` is pure in-memory state swap — MUST NOT trigger token refresh (spurious calls would disturb the 5-layer Entra defense counters)
 - Full pipeline details: Media Handling Pipeline → Avatar Pipeline below. Schema: `docs/ARCHITECTURE.md` §7 users table
 
+**Subscription Paywall + Free Trial (v1, RevenueCat — migration 012/013)**
+- Single tier, entitlement `plus`. **Monthly $3.99 / Annual $39.99** ("2 months free"). Annual carries a 7-day store intro offer for new subscribers.
+- **7-day no-card free trial of the full app**, granted at first sign-in (`users.trial_ends_at = NOW() + 7 days`, COALESCE-preserved). After it lapses unsubscribed, a hard paywall drops. Effective access = `entitlement_active OR (trial_ends_at > NOW())`, computed live (no reconciliation timer for trial).
+- Backend is authoritative: `requireActiveEntitlement` 402s `SUBSCRIPTION_REQUIRED` unless subscribed OR in trial; `buildAuthUserResponse` emits `entitlement { active, in_trial, trial_ends_at, effective_active, ... }`. RevenueCat webhook at `POST /api/internal/revenuecat-webhook`; 6h `entitlementReconciliationTimer` for subscription (not trial) expiry.
+- Mobile: `purchases_flutter` + `purchases_ui_flutter` (Paywalls v2). Router gates on `effective_active`; only `/paywall` + `/profile` reachable without access. Web: gated routes show "subscribe in the mobile app" (no Stripe in v1).
+- Reviewer + beta testers: RevenueCat **Promotional** entitlement grants (no DB override).
+- **Guardrail: do NOT regress to a free tier or remove the paywall without explicit product approval.** Monetization is now a v1 product requirement, not a future consideration.
+- **Store review prompts:** native `in_app_review` `requestReview()` fires after the user's 3rd successful media upload (cross-session), frequency-capped at 120 days, availability-gated, never on an error or paywall path. Manual "Rate Clique Pix" tile in Profile uses `openStoreListing(appStoreId: 6766294274)`.
+
 ### Do Not Build
 
 - ~~Chat, comments, or threads~~ (event-centric 1:1 DMs implemented — no group chat, no global inbox, no attachments)
@@ -120,7 +129,6 @@ If a feature does not directly support one of these loops, it does not belong in
 - Background upload continuation when app is backgrounded (foreground service Android, `URLSession` iOS) — v1 requires keeping app open during video upload; block-upload resumability handles connection drops
 - True managed video services (Cloudflare Stream, Mux, Azure Media Services) — v1 is self-hosted on Azure Container Apps Jobs for data sovereignty
 - AI features of any kind
-- Monetization, subscriptions, or paywalls
 - Printed albums
 - User search or directory
 - Read receipts or typing indicators
