@@ -11,6 +11,18 @@ export interface AvatarFields {
   avatarFramePreset?: number;
 }
 
+export interface Entitlement {
+  active: boolean;
+  productId: string | null;
+  periodType: string | null;
+  willRenew: boolean | null;
+  expiresAt: string | null;
+  store: string | null;
+  inTrial: boolean;
+  trialEndsAt: string | null;
+  effectiveActive: boolean;
+}
+
 export interface User extends AvatarFields {
   id: string;
   emailOrPhone: string;
@@ -24,6 +36,8 @@ export interface User extends AvatarFields {
    * once per onboarding.
    */
   shouldPromptForAvatar?: boolean;
+  /** Subscription/trial state. Absent on a pre-paywall backend → treat as no access. */
+  entitlement?: Entitlement;
 }
 
 export interface Clique {
