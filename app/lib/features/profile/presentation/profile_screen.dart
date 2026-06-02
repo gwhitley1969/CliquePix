@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../services/revenuecat_service.dart';
 import '../../../services/review_prompt_service.dart';
 import '../../../services/telemetry_service.dart';
 import '../../../widgets/avatar_widget.dart';
@@ -252,6 +253,43 @@ class ProfileScreen extends ConsumerWidget {
                           track: (event, {extra}) =>
                               ref.read(telemetryServiceProvider).record(event, extra: extra),
                         ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  // Subscription
+                  _SettingsGroup(
+                    children: [
+                      _SettingsTile(
+                        icon: Icons.workspace_premium_outlined,
+                        iconColors: const [AppColors.electricAqua, AppColors.deepBlue],
+                        title: 'Manage Subscription',
+                        onTap: () => ref
+                            .read(revenueCatServiceProvider)
+                            .openManageSubscriptions(),
+                      ),
+                      _SettingsTile(
+                        icon: Icons.restore_rounded,
+                        iconColors: const [AppColors.deepBlue, AppColors.violetAccent],
+                        title: 'Restore Purchases',
+                        showDivider: false,
+                        onTap: () async {
+                          final ok = await ref
+                              .read(revenueCatServiceProvider)
+                              .restorePurchases();
+                          if (ok) {
+                            await ref
+                                .read(authStateProvider.notifier)
+                                .refreshEntitlement();
+                          }
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                              content: Text(ok
+                                  ? 'Purchases restored'
+                                  : 'No purchases to restore'),
+                            ));
+                          }
+                        },
                       ),
                     ],
                   ),

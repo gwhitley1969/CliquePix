@@ -5,7 +5,7 @@ import 'package:clique_pix/models/user_model.dart';
 void main() {
   group('EntitlementState.fromJson', () {
     test('parses an active trial', () {
-      final e = EntitlementState.fromJson({
+      final e = EntitlementState.fromJson(const {
         'active': false,
         'product_id': null,
         'period_type': null,
@@ -23,7 +23,7 @@ void main() {
     });
 
     test('parses an active subscriber', () {
-      final e = EntitlementState.fromJson({
+      final e = EntitlementState.fromJson(const {
         'active': true,
         'product_id': 'plus_annual',
         'period_type': 'normal',
