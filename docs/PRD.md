@@ -233,7 +233,7 @@ Users can upload a headshot that replaces their initials everywhere in the app. 
 
 Clique Pix is a subscription product. Every new user gets a **7-day free trial of the entire app** — no credit card, no commitment — starting at sign-up. When the trial ends, a paywall appears and a subscription is required to keep using the app.
 
-- **Clique Pix Plus** — single plan, two billing options:
+- **Clique Pix** — single subscription, two billing options:
   - **Monthly:** $3.99 / month
   - **Annual:** $39.99 / year (2 months free vs. monthly), with a 7-day free trial for new subscribers
 - During the trial the full app works exactly as a paid subscription — create cliques and events, upload photos and videos, DMs, everything. The invite loop is preserved: someone invited to an event can sign in and immediately see it during their trial.
