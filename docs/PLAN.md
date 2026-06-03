@@ -16,7 +16,7 @@ Monetization is now **in scope for v1**. We are shipping a hard paywall fronted 
 - ✅ **Plan 3 (store review prompts) — complete + committed** (5 commits; 91/91 tests, release APK built).
 - ✅ **Plan 5 (docs/legal/pricing) — done + deployed.** Legal pages live + verified at `clique-pix.com/docs/*` (Task 7 web deploy ✅ 2026-06-03).
 - ✅ **RevenueCat + Azure config — largely done this session** (see "Session 2026-06-02" below).
-- ✅ **Plan 2 (Flutter paywall + trial gate) — code complete + committed (6 commits), analyze 54, 96/96 tests, release APK green.** iOS SDK key wired; Android `goog_` still placeholder (Play pending — tax verified 2026-06-03). Remaining: on-device smoke + paywall publish.
+- ✅ **Plan 2 (Flutter paywall + trial gate) — code complete + committed (6 commits), analyze 54, 96/96 tests, release APK green.** iOS SDK key wired; Android `goog_` still placeholder (Play pending — tax verified 2026-06-03). Remaining: on-device smoke.
 - ✅ **Plan 4 (web subscription gating) — done + committed (3 commits), lint clean, build green.**
 - ⏳ **Plan 6 promo grants** not done — **7-day trial clock is now running.** **All 5 implementation plans (1–5) are now complete**; only Plan 6 + manual store/dashboard steps remain.
 
@@ -39,9 +39,9 @@ Monetization is now **in scope for v1**. We are shipping a hard paywall fronted 
 - Webhook `whintgr721b9e5264` → `api.clique-pix.com/api/internal/revenuecat-webhook` (all envs/events, Bearer secret) — verified 200.
 - iOS public SDK key captured: `appl_OvhNypnojnQSEebpQtBikJYTHBa`.
 - `plus_annual` price **$29.99 → $39.99** (US + 6 available territories equalized) **+ 7-day intro offer added** — both were wrong/missing in live App Store Connect; fixed via MCP.
-- Paywall AI **draft** `pw9ac01d9e31184633` created on `default` offering — **UNATTACHED; Gene must publish + attach in the dashboard** (RC has no publish/attach API).
+- Paywall `pw9ac01d9e31184633` — ✅ **published + attached to the `default` offering** (2026-06-03); `presentPaywall()` now renders it. Headline "Subscribe to Clique Pix".
 
-**Still REMAINING (all dashboard/store, no code):** publish + attach the paywall; verify **Transfer Behavior = KEEP_ATTRIBUTION** (API can't read it); **submit** both IAPs; **Plan 6 promo grants** (urgent); ~~fix test-store prices~~ **(WON'T FIX 2026-06-03 — RC Test Store prices are immutable once set: greyed in dashboard, create-only API, no update/delete. Sandbox-only; real App Store prices already $3.99/$39.99)**; ~~Task 7 deploy legal pages~~ **(DONE 2026-06-03 — web client live + verified)**; **Android** Play setup (**tax verified 2026-06-03** — confirm identity in Play Console, then proceed).
+**Still REMAINING (all dashboard/store, no code):** verify **Transfer Behavior = KEEP_ATTRIBUTION** (API can't read it); **submit** both IAPs (or attach to the version at App Store submission); build the iOS app (Mac) → **TestFlight**; **Plan 6 promo grants** (after testers sign in on the build, within their 7-day trial); ~~fix test-store prices~~ **(WON'T FIX 2026-06-03 — RC Test Store prices are immutable once set: greyed in dashboard, create-only API, no update/delete. Sandbox-only; real App Store prices already $3.99/$39.99)**; ~~Task 7 deploy legal pages~~ **(DONE 2026-06-03 — web client live + verified)**; **Android** Play setup (**tax verified 2026-06-03** — confirm identity in Play Console, then proceed).
 **Code remaining:** **Plan 2** (Flutter paywall, now unblocked) + **Plan 4** (web gating).
 
 ---
@@ -91,7 +91,7 @@ Monetization is now **in scope for v1**. We are shipping a hard paywall fronted 
 - [x] Configure webhook → `https://api.clique-pix.com/api/internal/revenuecat-webhook` with `Bearer <secret>`. **(webhook `whintgr721b9e5264` created + verified 200; secret in Key Vault)**
 - [x] Generate **Secret API Key** (`sk_...`) → saved to Key Vault as `revenuecat-secret-api-key`.
 - [x] Capture **iOS public SDK key** → `appl_OvhNypnojnQSEebpQtBikJYTHBa` (still needs to land in `revenuecat_constants.dart`, Plan 2). Android `goog_...` later (blocked).
-- [~] Paywalls v2 paywall — **AI draft `pw9ac01d9e31184633` created** (dark, gradient, annual badge, disclaimer, Restore). **← Gene must publish + attach to `default` offering in the dashboard.**
+- [x] Paywalls v2 paywall `pw9ac01d9e31184633` — **published + attached to `default` offering 2026-06-03** (headline "Subscribe to Clique Pix"; Terms/Privacy buttons → `clique-pix.com/docs/*`).
 
 ### C. Pricing change
 - [x] `plus_annual` price **$29.99 → $39.99** + **7-day intro offer** — done via MCP (US + 6 territories equalized). Live ASC was actually still $29.99 with no intro offer; now fixed.
@@ -129,7 +129,7 @@ All to be executed subagent-driven on this branch, two-stage review per task (sp
 ### Plan 2 — Flutter paywall + trial gate  ✅ DONE 2026-06-02 (6 commits; analyze 54, 96/96 tests, release APK green)
 - SDK **v10** (`purchases_flutter`/`purchases_ui_flutter`). `EntitlementState` on `UserModel`; `RevenueCatService`; hosted paywall at `/paywall`; router gates on `effective_active` (allowlist `/paywall`,`/profile`,`/login`); nav hidden off-access; RC logIn/logOut in auth lifecycle; `refreshEntitlement` + optimistic-flag/30s reconcile (in a `StateNotifier`); Profile Manage/Restore + diagnostics. Version `1.0.0+5`.
 - **Deviations from the plan (review):** v10 has no `showManageSubscriptions()` → `managementURL` + `url_launcher`; `AuthNotifier` has no `Ref` → constructor-injected RC (`revenueCatServiceProvider` in `revenuecat_service.dart` to avoid an import cycle); optimistic reconcile moved out of the screen `State` into a `StateNotifier`; `UserModel.toJson` serializes entitlement (no cold-start paywall flash); `_configured` static; corrected `auth_state.dart` import path.
-- **Remaining (not code):** on-device smoke (device + published paywall + Apple sandbox tester); Android `goog_` SDK key still placeholder in `revenuecat_constants.dart` (Play blocked) → iOS-first.
+- **Remaining (not code):** on-device smoke (device + Apple sandbox tester); Android `goog_` SDK key still placeholder in `revenuecat_constants.dart` (Play pending — tax verified) → iOS-first.
 - Scope: `purchases_flutter` + `purchases_ui_flutter`, `EntitlementState` model + `UserModel.entitlement` parsing, `RevenueCatService` (configure/logIn/logOut/presentPaywall/restore/manage), paywall screen, **router gate on `effective_active`** (allowlist `/paywall`,`/profile`,`/login`), hide bottom nav off-access, lifecycle login/logout + `resetSession` logout, `Purchases.configure` in `performDeferredInit`, Profile Manage/Restore tiles + diagnostics section, **purchase-success optimistic flag + 30s auto-recovery**. Version bump `1.0.0+5`.
 
 ### Plan 3 — Flutter store review prompts  ✅ DONE 2026-06-02 (5 commits; 91/91 tests, analyze 54, release APK built)
