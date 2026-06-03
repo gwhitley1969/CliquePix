@@ -13,7 +13,7 @@ export function SubscribeInAppScreen() {
     <div className="min-h-screen bg-dark-bg flex flex-col items-center justify-center px-6 text-center text-white">
       <div className="max-w-md w-full rounded-lg bg-dark-card border border-white/10 p-8">
         <div className="mx-auto mb-5 h-14 w-14 rounded-2xl bg-gradient-primary" />
-        <h1 className="text-2xl font-bold mb-2">Clique Pix Plus</h1>
+        <h1 className="text-2xl font-bold mb-2">Subscribe to Clique Pix</h1>
         <p className="text-white/70 mb-6">
           Your free trial has ended. Subscribe in the Clique Pix mobile app to
           keep sharing — your subscription unlocks the app everywhere, including

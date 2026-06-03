@@ -40,10 +40,10 @@ export class ConflictError extends AppError {
 }
 
 // HTTP 402 Payment Required. Thrown by requireActiveEntitlement when an
-// authenticated user has no active Clique Pix Plus entitlement. The Flutter
+// authenticated user has no active Clique Pix subscription. The Flutter
 // client maps this status + code to a route bump back to /paywall.
 export class SubscriptionRequiredError extends AppError {
-  constructor(message = 'A Clique Pix Plus subscription is required to use this feature.') {
+  constructor(message = 'A Clique Pix subscription is required to use this feature.') {
     super('SUBSCRIPTION_REQUIRED', message, 402);
   }
 }
