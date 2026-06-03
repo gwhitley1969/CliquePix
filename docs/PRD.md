@@ -229,6 +229,21 @@ Users can upload a headshot that replaces their initials everywhere in the app. 
   - Mute notifications
   - **Delete account** — permanently removes user account, photos, videos, DM history, and clique memberships. Shared cliques/events are preserved for other members (creator set to null). Required by Apple App Store Review Guideline 5.1.1(v).
 
+### 5.16 Subscription & Free Trial
+
+Clique Pix is a subscription product. Every new user gets a **7-day free trial of the entire app** — no credit card, no commitment — starting at sign-up. When the trial ends, a paywall appears and a subscription is required to keep using the app.
+
+- **Clique Pix Plus** — single plan, two billing options:
+  - **Monthly:** $3.99 / month
+  - **Annual:** $39.99 / year (2 months free vs. monthly), with a 7-day free trial for new subscribers
+- During the trial the full app works exactly as a paid subscription — create cliques and events, upload photos and videos, DMs, everything. The invite loop is preserved: someone invited to an event can sign in and immediately see it during their trial.
+- Manage or cancel anytime in the App Store / Google Play account settings.
+- Beta testers and the App Store reviewer receive complimentary access.
+
+### 5.17 Rate the App
+
+A gentle, well-timed prompt asks happy users to rate Clique Pix on the App Store / Google Play after they've shared a few times. A "Rate Clique Pix" option is always available in Profile. (No private in-app feedback channel in v1.)
+
 ---
 
 ## 6. Non-Goals (v1.0)
@@ -398,7 +413,7 @@ Why Flutter for Clique Pix:
 - AI highlights / recap
 - ~~Multi-photo download~~ (implemented in v1)
 - ~~Video support~~ (implemented in v1 — capture, upload, transcode, HLS playback, local-first uploader playback, save/share)
-- Premium subscription tier
+- ~~Premium subscription tier~~ (implemented in v1 — 7-day free trial, then $3.99/mo or $39.99/yr; see §5.16)
 
 ---
 

@@ -21,8 +21,13 @@ import { SubscriptionRequiredError } from '../utils/errors';
 //
 // Everything else (events, photos, videos, cliques, DMs, reactions,
 // notifications-list) must call requireActiveEntitlement.
-export function requireActiveEntitlement(authUser: AuthenticatedUser): void {
-  if (!authUser.entitlementActive) {
+export function requireActiveEntitlement(
+  authUser: AuthenticatedUser,
+  now: Date = new Date(),
+): void {
+  // strictly greater-than: a trial expiring at exactly `now` is closed (blocked).
+  const inTrial = authUser.trialEndsAt != null && authUser.trialEndsAt > now;
+  if (!authUser.entitlementActive && !inTrial) {
     throw new SubscriptionRequiredError();
   }
 }

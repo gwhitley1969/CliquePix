@@ -24,6 +24,7 @@ import 'models/clique_model.dart';
 import 'models/event_model.dart';
 import 'services/install_referrer_service.dart';
 import 'services/push_notification_service.dart';
+import 'services/revenuecat_service.dart';
 import 'services/token_storage_service.dart';
 import 'app/app.dart';
 
@@ -214,6 +215,14 @@ bool _deferredInitDone = false;
 Future<void> performDeferredInit() async {
   if (_deferredInitDone) return;
   _deferredInitDone = true;
+
+  // Configure RevenueCat early (idempotent via the static _configured flag).
+  // logIn happens later in the auth lifecycle once a user is authenticated.
+  try {
+    await RevenueCatService().configure();
+  } catch (e) {
+    debugPrint('[CliquePix] RevenueCat configure failed: $e');
+  }
 
   tz.initializeTimeZones();
 

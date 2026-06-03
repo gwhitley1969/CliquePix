@@ -104,6 +104,7 @@ export function shouldPromptForAvatar(
  * Entitlement fields (migration 012) are tolerated as optional so callers
  * that haven't been updated yet still compile — the response just omits
  * the entitlement block, which the client interprets as "inactive."
+ * `trial_ends_at` (migration 013) is likewise optional for the same reason.
  */
 export interface AuthUserRow {
   id: string;
@@ -123,6 +124,8 @@ export interface AuthUserRow {
   entitlement_will_renew?: boolean | null;
   entitlement_expires_at?: Date | null;
   entitlement_store?: string | null;
+  // App-granted free trial (migration 013). Null until first sign-in stamps it.
+  trial_ends_at?: Date | string | null;
 }
 
 /**
@@ -137,9 +140,17 @@ export interface EntitlementResponse {
   will_renew: boolean | null;
   expires_at: string | null;
   store: string | null;
+  // Trial (migration 013). effective_active = active || in_trial — this is the
+  // value the client paywall gate keys off.
+  in_trial: boolean;
+  trial_ends_at: string | null;
+  effective_active: boolean;
 }
 
-function buildEntitlementResponse(row: AuthUserRow): EntitlementResponse {
+export function buildEntitlementResponse(
+  row: AuthUserRow,
+  now: Date = new Date(),
+): EntitlementResponse {
   let expiresAtIso: string | null = null;
   if (row.entitlement_expires_at) {
     expiresAtIso =
@@ -147,13 +158,30 @@ function buildEntitlementResponse(row: AuthUserRow): EntitlementResponse {
         ? row.entitlement_expires_at.toISOString()
         : String(row.entitlement_expires_at);
   }
+
+  let trialEndsAtIso: string | null = null;
+  let inTrial = false;
+  if (row.trial_ends_at) {
+    const trialEnds =
+      row.trial_ends_at instanceof Date
+        ? row.trial_ends_at
+        : new Date(row.trial_ends_at);
+    trialEndsAtIso = trialEnds.toISOString();
+    inTrial = trialEnds > now;
+  }
+
+  const active = row.entitlement_active ?? false;
+
   return {
-    active: row.entitlement_active ?? false,
+    active,
     product_id: row.entitlement_product_id ?? null,
     period_type: row.entitlement_period_type ?? null,
     will_renew: row.entitlement_will_renew ?? null,
     expires_at: expiresAtIso,
     store: row.entitlement_store ?? null,
+    in_trial: inTrial,
+    trial_ends_at: trialEndsAtIso,
+    effective_active: active || inTrial,
   };
 }
 

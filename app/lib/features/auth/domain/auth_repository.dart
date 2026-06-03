@@ -124,6 +124,17 @@ class AuthRepository {
     return UserModel.fromJson(data);
   }
 
+  /// Force the backend to re-sync entitlement from RevenueCat's REST API and
+  /// return the enriched user. Used by the post-purchase recovery loop and the
+  /// Profile "Restore Purchases" tile. Persists the cached model so the fresh
+  /// entitlement survives a cold start too.
+  Future<UserModel> refreshEntitlement() async {
+    final data = await api.refreshEntitlement();
+    final user = UserModel.fromJson(data);
+    await tokenStorage.saveCachedUserModel(user);
+    return user;
+  }
+
   Future<void> signOut() async {
     try {
       final pca = await _getOrCreatePca();

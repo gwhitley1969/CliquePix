@@ -12,6 +12,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_gradients.dart';
 import '../../../core/utils/upload_url_silent_retry.dart';
 import '../../../services/telemetry_service.dart';
+import '../../../services/review_prompt_service.dart';
 import '../domain/blob_upload_service.dart';
 import 'photos_providers.dart';
 
@@ -143,6 +144,10 @@ class _CameraCaptureScreenState extends ConsumerState<CameraCaptureScreen> {
         originalFilename: _editedImage!.path.split('/').last,
       );
       debugPrint('[CliquePix] _upload: confirm complete');
+      unawaited(ReviewPromptService.recordSuccessfulUploadAndMaybePrompt(
+        track: (event, {extra}) =>
+            ref.read(telemetryServiceProvider).record(event, extra: extra),
+      ));
       setState(() { _progress = 1.0; _statusText = 'Done!'; });
 
       // Best-effort temp-file cleanup. Don't let cleanup failures mask success.

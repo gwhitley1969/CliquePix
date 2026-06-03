@@ -145,12 +145,13 @@ async function authVerify(req: HttpRequest, context: InvocationContext): Promise
     // leaves it null, which is fine for existing accounts.
     const ageVerifiedAt = decision.action === 'pass' ? new Date() : null;
     const user = await queryOne<User>(
-      `INSERT INTO users (external_auth_id, display_name, email_or_phone, age_verified_at)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO users (external_auth_id, display_name, email_or_phone, age_verified_at, trial_ends_at)
+       VALUES ($1, $2, $3, $4, NOW() + INTERVAL '7 days')
        ON CONFLICT (external_auth_id) DO UPDATE SET
          display_name = EXCLUDED.display_name,
          email_or_phone = EXCLUDED.email_or_phone,
          age_verified_at = COALESCE(users.age_verified_at, EXCLUDED.age_verified_at),
+         trial_ends_at = COALESCE(users.trial_ends_at, EXCLUDED.trial_ends_at),
          updated_at = NOW()
        RETURNING *`,
       [externalAuthId, displayName, email, ageVerifiedAt],

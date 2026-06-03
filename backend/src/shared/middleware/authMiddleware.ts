@@ -45,6 +45,8 @@ export interface AuthenticatedUser {
   entitlementWillRenew: boolean | null;
   entitlementExpiresAt: Date | null;
   entitlementStore: string | null;
+  // App-granted trial window (migration 013). null = never stamped / pre-013.
+  trialEndsAt: Date | null;
 }
 
 export async function authenticateRequest(req: HttpRequest): Promise<AuthenticatedUser> {
@@ -89,7 +91,8 @@ export async function authenticateRequest(req: HttpRequest): Promise<Authenticat
             avatar_blob_path, avatar_thumb_blob_path, avatar_updated_at,
             avatar_frame_preset,
             entitlement_active, entitlement_product_id, entitlement_period_type,
-            entitlement_will_renew, entitlement_expires_at, entitlement_store
+            entitlement_will_renew, entitlement_expires_at, entitlement_store,
+            trial_ends_at
      FROM users WHERE external_auth_id = $1`,
     [externalAuthId],
   );
@@ -126,6 +129,7 @@ export async function authenticateRequest(req: HttpRequest): Promise<Authenticat
     entitlementWillRenew: user.entitlement_will_renew ?? null,
     entitlementExpiresAt: user.entitlement_expires_at ?? null,
     entitlementStore: user.entitlement_store ?? null,
+    trialEndsAt: user.trial_ends_at ?? null,
   };
 }
 

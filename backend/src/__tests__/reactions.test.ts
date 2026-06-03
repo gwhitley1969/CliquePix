@@ -77,6 +77,7 @@ beforeEach(() => {
     entitlementWillRenew: true,
     entitlementExpiresAt: null,
     entitlementStore: 'APP_STORE',
+    trialEndsAt: null,
   });
   // Default: caller is a clique member of the event for the requested media.
   (queryOne as jest.Mock).mockResolvedValue({ id: PHOTO_ID });

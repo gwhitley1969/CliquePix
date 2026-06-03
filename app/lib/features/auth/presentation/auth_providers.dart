@@ -16,6 +16,7 @@ import '../domain/app_lifecycle_service.dart';
 import '../domain/auth_repository.dart';
 import '../domain/auth_state.dart';
 import '../domain/background_token_service.dart';
+import '../../../services/revenuecat_service.dart';
 
 final authApiProvider = Provider<AuthApi>((ref) {
   final apiClient = ref.watch(apiClientProvider);
@@ -61,6 +62,7 @@ final authStateProvider =
     ref.watch(telemetryServiceProvider),
     ref.watch(dmRealtimeServiceProvider),
     ref.watch(dmRepositoryProvider),
+    ref.watch(revenueCatServiceProvider),
     bootstrap: ref.watch(authBootstrapStateProvider),
   );
 });
@@ -94,6 +96,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   final TelemetryService _telemetry;
   final DmRealtimeService _realtime;
   final DmRepository _dmRepo;
+  final RevenueCatService _revenueCat;
   AppLifecycleService? _lifecycle;
 
   bool _signingIn = false;
@@ -104,7 +107,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
     this._tokenStorage,
     this._telemetry,
     this._realtime,
-    this._dmRepo, {
+    this._dmRepo,
+    this._revenueCat, {
     required AuthState bootstrap,
   }) : super(bootstrap) {
     // Optimistic bootstrap: if we seeded AuthAuthenticated from cached
@@ -277,6 +281,22 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
+  /// Force the backend to re-sync entitlement from RevenueCat's REST API and
+  /// fold the fresh user into state. Used by the post-purchase recovery loop
+  /// (paywall) and the Profile "Restore Purchases" tile. The optimistic
+  /// post-purchase flag is cleared by the caller (paywall screen) once this
+  /// confirms effective access — AuthNotifier intentionally holds no Ref.
+  Future<void> refreshEntitlement() async {
+    try {
+      final user = await _repository.refreshEntitlement();
+      if (state is AuthAuthenticated) {
+        state = AuthAuthenticated(user);
+      }
+    } catch (e) {
+      debugPrint('[AUTH] refreshEntitlement failed: $e');
+    }
+  }
+
   /// Entry into Layer 5. Called when Layer 3 detects that the foreground
   /// refresh failed, OR when the AuthInterceptor catches a 401 whose token
   /// refresh failed with a session-expired signature
@@ -353,6 +373,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
       // `new_event`, `video_ready`, and DM messages regardless of which
       // screen they're on.
       unawaited(_connectRealtime());
+      // Alias the RevenueCat anonymous app-user to our backend user id so
+      // entitlements + purchases attach to the right account.
+      final u = state;
+      if (u is AuthAuthenticated) {
+        unawaited(_revenueCat.logIn(u.user.id));
+      }
     });
   }
 
@@ -413,6 +439,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
   void _stopLifecycle() {
     _lifecycle?.stop();
     _lifecycle = null;
+    // Log RevenueCat out so the next user (or anonymous) doesn't inherit this
+    // user's entitlements. Idempotent / benign if already anonymous.
+    unawaited(_revenueCat.logOut());
     // Cancel the Friday reminder so signed-out devices don't keep firing.
     // Fire-and-forget — never block the sign-out path on this.
     unawaited(FridayReminderService.cancel());

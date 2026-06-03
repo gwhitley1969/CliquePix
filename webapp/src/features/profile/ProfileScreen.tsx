@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useMsal } from '@azure/msal-react';
-import { Camera, LogOut, Trash2 } from 'lucide-react';
+import { Camera, CreditCard, LogOut, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import confetti from 'canvas-confetti';
 import { deleteAccount, getMe } from '../../api/endpoints/auth';
@@ -124,6 +124,19 @@ export function ProfileScreen() {
       />
 
       <div className="space-y-2">
+        <Button
+          variant="secondary"
+          className="w-full justify-start"
+          onClick={() =>
+            window.open(
+              'https://apps.apple.com/account/subscriptions',
+              '_blank',
+              'noopener,noreferrer',
+            )
+          }
+        >
+          <CreditCard size={16} className="mr-2" /> Manage Subscription
+        </Button>
         <Button
           variant="secondary"
           className="w-full justify-start"

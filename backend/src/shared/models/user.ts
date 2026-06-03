@@ -27,6 +27,7 @@ export interface User {
   entitlement_store: string | null;
   entitlement_last_event_id: string | null;
   entitlement_updated_at: Date | null;
+  trial_ends_at: Date | null;
   created_at: Date;
   updated_at: Date;
 }

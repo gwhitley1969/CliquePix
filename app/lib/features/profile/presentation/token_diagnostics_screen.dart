@@ -6,7 +6,9 @@ import '../../../core/theme/app_colors.dart';
 import '../../../services/telemetry_service.dart';
 import '../../../services/token_storage_service.dart';
 import '../../auth/domain/app_lifecycle_service.dart';
+import '../../auth/domain/auth_state.dart';
 import '../../auth/presentation/auth_providers.dart';
+import '../../paywall/domain/entitlement_state.dart';
 
 /// Hidden beta-testing screen reached by tapping the version number seven
 /// times in ProfileScreen. Exposes token state and the telemetry ring
@@ -126,6 +128,22 @@ class _TokenDiagnosticsScreenState
                       _batteryExempt
                           ? 'granted'
                           : 'not granted — Layer 4 may be throttled'),
+                  Builder(builder: (context) {
+                    final auth = ref.watch(authStateProvider);
+                    final e = auth is AuthAuthenticated
+                        ? auth.user.entitlement
+                        : EntitlementState.none;
+                    return Column(children: [
+                      _statTile('Entitlement active', e.active.toString()),
+                      _statTile('In trial', e.inTrial.toString()),
+                      _statTile('Effective access', e.effectiveActive.toString()),
+                      _statTile('Trial ends',
+                          e.trialEndsAt?.toLocal().toString() ?? '—'),
+                      _statTile('Product', e.productId ?? '—'),
+                      _statTile('Period', e.periodType ?? '—'),
+                      _statTile('Store', e.store ?? '—'),
+                    ]);
+                  }),
                   const SizedBox(height: 16),
                   Wrap(
                     spacing: 8,
