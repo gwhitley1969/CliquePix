@@ -22,7 +22,7 @@ Last updated **2026-06-02** — backend deployed live + most RevenueCat/Azure co
 3. ~~Fix test-store prices~~ **WON'T FIX (2026-06-03)** — RevenueCat Test Store prices are **immutable once set** (greyed in dashboard, create-only API, no update/delete endpoint). Sandbox-only; real App Store prices already correct at $3.99/$39.99, so zero user impact.
 4. **Submit** both IAPs (still `READY_TO_SUBMIT`) on the app version page.
 5. **Phase 6 promo grants** (reviewer + 4 testers) — urgent, 7-day clock.
-6. **Deploy legal pages** (Phase 5 — `webapp/public/docs/*` edited + committed; GH Actions deploy pending).
+6. ~~Deploy legal pages~~ **✅ DONE 2026-06-03** — web client auto-deployed on merge; `clique-pix.com/docs/privacy` + `/docs/terms` verified live with the subscription disclosures.
 7. **Android** (Phase 1b) — **tax verified 2026-06-03 ✅**; confirm **identity verification** is also green in Play Console (I can't check it), then the Android subscription setup + RevenueCat Play app proceed.
 
 ---
@@ -200,7 +200,7 @@ Original checklist (all implemented unless noted above):
 - [x] `webapp/src/auth/EntitlementGuard.tsx` + `webapp/src/features/paywall/SubscribeInAppScreen.tsx` created.
 - [x] Web router gates the app shell on `effective_active`; `/profile` + `/subscribe` exempt; allowlist `/subscribe`,`/profile`,`/login`,`/docs/*`,`/`.
 - [x] `ProfileScreen.tsx` — "Manage Subscription" link.
-- lint clean, build green. **Deploys with the web client (Task 7 SWA deploy).**
+- lint clean, build green. ✅ **Deployed + verified live 2026-06-03** (auto-deploy on merge to main).
 
 ---
 
@@ -210,7 +210,7 @@ Required by Apple Guideline 3.1.2 + Google Play Subscriptions policy. Must ship 
 
 - [x] `webapp/public/docs/privacy.html`: subscription/billing data section + RevenueCat subprocessor link (commit `432e4f5`).
 - [x] `webapp/public/docs/terms.html`: subscription terms — Clique Pix Plus, $3.99/$39.99, 7-day trial, auto-renew/charge/cancel disclosures (commit `83aaafd`). Effective dates bumped to 2026-06-02.
-- [ ] **Deploy webapp via GH Actions** (= PLAN.md Task 7) — **← STILL TODO; must be live on `clique-pix.com/docs/*` BEFORE App Store submission (Apple checks the URLs).**
+- [x] **Deploy webapp via GH Actions** (= PLAN.md Task 7) — **✅ DONE 2026-06-03; live + verified at `clique-pix.com/docs/*` (App Store URL-check requirement met).**
 
 ---
 

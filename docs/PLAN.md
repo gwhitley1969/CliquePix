@@ -14,7 +14,7 @@ Monetization is now **in scope for v1**. We are shipping a hard paywall fronted 
 - ✅ **5 implementation plans** written + committed.
 - ✅ **Plan 1 (backend trial) — code complete AND DEPLOYED LIVE 2026-06-02.** Migrations 012+013 applied to prod (14 users backfilled, `trial_null=0`), `func publish` succeeded, `/api/health` 200, webhook verified. 174/174 tests.
 - ✅ **Plan 3 (store review prompts) — complete + committed** (5 commits; 91/91 tests, release APK built).
-- ✅ **Plan 5 (docs/legal/pricing) — edits complete + committed.** Remaining: **Task 7 web deploy** of the legal pages before App Store submission.
+- ✅ **Plan 5 (docs/legal/pricing) — done + deployed.** Legal pages live + verified at `clique-pix.com/docs/*` (Task 7 web deploy ✅ 2026-06-03).
 - ✅ **RevenueCat + Azure config — largely done this session** (see "Session 2026-06-02" below).
 - ✅ **Plan 2 (Flutter paywall + trial gate) — code complete + committed (6 commits), analyze 54, 96/96 tests, release APK green.** iOS SDK key wired; Android `goog_` still placeholder (Play pending — tax verified 2026-06-03). Remaining: on-device smoke + paywall publish.
 - ✅ **Plan 4 (web subscription gating) — done + committed (3 commits), lint clean, build green.**
@@ -41,7 +41,7 @@ Monetization is now **in scope for v1**. We are shipping a hard paywall fronted 
 - `plus_annual` price **$29.99 → $39.99** (US + 6 available territories equalized) **+ 7-day intro offer added** — both were wrong/missing in live App Store Connect; fixed via MCP.
 - Paywall AI **draft** `pw9ac01d9e31184633` created on `default` offering — **UNATTACHED; Gene must publish + attach in the dashboard** (RC has no publish/attach API).
 
-**Still REMAINING (all dashboard/store, no code):** publish + attach the paywall; verify **Transfer Behavior = KEEP_ATTRIBUTION** (API can't read it); **submit** both IAPs; **Plan 6 promo grants** (urgent); ~~fix test-store prices~~ **(WON'T FIX 2026-06-03 — RC Test Store prices are immutable once set: greyed in dashboard, create-only API, no update/delete. Sandbox-only; real App Store prices already $3.99/$39.99)**; **Task 7** deploy legal pages; **Android** Play setup (**tax verified 2026-06-03** — confirm identity in Play Console, then proceed).
+**Still REMAINING (all dashboard/store, no code):** publish + attach the paywall; verify **Transfer Behavior = KEEP_ATTRIBUTION** (API can't read it); **submit** both IAPs; **Plan 6 promo grants** (urgent); ~~fix test-store prices~~ **(WON'T FIX 2026-06-03 — RC Test Store prices are immutable once set: greyed in dashboard, create-only API, no update/delete. Sandbox-only; real App Store prices already $3.99/$39.99)**; ~~Task 7 deploy legal pages~~ **(DONE 2026-06-03 — web client live + verified)**; **Android** Play setup (**tax verified 2026-06-03** — confirm identity in Play Console, then proceed).
 **Code remaining:** **Plan 2** (Flutter paywall, now unblocked) + **Plan 4** (web gating).
 
 ---
@@ -137,12 +137,12 @@ All to be executed subagent-driven on this branch, two-stage review per task (sp
 
 ### Plan 4 — Web subscription gating  ✅ DONE 2026-06-02 (3 commits; lint clean, build green)
 - `User.entitlement` (camelCase), `EntitlementGuard` → `/subscribe`, `SubscribeInAppScreen` (store badges + "subscribe in the mobile app"), router split (entitlement-gated shell + ungated `/profile` + `/subscribe`), Profile "Manage Subscription" link. No web purchase flow.
-- Allowlist: `/subscribe`, `/profile`, `/login`, `/docs/*`, `/`. **Remaining:** ships with the web client (Task 7 SWA deploy).
+- Allowlist: `/subscribe`, `/profile`, `/login`, `/docs/*`, `/`. ✅ **Deployed + verified live 2026-06-03** with the web client (Task 7).
 
-### Plan 5 — Docs / legal / pricing $39.99  ✅ DONE (edits committed 2026-06-02; web deploy + store price change pending)
+### Plan 5 — Docs / legal / pricing $39.99  ✅ DONE (committed 2026-06-02; deployed + verified live 2026-06-03)
 - CLAUDE.md (remove "no monetization", add paywall section + guardrail + review-prompt note), PRD §5.16/§5.17/§13, ARCHITECTURE users table + auth-response section, **privacy.html + terms.html subscription disclosures**, repo-wide `$29.99 → $39.99` sweep.
-- **Status:** all doc/HTML edits committed (see "Done so far"). NOT yet deployed — **Task 7 (SWA deploy of legal pages)** + App Store Connect `plus_annual` price change remain (both ops/Gene).
-- **Deadline:** privacy/terms pages MUST be deployed to `clique-pix.com/docs/*` BEFORE the gated mobile build is submitted (Apple checks the URLs).
+- **Status:** ✅ **deployed + verified live 2026-06-03** (auto-deploy on merge → `clique-pix.com/docs/privacy` + `/docs/terms` return 200 with the subscription disclosures). The `plus_annual` → $39.99 store price change is also done (via MCP).
+- **Deadline:** ✅ satisfied — privacy/terms are live at `clique-pix.com/docs/*`, so the App Store submission URL-check requirement is met.
 
 ---
 
@@ -200,7 +200,7 @@ Plans that parallelize freely: Plan 3 + Plan 5 can run now alongside Gene's conf
 - `c1e7cfa` annual price $29.99 → $39.99 sweep (docs/GENE.md)
 - (`b61b7d2` separately: CLAUDE.md trim of 5 reference sections — unrelated to Plan 5)
 
-**Plan 5 docs/HTML: complete + committed. NOT deployed (Task 7 SWA deploy pending).**
+**Plan 5 docs/HTML: complete + committed + DEPLOYED & verified live 2026-06-03 (Task 7 done).**
 
 **Plan 3 (store review prompts) — 2026-06-02:**
 - `41c7403` add in_app_review dependency
