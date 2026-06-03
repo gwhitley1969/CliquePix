@@ -19,7 +19,7 @@ Last updated **2026-06-02** — backend deployed live + most RevenueCat/Azure co
 1. **Publish + attach the paywall draft** `pw9ac01d9e31184633` to the `default` offering (open the editor → Publish). RC has no API for this.
    - Editor: https://app.revenuecat.com/projects/04f5314d/paywalls/pw9ac01d9e31184633/builder
 2. **Verify Transfer Behavior = "Keep with previous App User ID"** (Project Settings → General). The API can't read it.
-3. **Fix test-store prices**: `monthly` $9.99 → $3.99, `yearly` $79.99 → $39.99 (Products → Test Store). Real-device prices already come from the App Store products and are correct.
+3. ~~Fix test-store prices~~ **WON'T FIX (2026-06-03)** — RevenueCat Test Store prices are **immutable once set** (greyed in dashboard, create-only API, no update/delete endpoint). Sandbox-only; real App Store prices already correct at $3.99/$39.99, so zero user impact.
 4. **Submit** both IAPs (still `READY_TO_SUBMIT`) on the app version page.
 5. **Phase 6 promo grants** (reviewer + 4 testers) — urgent, 7-day clock.
 6. **Deploy legal pages** (Phase 5 — `webapp/public/docs/*` edited + committed; GH Actions deploy pending).

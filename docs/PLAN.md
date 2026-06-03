@@ -41,7 +41,7 @@ Monetization is now **in scope for v1**. We are shipping a hard paywall fronted 
 - `plus_annual` price **$29.99 → $39.99** (US + 6 available territories equalized) **+ 7-day intro offer added** — both were wrong/missing in live App Store Connect; fixed via MCP.
 - Paywall AI **draft** `pw9ac01d9e31184633` created on `default` offering — **UNATTACHED; Gene must publish + attach in the dashboard** (RC has no publish/attach API).
 
-**Still REMAINING (all dashboard/store, no code):** publish + attach the paywall; verify **Transfer Behavior = KEEP_ATTRIBUTION** (API can't read it); **submit** both IAPs; **Plan 6 promo grants** (urgent); fix **test-store prices** ($9.99/$79.99 → $3.99/$39.99); **Task 7** deploy legal pages; **Android** Play setup (blocked on W-9).
+**Still REMAINING (all dashboard/store, no code):** publish + attach the paywall; verify **Transfer Behavior = KEEP_ATTRIBUTION** (API can't read it); **submit** both IAPs; **Plan 6 promo grants** (urgent); ~~fix test-store prices~~ **(WON'T FIX 2026-06-03 — RC Test Store prices are immutable once set: greyed in dashboard, create-only API, no update/delete. Sandbox-only; real App Store prices already $3.99/$39.99)**; **Task 7** deploy legal pages; **Android** Play setup (blocked on W-9).
 **Code remaining:** **Plan 2** (Flutter paywall, now unblocked) + **Plan 4** (web gating).
 
 ---
