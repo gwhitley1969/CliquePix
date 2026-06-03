@@ -23,7 +23,7 @@ Last updated **2026-06-02** — backend deployed live + most RevenueCat/Azure co
 4. **Submit** both IAPs (still `READY_TO_SUBMIT`) on the app version page.
 5. **Phase 6 promo grants** (reviewer + 4 testers) — urgent, 7-day clock.
 6. **Deploy legal pages** (Phase 5 — `webapp/public/docs/*` edited + committed; GH Actions deploy pending).
-7. **Android** (Phase 1b) — still blocked on the W-9/IRS item.
+7. **Android** (Phase 1b) — **tax verified 2026-06-03 ✅**; confirm **identity verification** is also green in Play Console (I can't check it), then the Android subscription setup + RevenueCat Play app proceed.
 
 ---
 
@@ -56,27 +56,18 @@ Last updated **2026-06-02** — backend deployed live + most RevenueCat/Azure co
 
 ---
 
-## Phase 1b — Google Play Console ⏸️ PAUSED
+## Phase 1b — Google Play Console 🟢 UNBLOCKING (tax verified 2026-06-03)
 
-Blocked on Payments profile verification. Two issues stacked:
+**Update 2026-06-03:** Google emailed that the **tax information is VERIFIED ✅** — the EIN-name mismatch (IRS had "BlueBuildApps, LLC"; Google's TIN matching rejected "Xtend-AI LLC") is resolved. The Payments-profile blocker is clearing.
 
-- ⚠️ **Tax info declined** — IRS still has "BlueBuildApps, LLC" registered to the EIN; Google's TIN matching rejects "Xtend-AI LLC" submissions
-- ⏳ **Identity verification submitted, Google reviewing** (1-2 business days)
+- ✅ **Tax info verified.**
+- ❓ **Identity verification — CONFIRM IN PLAY CONSOLE.** Two checks were stacked; Google's email covered tax, not necessarily identity. The Payments profile is only **Active** when BOTH are verified. **The assistant CANNOT check this** — there's no Google Play Console / Google-account access via any connected MCP (only Azure + RevenueCat + GitHub). Verify manually at **Play Console → Setup → Payments profile** and **payments.google.com → Settings**: both Tax and Identity must show verified.
 
-### Real fix — call the IRS
+### ✅ RESOLVED — IRS / W-9 path (kept for history)
 
-- [ ] **Call IRS Business Specialty Line: `800-829-4933`** (Mon-Fri 7am-7pm local)
-  - Ask them to update the legal name on the EIN due to LLC name change (BlueBuildApps → Xtend-AI)
-  - Have ready: EIN, old name, new name, NC Secretary of State filing date
-  - Request a **Form 147c letter** (current name confirmation, arrives by mail 1-2 weeks)
-- [ ] Once IRS database updated (often same day), retry W-9 on Google as `Xtend-AI LLC`
+Tax is verified, so these are moot: the IRS-147c call (`800-829-4933`, EIN name-change BlueBuildApps → Xtend-AI, Form 147c letter) and the "retry W-9 as Xtend-AI" / "submit as BlueBuildApps" workaround. No further action on the tax side.
 
-### Workaround if you need Google unblocked sooner
-
-- [ ] Submit W-9 as `BlueBuildApps, LLC` (matches IRS records right now)
-- Caveat: Year-end 1099-K issues under BlueBuildApps; talk to your accountant first
-
-### Once Payments is Active
+### Once Payments is fully Active (tax ✅ + identity confirmed) — DO THESE
 
 - [ ] Create subscription `plus_monthly` (Base plan: monthly, $3.99, auto-renewing, 5 English-speaking countries)
 - [ ] Create subscription `plus_annual` (Base plan: annual, $39.99, auto-renewing, 5 countries)

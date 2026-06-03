@@ -16,7 +16,7 @@ Monetization is now **in scope for v1**. We are shipping a hard paywall fronted 
 - ✅ **Plan 3 (store review prompts) — complete + committed** (5 commits; 91/91 tests, release APK built).
 - ✅ **Plan 5 (docs/legal/pricing) — edits complete + committed.** Remaining: **Task 7 web deploy** of the legal pages before App Store submission.
 - ✅ **RevenueCat + Azure config — largely done this session** (see "Session 2026-06-02" below).
-- ✅ **Plan 2 (Flutter paywall + trial gate) — code complete + committed (6 commits), analyze 54, 96/96 tests, release APK green.** iOS SDK key wired; Android `goog_` still placeholder (Play blocked). Remaining: on-device smoke + paywall publish.
+- ✅ **Plan 2 (Flutter paywall + trial gate) — code complete + committed (6 commits), analyze 54, 96/96 tests, release APK green.** iOS SDK key wired; Android `goog_` still placeholder (Play pending — tax verified 2026-06-03). Remaining: on-device smoke + paywall publish.
 - ✅ **Plan 4 (web subscription gating) — done + committed (3 commits), lint clean, build green.**
 - ⏳ **Plan 6 promo grants** not done — **7-day trial clock is now running.** **All 5 implementation plans (1–5) are now complete**; only Plan 6 + manual store/dashboard steps remain.
 
@@ -41,7 +41,7 @@ Monetization is now **in scope for v1**. We are shipping a hard paywall fronted 
 - `plus_annual` price **$29.99 → $39.99** (US + 6 available territories equalized) **+ 7-day intro offer added** — both were wrong/missing in live App Store Connect; fixed via MCP.
 - Paywall AI **draft** `pw9ac01d9e31184633` created on `default` offering — **UNATTACHED; Gene must publish + attach in the dashboard** (RC has no publish/attach API).
 
-**Still REMAINING (all dashboard/store, no code):** publish + attach the paywall; verify **Transfer Behavior = KEEP_ATTRIBUTION** (API can't read it); **submit** both IAPs; **Plan 6 promo grants** (urgent); ~~fix test-store prices~~ **(WON'T FIX 2026-06-03 — RC Test Store prices are immutable once set: greyed in dashboard, create-only API, no update/delete. Sandbox-only; real App Store prices already $3.99/$39.99)**; **Task 7** deploy legal pages; **Android** Play setup (blocked on W-9).
+**Still REMAINING (all dashboard/store, no code):** publish + attach the paywall; verify **Transfer Behavior = KEEP_ATTRIBUTION** (API can't read it); **submit** both IAPs; **Plan 6 promo grants** (urgent); ~~fix test-store prices~~ **(WON'T FIX 2026-06-03 — RC Test Store prices are immutable once set: greyed in dashboard, create-only API, no update/delete. Sandbox-only; real App Store prices already $3.99/$39.99)**; **Task 7** deploy legal pages; **Android** Play setup (**tax verified 2026-06-03** — confirm identity in Play Console, then proceed).
 **Code remaining:** **Plan 2** (Flutter paywall, now unblocked) + **Plan 4** (web gating).
 
 ---
@@ -103,7 +103,7 @@ Monetization is now **in scope for v1**. We are shipping a hard paywall fronted 
 - [x] Smoke verified (self-sent curl): webhook 200 on correct Bearer, 401 on bad. (Optional: also click RC "Send test event" for RC-side delivery confirmation.)
 
 ### E. Google Play (Phase 1b — PAUSED on payments/tax verification, per GENE.md)
-- [ ] Resolve IRS/EIN name mismatch (call IRS Business line, get Form 147c) OR submit W-9 as `BlueBuildApps, LLC` to unblock.
+- [x] ~~Resolve IRS/EIN name mismatch~~ — **Google VERIFIED the tax info 2026-06-03** ✅ (no IRS-147c call needed). **Still confirm identity verification** is also green in Play Console for the Payments profile to be fully Active.
 - [ ] Create `plus_monthly` / `plus_annual` subscriptions ($3.99 / $39.99), add 7-day trial offer on annual, activate base plans.
 - [ ] Data safety: declare Purchase history + RevenueCat partner.
 - [ ] License testing accounts; `revenuecat-play` service account + RTDN topic paste-back.
