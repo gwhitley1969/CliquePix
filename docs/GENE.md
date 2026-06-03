@@ -1,6 +1,6 @@
 # GENE.md — Paywall Rollout Punch List
 
-Personal tracking file for Gene. Pick up here when resuming the Clique Pix Plus paywall implementation.
+Personal tracking file for Gene. Pick up here when resuming the Clique Pix paywall implementation.
 
 Full plan lives at `C:\Users\genew\.claude\plans\okay-this-is-what-inherited-deer.md`.
 
@@ -11,13 +11,12 @@ Last updated **2026-06-02** — backend deployed live + most RevenueCat/Azure co
 ## ✅ Session 2026-06-02 — what the assistant completed
 
 - **Backend DEPLOYED live:** migrations 012+013 applied to `pg-cliquepixdb` (14 users backfilled, `trial_null=0`), `func publish` succeeded, `/api/health` 200, webhook verified 200. The paywall gate is **live** now → existing users ride a 7-day trial; **Phase 6 promo grants must land within 7 days.**
-- **RevenueCat:** offering packages wired (`plus_monthly` → `$rc_monthly`, `plus_annual` → `$rc_annual`); webhook `whintgr721b9e5264` created + verified; iOS SDK key `appl_OvhNypnojnQSEebpQtBikJYTHBa` captured; `plus_annual` set to **$39.99 + 7-day intro offer** (live ASC had actually still been $29.99 with no intro offer until now); paywall AI **draft** `pw9ac01d9e31184633` created.
+- **RevenueCat:** offering packages wired (`plus_monthly` → `$rc_monthly`, `plus_annual` → `$rc_annual`); webhook `whintgr721b9e5264` created + verified; iOS SDK key `appl_OvhNypnojnQSEebpQtBikJYTHBa` captured; `plus_annual` set to **$39.99 + 7-day intro offer** (live ASC had actually still been $29.99 with no intro offer until now); paywall `pw9ac01d9e31184633` **published + attached to `default`** (2026-06-03).
 - **Azure:** KV secrets + Function App settings (`REVENUECAT_WEBHOOK_SECRET`, `REVENUECAT_SECRET_API_KEY`) wired as Key Vault references and verified.
 
 ## Where we are RIGHT NOW — next clicks for Gene (all dashboard/store, no code)
 
-1. **Publish + attach the paywall draft** `pw9ac01d9e31184633` to the `default` offering (open the editor → Publish). RC has no API for this.
-   - Editor: https://app.revenuecat.com/projects/04f5314d/paywalls/pw9ac01d9e31184633/builder
+1. ~~Publish + attach the paywall~~ **✅ DONE 2026-06-03** — `pw9ac01d9e31184633` published + attached to `default`. Subscription also renamed "Clique Pix Plus" → "Clique Pix" across legal pages, web, paywall, and App Store Connect (no free tier, so "Plus" was misleading).
 2. **Verify Transfer Behavior = "Keep with previous App User ID"** (Project Settings → General). The API can't read it.
 3. ~~Fix test-store prices~~ **WON'T FIX (2026-06-03)** — RevenueCat Test Store prices are **immutable once set** (greyed in dashboard, create-only API, no update/delete endpoint). Sandbox-only; real App Store prices already correct at $3.99/$39.99, so zero user impact.
 4. **Submit** both IAPs (still `READY_TO_SUBMIT`) on the app version page.
@@ -30,7 +29,7 @@ Last updated **2026-06-02** — backend deployed live + most RevenueCat/Azure co
 ## Phase 1a — App Store Connect ✅ DONE
 
 - ✅ Paid Apps Agreement Active
-- ✅ Subscription Group: `Clique Pix Plus`
+- ✅ Subscription Group: `Clique Pix` (renamed from "Clique Pix Plus" 2026-06-03 — no free tier, so "Plus" was misleading)
 - ✅ `plus_monthly` Ready to Submit ($3.99 / mo, Family Sharing OFF, 5 English-speaking countries)
 - ✅ `plus_annual` Ready to Submit ($39.99 / yr, 7-day free trial intro offer, Family Sharing OFF)
 - ✅ App Store Connect API key (`AuthKey_TP9C6PA769.p8` in `secrets/`)
@@ -111,7 +110,7 @@ Tax is verified, so these are moot: the IRS-147c call (`800-829-4933`, EIN name-
 - [x] **Webhook configured** → `https://api.clique-pix.com/api/internal/revenuecat-webhook`, `Bearer <secret>` (secret in Key Vault). Verified **200**. *(`whintgr721b9e5264`)*
 - [x] **Secret API Key** generated → Key Vault `revenuecat-secret-api-key`.
 - [x] **iOS public SDK key** captured → `appl_OvhNypnojnQSEebpQtBikJYTHBa`. *(still must land in `app/lib/core/constants/revenuecat_constants.dart`, Phase 3)*
-- [~] **Paywalls v2 paywall** — AI **draft `pw9ac01d9e31184633`** created (dark `#0E1525`, gradient header/CTA, annual "Best Value — 7-Day Free Trial" badge, benefits list, auto-renew disclaimer, Restore). **← STILL TODO: review + Publish + attach to the `default` offering in the dashboard (no publish API).**
+- [x] **Paywalls v2 paywall** `pw9ac01d9e31184633` — **published + attached to `default` offering 2026-06-03.** Headline "Subscribe to Clique Pix"; Terms/Privacy buttons → `clique-pix.com/docs/*`.
 
 ### Android side (do after Google Play Payments is Active and service account ready)
 
