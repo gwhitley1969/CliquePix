@@ -1,6 +1,6 @@
 import { execute, query, queryOne } from './dbService';
 import { trackEvent } from './telemetryService';
-import { fetchSubscriberFromRc, type RcSubscriberResponse } from './revenuecatRestClient';
+import { fetchSubscriberFromRc } from './revenuecatRestClient';
 
 // ============================================================================
 // RevenueCat webhook event payload shape (the subset we care about)
@@ -294,10 +294,10 @@ export async function forceSyncFromRcApi(userId: string): Promise<EntitlementRow
   // use uppercased ones. Normalize to uppercase to match webhook-driven rows.
   const store = productSub?.store ? productSub.store.toUpperCase() : null;
   const periodType = productSub?.period_type ?? null;
-  // An RC subscription is set to auto-renew unless the user has unsubscribed
-  // (unsubscribe_detected_at is non-null). expires_date is always populated
-  // for active subs and is irrelevant to the renewal flag.
-  const willRenew = productSub ? !productSub.unsubscribe_detected_at : null;
+  // NOTE: RcWebhookEvent carries no will_renew field — upsertEntitlement
+  // derives it from the event type (RENEWAL ⇒ true). RC's unsubscribe state
+  // (productSub.unsubscribe_detected_at) is therefore not threaded through the
+  // synthetic event here; a webhook is the source of truth for will_renew.
 
   // Synthesize a force-sync RENEWAL so we can reuse the same upsert path.
   // event_id is unique per sync so it won't be idempotency-skipped. Only the
