@@ -13,7 +13,7 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
-import { dequeueMessage, deleteMessage } from './queueService';
+import { dequeueMessage, deleteMessage, MAX_DEQUEUE_COUNT } from './queueService';
 import { downloadBlob, uploadBlob, uploadDirectory, setBlobTier } from './blobService';
 import {
   ffprobe,
@@ -115,6 +115,33 @@ async function runQueueMode(): Promise<void> {
 
   const { videoId, blobPath, eventId, cliqueId } = message.payload;
   console.log(`[runner] Processing video ${videoId} from event ${eventId}`);
+
+  // Poison guard: the bare Storage Queue SDK does NOT auto-dead-letter, so a
+  // message that keeps failing (persistent callback failure, repeated FFmpeg
+  // crash) would redeliver forever — respawning a 2-vCPU replica each cycle and
+  // leaving the video stuck in 'processing'. Once delivery attempts reach the
+  // bound, give up: best-effort tell the backend it failed (→ row 'rejected',
+  // uploader notified, blob eligible for cleanup), then delete the message so
+  // the loop terminates. Delete even if that terminal callback fails — stopping
+  // the runaway compute outranks the (rare) stuck row, which event expiry reaps.
+  if (message.raw.dequeueCount >= MAX_DEQUEUE_COUNT) {
+    console.error(
+      `[runner] Video ${videoId} message hit dequeueCount=${message.raw.dequeueCount} ` +
+        `(>= ${MAX_DEQUEUE_COUNT}) — discarding as poison`,
+    );
+    try {
+      await postCallback({
+        video_id: videoId,
+        success: false,
+        error_code: 'TRANSCODE_POISON',
+        error_message: `Exceeded ${MAX_DEQUEUE_COUNT} delivery attempts`,
+      });
+    } catch (cbErr) {
+      console.error('[runner] Poison terminal callback failed (deleting message anyway):', cbErr);
+    }
+    await deleteMessage(message);
+    return;
+  }
 
   // Use a unique work directory under /tmp to avoid collisions if multiple
   // job replicas ever land on the same host
@@ -254,8 +281,10 @@ async function runQueueMode(): Promise<void> {
       await deleteMessage(message);
     } catch (callbackErr) {
       console.error('[runner] Failed to post failure callback:', callbackErr);
-      // Don't delete the message — let it retry via visibility timeout
-      // Eventually it'll go to the poison queue after 5 attempts
+      // Don't delete the message — let it redeliver after the visibility timeout
+      // for another attempt. There is NO automatic poison queue (bare SDK), so
+      // the MAX_DEQUEUE_COUNT guard at the top of runQueueMode is what bounds
+      // this and prevents an infinite redelivery loop.
       throw err;
     }
   } finally {
