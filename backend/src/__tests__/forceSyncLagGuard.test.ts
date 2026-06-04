@@ -54,6 +54,27 @@ function inactiveSubscriber() {
   };
 }
 
+// RC subscriber WITH a lifetime/promotional plus entitlement: expires_date null
+// = never expires (the reviewer + beta-tester grant mechanism).
+function lifetimePlusSubscriber() {
+  return {
+    subscriber: {
+      entitlements: { plus: { expires_date: null, product_identifier: 'promo_lifetime' } },
+      subscriptions: {},
+    },
+  };
+}
+
+// RC subscriber WITH a plus entitlement whose expiry is in the PAST (lapsed).
+function expiredPlusSubscriber() {
+  return {
+    subscriber: {
+      entitlements: { plus: { expires_date: PAST.toISOString(), product_identifier: 'plus_annual' } },
+      subscriptions: {},
+    },
+  };
+}
+
 beforeEach(() => {
   execMock.mockReset().mockResolvedValue(1);
   queryOneMock.mockReset();
@@ -95,5 +116,51 @@ describe('forceSyncFromRcApi — RC API-lag corroboration (H1)', () => {
     await forceSyncFromRcApi('user-1');
 
     expect(execMock).toHaveBeenCalled();
+  });
+});
+
+describe('forceSyncFromRcApi — lifetime/promotional grants (reviewer-lockout fix)', () => {
+  // markExpired is the ONLY UPDATE that sets `entitlement_active = FALSE`; the
+  // synthetic-RENEWAL upsert uses `entitlement_active          = $3`. So this
+  // distinguishes "deactivated" from "kept active" in the execute mock.
+  const calledMarkExpired = () =>
+    execMock.mock.calls.some((c) => String(c[0]).includes('entitlement_active = FALSE'));
+
+  it('keeps a lifetime/promotional plus (null expires_date) ACTIVE — never markExpired', async () => {
+    fetchSubscriberMock.mockResolvedValue(lifetimePlusSubscriber());
+    queryOneMock.mockResolvedValue(
+      dbRow({ entitlement_active: true, entitlement_expires_at: null }),
+    );
+
+    const result = await forceSyncFromRcApi('reviewer-1');
+
+    // Takes the ACTIVE branch (synthetic RENEWAL upsert), NOT markExpired.
+    expect(execMock).toHaveBeenCalled();
+    expect(calledMarkExpired()).toBe(false);
+    expect(result?.active).toBe(true);
+  });
+
+  it('still deactivates a plus whose expiry is genuinely in the PAST', async () => {
+    fetchSubscriberMock.mockResolvedValue(expiredPlusSubscriber());
+    queryOneMock.mockResolvedValue(
+      dbRow({ entitlement_active: true, entitlement_expires_at: PAST }),
+    );
+
+    await forceSyncFromRcApi('user-1');
+
+    expect(calledMarkExpired()).toBe(true);
+  });
+
+  it('does NOT deactivate an active promo (DB null expiry) when RC API lags with no plus', async () => {
+    fetchSubscriberMock.mockResolvedValue(inactiveSubscriber()); // no plus → isActive=false
+    queryOneMock.mockResolvedValue(
+      dbRow({ entitlement_active: true, entitlement_expires_at: null }),
+    );
+
+    const result = await forceSyncFromRcApi('reviewer-1');
+
+    // Lag-guard now protects active + null expiry → no markExpired, no upsert.
+    expect(execMock).not.toHaveBeenCalled();
+    expect(result?.active).toBe(true);
   });
 });
