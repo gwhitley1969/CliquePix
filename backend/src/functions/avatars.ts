@@ -219,10 +219,10 @@ async function updateAvatarPrompt(req: HttpRequest, context: InvocationContext):
     } else if (action === 'snooze') {
       await execute(
         `UPDATE users
-         SET avatar_prompt_snoozed_until = NOW() + INTERVAL '${PROMPT_SNOOZE_DAYS} days',
+         SET avatar_prompt_snoozed_until = NOW() + make_interval(days => $2),
              updated_at = NOW()
          WHERE id = $1`,
-        [authUser.id],
+        [authUser.id, PROMPT_SNOOZE_DAYS],
       );
       trackEvent('avatar_prompt_snoozed', { userId: authUser.id, days: String(PROMPT_SNOOZE_DAYS) });
     } else {
