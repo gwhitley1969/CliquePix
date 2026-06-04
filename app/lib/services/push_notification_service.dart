@@ -209,4 +209,20 @@ class PushNotificationService {
       debugPrint('[CliquePix] Failed to register push token: $e');
     }
   }
+
+  /// De-register this device's FCM token from the backend so it stops
+  /// receiving pushes addressed to the signed-out user. MUST run BEFORE auth
+  /// tokens are cleared (the DELETE needs a valid JWT). Best-effort: a failure
+  /// here must never block sign-out.
+  Future<void> deregister() async {
+    try {
+      final token = await FirebaseMessaging.instance.getToken();
+      if (token == null) return;
+      final repo = _ref.read(notificationsRepositoryProvider);
+      await repo.deletePushToken(token);
+      debugPrint('[CliquePix] FCM token de-registered');
+    } catch (e) {
+      debugPrint('[CliquePix] Failed to de-register push token: $e');
+    }
+  }
 }

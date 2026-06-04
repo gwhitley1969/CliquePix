@@ -27,4 +27,8 @@ class NotificationsApi {
   Future<void> registerPushToken(String platform, String token) async {
     await dio.post(ApiEndpoints.pushTokens, data: {'platform': platform, 'token': token});
   }
+
+  Future<void> deletePushToken(String token) async {
+    await dio.delete(ApiEndpoints.pushTokens, data: {'token': token});
+  }
 }

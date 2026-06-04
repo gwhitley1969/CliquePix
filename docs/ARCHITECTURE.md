@@ -352,6 +352,7 @@ PATCH  /api/notifications/{notificationId}/read
 DELETE /api/notifications/{notificationId}
 DELETE /api/notifications
 POST   /api/push-tokens
+DELETE /api/push-tokens
 ```
 
 ## Response Format

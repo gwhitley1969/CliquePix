@@ -366,7 +366,7 @@ GET    /api/videos/{videoId}                       # metadata + processing statu
 GET    /api/videos/{videoId}/playback              # returns rewritten HLS manifest URL + MP4 fallback URL + poster URL (15-min SAS)
 DELETE /api/videos/{videoId}
 
-POST   /api/internal/video-processing-complete     # Container Apps Job callback (managed-identity authenticated)
+POST   /api/internal/video-processing-complete     # Container Apps Job callback (Azure Functions function-key auth via ?code=; managed-identity JWT deferred to v1.5)
 
 POST   /api/photos/{photoId}/reactions
 DELETE /api/photos/{photoId}/reactions/{reactionId}
@@ -380,6 +380,7 @@ PATCH  /api/notifications/{notificationId}/read
 DELETE /api/notifications/{notificationId}
 DELETE /api/notifications
 POST   /api/push-tokens
+DELETE /api/push-tokens                            # de-register this device's FCM token on sign-out / account delete (body: { token })
 
 POST   /api/events/{eventId}/dm-threads
 GET    /api/events/{eventId}/dm-threads
@@ -435,7 +436,7 @@ If the client does not confirm upload (step 8) within 10 minutes, the orphan cle
    - Produce MP4 fallback (single file, progressive download)
    - Extract poster frame (first I-frame or 1-second mark)
 11. Container Apps Job writes HLS segments, manifest, MP4 fallback, and poster to blob storage at `photos/{cliqueId}/{eventId}/{videoId}/{hls/|fallback.mp4|poster.jpg}`
-12. Container Apps Job calls `POST /api/internal/video-processing-complete` with results (managed identity authenticated)
+12. Container Apps Job calls `POST /api/internal/video-processing-complete` with results. **Auth is the Azure Functions function key** (`authLevel: 'function'`), passed as `?code=<FUNCTION_CALLBACK_KEY>` (key sourced from Key Vault, set as the Job's env var) — NOT a managed-identity JWT. The managed-identity-token approach was attempted and deferred to v1.5 (needs an Azure AD app registration for the Function's audience). Treat the function key as a sensitive shared secret: a leak (via the Job env, Key Vault, or storage) lets a caller flip `processing` videos to `active`. See `backend/transcoder/src/callbackService.ts` + `backend/src/functions/videos.ts:videoProcessingComplete`.
 13. Function updates video row to `status='active'`, stores manifest/fallback/poster blob paths, pushes `video_ready` event via Web PubSub + sends FCM push to event members
 14. Client receives push → navigates to event feed → video card transitions from placeholder to ready state
 
@@ -1099,7 +1100,7 @@ Use Flutter flavor/environment mechanisms. Do not hardcode environment-specific 
 | `Storage Blob Data Contributor` | Storage account | Read video originals, write HLS manifest/segments, MP4 fallback, poster |
 | `Storage Queue Data Message Processor` | Storage account | Dequeue and process transcoding job messages |
 | `AcrPull` | Container Registry | Pull the FFmpeg transcoder image |
-| *(Callback auth to Function)* | — | Via managed identity token for the Function App's audience — Function validates the caller's managed identity token on `/api/internal/video-processing-complete` |
+| *(Callback auth to Function)* | — | **Azure Functions function key** (`authLevel: 'function'`) passed as `?code=<FUNCTION_CALLBACK_KEY>` on `/api/internal/video-processing-complete`. Managed-identity JWT validation was attempted and deferred to v1.5. Rotate the key as a sensitive shared secret. |
 
 No storage account keys in application code. All CliquePix SDK calls use `DefaultAzureCredential` (Function App Node.js + Container Apps Job). `allowSharedKeyAccess` remains `true` on the storage account because the Azure Functions runtime (`AzureWebJobsStorage`) requires shared keys — migrate to identity-based connection in v1.5. PostgreSQL connection string stored in Key Vault, referenced via Key Vault reference in Function App settings.
 
