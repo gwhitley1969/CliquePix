@@ -581,11 +581,26 @@ async function commitVideoUpload(
     );
     if (!eventDetails) throw new NotFoundError('event');
 
-    // Mark the row as processing and enqueue the transcode job
-    await execute(
-      `UPDATE photos SET status = 'processing', processing_status = 'queued' WHERE id = $1`,
+    // Mark the row as processing — atomic claim guarded on status='pending'.
+    // The orphan-cleanup timer can delete a still-pending video row at any
+    // point between our initial read and now (and delete its blocks/blob). If
+    // it won, this UPDATE matches 0 rows; do NOT enqueue a transcode for a row
+    // that no longer exists. Clean up any assembled blob and tell the client
+    // to retry.
+    const claimed = await execute(
+      `UPDATE photos SET status = 'processing', processing_status = 'queued'
+       WHERE id = $1 AND status = 'pending'`,
       [videoId],
     );
+    if (claimed === 0) {
+      trackEvent('video_commit_lost_to_orphan_cleanup', {
+        videoId,
+        eventId,
+        userId: authUser.id,
+      });
+      try { await cleanupVideoBlobs(video); } catch (_) { /* best-effort */ }
+      throw new ValidationError('This upload expired before it was confirmed. Please try again.');
+    }
 
     await enqueueTranscodeJob({
       videoId,

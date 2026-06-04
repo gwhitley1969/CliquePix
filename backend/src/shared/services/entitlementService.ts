@@ -262,16 +262,33 @@ export async function forceSyncFromRcApi(userId: string): Promise<EntitlementRow
   const plus = subscriber.subscriber.entitlements?.plus;
   const subscriptionsByProduct = subscriber.subscriber.subscriptions ?? {};
 
-  if (!plus) {
-    // No 'plus' entitlement on the RC subscriber object. Mark inactive
-    // (defensive — should match what the EXPIRATION webhook would have done).
+  const expiresAtMs = plus?.expires_date ? Date.parse(plus.expires_date) : null;
+  const isActive = !!plus && expiresAtMs != null && expiresAtMs > Date.now();
+
+  if (!isActive) {
+    // RC API says inactive. BUT RC's REST API is eventually-consistent and can
+    // lag webhook events by seconds–minutes — exactly the window when the
+    // client's 30s post-purchase auto-recovery calls this endpoint. If our DB
+    // already shows an active entitlement with a future expiry (a RENEWAL
+    // webhook we already processed), DO NOT deactivate a just-paid user off a
+    // stale API read: a synthetic EXPIRATION would win the ordering guard AND
+    // make the real RENEWAL webhook get rejected as stale — a sticky lockout
+    // of a paying customer. Let the webhook-driven state stand; the 6h
+    // reconciliation timer flips active=false only when the stored
+    // entitlement_expires_at genuinely passes.
+    const current = await getEntitlement(userId);
+    const dbExpiresMs = current?.expires_at ? new Date(current.expires_at).getTime() : null;
+    if (current?.active && dbExpiresMs != null && dbExpiresMs > Date.now()) {
+      trackEvent('entitlement_force_sync_skipped_api_lag', { userId });
+      return current;
+    }
     await markExpired(userId);
     trackEvent('entitlement_force_sync_inactive', { userId });
     return getEntitlement(userId);
   }
 
-  const expiresAtMs = plus.expires_date ? Date.parse(plus.expires_date) : null;
-  const productId = plus.product_identifier ?? null;
+  // Active per RC API — synthesize a RENEWAL below to reflect the real payment.
+  const productId = plus!.product_identifier ?? null;
   const productSub = productId ? subscriptionsByProduct[productId] : undefined;
   // RC stores values lowercased (`app_store` / `play_store`); webhook events
   // use uppercased ones. Normalize to uppercase to match webhook-driven rows.
@@ -282,13 +299,13 @@ export async function forceSyncFromRcApi(userId: string): Promise<EntitlementRow
   // for active subs and is irrelevant to the renewal flag.
   const willRenew = productSub ? !productSub.unsubscribe_detected_at : null;
 
-  const isActive = expiresAtMs != null && expiresAtMs > Date.now();
-
-  // Synthesize a force-sync "event" so we can reuse the same upsert path.
-  // event_id is unique per sync so it won't be idempotency-skipped.
+  // Synthesize a force-sync RENEWAL so we can reuse the same upsert path.
+  // event_id is unique per sync so it won't be idempotency-skipped. Only the
+  // active case reaches here — the inactive case returned above with the
+  // API-lag corroboration guard, so we never down-grade via a synthetic event.
   const syntheticEvent: RcWebhookEvent = {
     id: `force-sync-${userId}-${Date.now()}`,
-    type: isActive ? 'RENEWAL' : 'EXPIRATION',
+    type: 'RENEWAL',
     event_timestamp_ms: Date.now(),
     app_user_id: userId,
     product_id: productId ?? undefined,
@@ -299,6 +316,6 @@ export async function forceSyncFromRcApi(userId: string): Promise<EntitlementRow
   };
 
   await upsertEntitlement(syntheticEvent);
-  trackEvent('entitlement_force_sync_complete', { userId, active: String(isActive) });
+  trackEvent('entitlement_force_sync_complete', { userId, active: 'true' });
   return getEntitlement(userId);
 }

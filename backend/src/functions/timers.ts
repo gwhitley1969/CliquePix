@@ -193,8 +193,16 @@ async function cleanupOrphans(myTimer: Timer, context: InvocationContext): Promi
   let cleanedPhotoCount = 0;
   for (const orphan of photoOrphans) {
     try {
+      // Atomically claim the row, still guarded on status='pending'. A confirm
+      // in flight may have moved it to 'active' between our SELECT and now;
+      // if so this matches 0 rows and we MUST NOT delete its blob (the upload
+      // is live). Delete the blob only after we own the row.
+      const claimed = await execute(
+        "DELETE FROM photos WHERE id = $1 AND status = 'pending'",
+        [orphan.id],
+      );
+      if (claimed === 0) continue; // confirm won the race; leave it alone
       await deleteBlob(orphan.blob_path);
-      await execute('DELETE FROM photos WHERE id = $1', [orphan.id]);
       cleanedPhotoCount++;
     } catch (err) {
       context.error(`Failed to clean up photo orphan ${orphan.id}:`, err);
@@ -214,10 +222,17 @@ async function cleanupOrphans(myTimer: Timer, context: InvocationContext): Promi
   let cleanedVideoCount = 0;
   for (const orphan of videoOrphans) {
     try {
+      // Atomic claim guarded on status='pending' — a commit in flight may have
+      // moved it to 'processing' between our SELECT and now; if so this matches
+      // 0 rows and we leave the (now-confirming) upload's blob alone.
+      const claimed = await execute(
+        "DELETE FROM photos WHERE id = $1 AND status = 'pending'",
+        [orphan.id],
+      );
+      if (claimed === 0) continue; // commit won the race
       // Pending videos may have partial blocks committed but not finalized.
       // deleteBlob handles both committed and uncommitted blocks.
       await deleteBlob(orphan.blob_path);
-      await execute('DELETE FROM photos WHERE id = $1', [orphan.id]);
       cleanedVideoCount++;
     } catch (err) {
       context.error(`Failed to clean up video orphan ${orphan.id}:`, err);
