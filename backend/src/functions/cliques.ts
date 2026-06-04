@@ -11,9 +11,16 @@ import { NotFoundError, ForbiddenError, ValidationError } from '../shared/utils/
 import { Clique, CliqueMember, CliqueWithMemberCount } from '../shared/models/clique';
 import { sendToMultipleTokens } from '../shared/services/fcmService';
 import { enrichUserAvatar } from '../shared/services/avatarEnricher';
+import { deleteMediaAssets } from '../shared/services/blobService';
 import * as crypto from 'crypto';
 
-function generateInviteCode(): string {
+// Max accepted length when validating an inbound invite code on join. MUST stay
+// >= the length generateInviteCode() emits, or sanitizeString() truncates the
+// submitted code and the exact-match lookup can never match (joins 404). Keep
+// these two in lockstep — inviteCode.test.ts asserts the round-trip.
+export const INVITE_CODE_MAX_LENGTH = 64;
+
+export function generateInviteCode(): string {
   // 16 bytes = 128 bits of entropy (32 hex chars). 4 bytes (32 bits) was
   // brute-forceable given no APIM rate limiting + invite-code-only join
   // resolution — an attacker could probabilistically enumerate valid codes to
@@ -149,7 +156,11 @@ async function joinClique(req: HttpRequest, context: InvocationContext): Promise
     requireActiveEntitlement(authUser);
 
     const body = await req.json() as Record<string, unknown>;
-    const inviteCode = validateRequiredString(body.invite_code, 'invite_code', 20);
+    // Use INVITE_CODE_MAX_LENGTH (not a bare literal): the previous limit of 20
+    // silently truncated every 32-char C1-hardened code via sanitizeString's
+    // slice(), so the exact-match lookup below never matched and joins 404'd.
+    // Legacy 8-char codes still fit and still match.
+    const inviteCode = validateRequiredString(body.invite_code, 'invite_code', INVITE_CODE_MAX_LENGTH);
 
     // Look up clique by invite code
     const clique = await queryOne<CliqueWithMemberCount>(
@@ -340,10 +351,39 @@ async function leaveClique(req: HttpRequest, context: InvocationContext): Promis
         throw new ForbiddenError('Transfer ownership before leaving.');
       }
 
-      // Owner is the only member — delete the clique (cascade deletes memberships)
+      // Owner is the only member — the clique (and its events + media rows) is
+      // about to be CASCADE-deleted. Blobs are NOT auto-deleted, so enumerate
+      // every photo/video across all of the clique's events and delete their
+      // blobs FIRST. Without this, originals + thumbnails + (for videos) the
+      // whole HLS/fallback/poster dir are orphaned in storage forever, since
+      // once the rows are gone no cleanup path can ever find them. Mirrors the
+      // deleteEvent / deleteMe pattern (uses the shared deleteMediaAssets helper).
+      const media = await query<{ blob_path: string; thumbnail_blob_path: string | null; media_type: string }>(
+        `SELECT p.blob_path, p.thumbnail_blob_path, p.media_type
+         FROM photos p
+         JOIN events e ON e.id = p.event_id
+         WHERE e.clique_id = $1 AND p.status IN ('active', 'pending')`,
+        [cliqueId],
+      );
+      let blobCleanupFailures = 0;
+      for (const m of media) {
+        try {
+          await deleteMediaAssets(m);
+        } catch (err) {
+          blobCleanupFailures++;
+          context.error(`Failed to delete media assets while deleting clique ${cliqueId}:`, err);
+        }
+      }
+
       await execute('DELETE FROM cliques WHERE id = $1', [cliqueId]);
 
-      trackEvent('clique_left', { cliqueId, userId: authUser.id, cliqueDeleted: 'true' });
+      trackEvent('clique_left', {
+        cliqueId,
+        userId: authUser.id,
+        cliqueDeleted: 'true',
+        mediaBlobsDeleted: String(media.length - blobCleanupFailures),
+        mediaBlobCleanupFailures: String(blobCleanupFailures),
+      });
 
       return successResponse({ message: 'Clique deleted.' });
     }

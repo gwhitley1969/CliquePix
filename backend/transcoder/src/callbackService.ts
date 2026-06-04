@@ -23,10 +23,12 @@ if (!FUNCTION_CALLBACK_KEY) {
  * POST a callback payload to the Function App with retry on failure.
  *
  * Retries: 3 attempts, exponential backoff (1s, 2s, 4s).
- * If all retries fail, the error is thrown — the runner does NOT delete
- * the queue message in that case, so it gets re-tried (which is wasteful
- * but correct). After 5 dequeues without deletion, Storage Queue moves
- * the message to the poison queue and a separate timer Function cleans up.
+ * If all retries fail, the error is thrown — the runner does NOT delete the
+ * queue message in that case, so it redelivers after the visibility timeout for
+ * another attempt. NOTE: the bare @azure/storage-queue SDK does NOT auto-move
+ * messages to a poison queue (that is an Azure Functions trigger feature), so
+ * redelivery is bounded by MAX_DEQUEUE_COUNT in the runner (see queueService.ts),
+ * not by any queue-level dead-lettering.
  */
 export async function postCallback(payload: CallbackPayload): Promise<void> {
   const body = JSON.stringify(payload);

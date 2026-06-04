@@ -124,3 +124,35 @@ New `DELETE /api/push-tokens` (authenticated, ungated, scoped to the caller: `DE
 4. **`forceSyncFromRcApi` never down-grades a subscriber via a synthetic event.** Synthetic events are RENEWAL-only; deactivation requires DB corroboration (`active` + future expiry → skip).
 5. **Sign-out / delete-account de-register the FCM token before clearing the JWT** (`AuthNotifier` → `deregisterPush` → `PushNotificationService.deregister`).
 6. **The transcoder callback is function-key auth, not managed identity.** Treat `FUNCTION_CALLBACK_KEY` as a rotatable secret; don't re-document it as managed-identity until the v1.5 change actually lands.
+7. **Invite-code validation `maxLength` MUST stay ≥ the generated code length.** `joinClique` uses `INVITE_CODE_MAX_LENGTH` (64) and `generateInviteCode()` emits 32 hex chars. A smaller limit truncates via `sanitizeString().slice()` and the exact-match lookup 404s every new clique join. Guarded by `inviteCode.test.ts`.
+8. **Sole-owner clique deletion deletes media blobs first.** `leaveClique` enumerates the clique's media and calls `deleteMediaAssets` (invariant #2) BEFORE `DELETE FROM cliques` — otherwise CASCADE drops the rows and the blobs are orphaned with no cleanup path.
+9. **The transcoder bounds queue redelivery itself (`MAX_DEQUEUE_COUNT`).** There is no Storage Queue dead-letter queue on the bare-SDK path — never re-document one. Malformed messages are deleted on dequeue.
+
+---
+
+## Follow-up re-audit — 2026-06-04 (independent pass)
+
+A second, independent audit (13 finders across backend / transcoder / Flutter / webapp / config, each finding adversarially re-verified) ran after the fixes above merged. It confirmed the fixes held — **except the C1 invite fix introduced a join-breaking regression** — and surfaced new issues the first pass missed (broader Flutter/web/transcoder coverage). Raw 89 → 69 confirmed.
+
+### Ship-blockers — fixed on branch `fix/audit-ship-blockers-2026-06-04`
+
+| ID | Sev | Finding | Fix |
+|----|-----|---------|-----|
+| INV-1 | 🔴 | **Regression from C1 (`85116d2`):** `joinClique` validated `invite_code` with `maxLength 20`, truncating the new 32-char codes → exact-match lookup 404s → every clique created since C1 is un-joinable (link/QR/SMS/web). | `cliques.ts`: `INVITE_CODE_MAX_LENGTH = 64`, join uses it; `generateInviteCode` + constant exported; `inviteCode.test.ts` round-trip regression. |
+| BLOB-1 | 🔴 | **C2 gap:** sole-owner `leaveClique` CASCADE-drops media rows but never deleted blobs (`cliques.ts` didn't import `blobService`) → permanent orphan of originals + HLS/fallback/poster. | `leaveClique` enumerates clique media and calls `deleteMediaAssets` before `DELETE FROM cliques`. |
+| TQ-1 | 🔴 | **No real poison handling:** code + docs assumed Storage Queue auto-DLQs after 5 dequeues (false for the bare SDK). A persistently-failing callback or malformed message redelivered forever, respawning a 2-vCPU replica each cycle; the video stuck `processing`. | `MAX_DEQUEUE_COUNT` poison guard + terminal failure callback + delete in `runner.ts` / `queueService.ts`; malformed messages deleted on dequeue; false DLQ comments + `VIDEO_ARCHITECTURE_DECISIONS.md:173` corrected. |
+| AUTH-1 | 🟠→cfg | **MSAL Android redirect = DEBUG keystore cert hash** (AndroidManifest + `msal_config.json` + `msal_constants.dart`) → sign-in fails on Play-signed builds. | ✅ Wired with the real Play App Signing hash (`4FsaiJ4wJWgM09R/hUh3osYJhgg=`). `androidRedirectUri` is now `String.fromEnvironment('MSAL_ANDROID_REDIRECT_URI')` defaulting to the **release** hash (fail-safe); debug opts in via `dart_defines/debug.json`. AndroidManifest registers **both** `<data>` paths. **Remaining (Gene):** register `msauth://com.cliquepix.clique_pix/4FsaiJ4wJWgM09R%2FhUh3osYJhgg%3D` in the Entra app registration (Authentication → Android). |
+| H4 | 🟠→cfg | **assetlinks.json carried only the DEBUG SHA-256** → App Links fail (+ spoofable) on Play-signed installs. | ✅ Added the release Play App Signing SHA-256 (`BD:B3:DE:EC:…:60:75:FB`) to `webapp/public/.well-known/assetlinks.json` + the `infrastructure/` template (both fingerprints now present). **Remaining (Gene):** redeploy the SWA so `clique-pix.com/.well-known/assetlinks.json` serves the new file. |
+
+### Other confirmed findings (tracked, not yet fixed)
+
+High/medium to schedule:
+- **PAY — reviewer/beta lockout:** `forceSyncFromRcApi` treats a `plus` entitlement with `expires_date: null` (RevenueCat **promotional** grants — the documented reviewer + beta-tester mechanism) as inactive → `markExpired` locks them out on a "Refresh Subscription" tap. `entitlementService.ts:265`.
+- **PAY:** RevenueCat webhook returns 500 (not 200) on DB error / non-UUID `app_user_id` → RC retry storm, contradicting its own invariant. `revenuecatWebhook.ts:97`.
+- **PAY:** reconciliation `markExpired` TOCTOU — guarded only on `active=TRUE`, not `expires_at < NOW()` → can deactivate a just-renewed payer. `entitlementService.ts:237`.
+- **NOTIF:** in-app notification rows (`member_joined` / `new_photo` / `event_deleted`) are written only inside `if (tokens.length > 0)` → web-only users get none. `cliques.ts` / `photos.ts` / `events.ts`.
+- **NOTIF:** FCM transient (5xx / timeout) failures purge valid push tokens. `fcmService.ts:94`.
+- **TQ-2:** event-expiry hard-delete races a transcoding video → orphaned blobs + callback-404 retry storm. `videos.ts:916`.
+- **START:** `_briefError` RangeError can crash app startup (blank screen) on a cold-start storage failure. `main.dart:121`.
+
+Plus the prior-audit open items reconfirmed (M1/M2/M3, L2–L7, H4) and a longer low/info list (DM unread self-count; `error.toString()` on ~11 bootstrap screens; optimistic-entitlement flag not reset on account switch; Flutter resource leaks — `ui.Image`/temp files; web DM ownership OID-vs-UUID; transcoder HDR poster not tone-mapped; transcoder Docker runs as root; CI workflows lack `permissions:`; …). Full machine-readable finding set: workflow run `wf_1616060a-dc4`.
