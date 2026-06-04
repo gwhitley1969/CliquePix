@@ -1,6 +1,28 @@
 # DEPLOYMENT_STATUS.md — Clique Pix v1
 
-Last updated: 2026-06-04 (Pre-submission security & detrimental-bug audit — 4 fix commits on branch `security/audit-fixes-2026-06-04`; no remote-unauth breach found; hardened invite-code entropy, video-blob cleanup on all delete paths, entitlement lag-lockout + upload-confirm race, FCM de-register, dependency CVEs)
+Last updated: 2026-06-04 (Re-audit follow-up — 4 ship-blockers fixed & **deployed**: INV-1 invite-join regression [backend live], BLOB-1 clique-blob orphan [backend live], TQ-1 transcoder poison loop [v0.1.8 live], AUTH-1/H4 Android signing-cert [assetlinks live; app side pending next Play build]. Prior: pre-submission security audit — 4 commits, no remote-unauth breach.)
+
+## Re-audit follow-up — ship-blocker fixes deployed (2026-06-04)
+
+**Status:** ✅ deployed & verified (backend + transcoder + assetlinks). An independent re-audit (13 finders × adversarial verification; 89 raw → 69 confirmed; full machine-readable set in workflow run `wf_1616060a-dc4`) re-checked the audit fixes above and surfaced **4 ship-blockers — including a regression introduced by the C1 fix**. All four are on `main` (PRs **#18** assetlinks, **#19** backend/transcoder/app). Canonical findings record: `docs/SECURITY_AUDIT_2026-06-04.md` → "Follow-up re-audit".
+
+| ID | Fix | Deploy channel | Live? |
+|---|---|---|---|
+| **INV-1** | `joinClique` validated `invite_code` with maxLength 20 — truncating the C1 32-char codes — so the exact-match lookup 404'd; **every clique created since C1 was un-joinable** (link/QR/SMS/web). Now `INVITE_CODE_MAX_LENGTH=64` coupled to the generator + `inviteCode.test.ts` round-trip. | `func azure functionapp publish func-cliquepix-fresh` | ✅ **live** — `/api/health` 200 (direct + Front Door) |
+| **BLOB-1** | sole-owner `leaveClique` CASCADE-dropped media rows but never deleted blobs (C2 `deleteMediaAssets` not wired here) → now enumerates clique media and deletes blobs before `DELETE FROM cliques`. | same backend publish | ✅ **live** |
+| **TQ-1** | bare `@azure/storage-queue` SDK has **no** auto-DLQ (that's a Functions trigger feature) → a failing callback / malformed message respawned a 2-vCPU replica forever. Adds `MAX_DEQUEUE_COUNT` poison guard + terminal callback + malformed-message drop on dequeue. | transcoder **v0.1.8** (retagged from CI build `acf108d…` via `az acr import`) + `az containerapp job update` | ✅ **live** next transcode (job verified on `:v0.1.8`) |
+| **AUTH-1** | msauth redirect hash was the **debug** keystore cert → sign-in fails on Play-signed builds. `androidRedirectUri` now `String.fromEnvironment` defaulting to the **release** hash (`4FsaiJ4wJWgM09R/hUh3osYJhgg=`); both `<data>` paths in the manifest; debug opts in via `dart_defines/debug.json`. | Entra redirect registered (portal) ✅; **app side ships in next Play-signed build** | ⏳ app side pending build |
+| **H4** | assetlinks carried only the debug SHA-256 → added the release Play App Signing SHA-256 (`BD:B3:DE:EC:…:60:75:FB`). | SWA (PR #18) | ✅ **live** — served at `clique-pix.com/.well-known/assetlinks.json` |
+
+**Backend deploy:** `npm run build` clean + 185/185 jest (was 181 — +4 invite-code regression tests); `func azure functionapp publish func-cliquepix-fresh` succeeded; `GET /api/health` → **200** on `func-cliquepix-fresh.azurewebsites.net` AND `api.clique-pix.com`.
+
+**Transcoder deploy:** `az acr import` retagged CI image `cliquepix-transcoder:acf108d3a29f52813bd628bdc4de62cce923d591` → `:v0.1.8`; `az containerapp job update -n caj-cliquepix-transcoder -g rg-cliquepix-prod --image …:v0.1.8`; job image **verified** `:v0.1.8`. Corrected the false "Storage Queue has built-in DLQ after 5 dequeues" claim in `VIDEO_ARCHITECTURE_DECISIONS.md`.
+
+**Ops:** deleted 3 orphaned SWA staging environments (PRs 13/15/17) that were maxing the Free-tier cap and failing PR previews; production `default` env untouched.
+
+**Still open (tracked, not started):** 7 high/medium follow-ups — reviewer-lockout `expires_date:null` (promotional grants deactivated by force-sync), RC webhook 500 retry-storm, `markExpired` TOCTOU, web-user in-app notifications gated on FCM-token presence, FCM transient-failure token purge, event-expiry vs in-flight transcode race, `_briefError` startup `RangeError`. Details in `docs/SECURITY_AUDIT_2026-06-04.md`.
+
+---
 
 ## Pre-submission security & detrimental-bug audit (2026-06-04)
 
