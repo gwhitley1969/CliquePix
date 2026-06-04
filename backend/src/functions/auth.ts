@@ -2,7 +2,7 @@ import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/fu
 import * as jwt from 'jsonwebtoken';
 import jwksRsa from 'jwks-rsa';
 import { query, queryOne, execute } from '../shared/services/dbService';
-import { deleteBlob } from '../shared/services/blobService';
+import { deleteBlob, deleteMediaAssets } from '../shared/services/blobService';
 import { handleError } from '../shared/middleware/errorHandler';
 import { authenticateRequest } from '../shared/middleware/authMiddleware';
 import { successResponse, errorResponse } from '../shared/utils/response';
@@ -201,27 +201,27 @@ async function deleteMe(req: HttpRequest, context: InvocationContext): Promise<H
 
     // 2. For sole-owner cliques: delete all photo blobs, then delete clique (CASCADE)
     for (const clique of soleOwnerCliques) {
-      const cliquePhotos = await query<{ blob_path: string; thumbnail_blob_path: string | null }>(
-        `SELECT p.blob_path, p.thumbnail_blob_path FROM photos p
+      const cliqueMedia = await query<{ blob_path: string; thumbnail_blob_path: string | null; media_type: string }>(
+        `SELECT p.blob_path, p.thumbnail_blob_path, p.media_type FROM photos p
          JOIN events e ON e.id = p.event_id
          WHERE e.clique_id = $1`,
         [clique.id],
       );
-      for (const photo of cliquePhotos) {
-        await deleteBlob(photo.blob_path);
-        if (photo.thumbnail_blob_path) await deleteBlob(photo.thumbnail_blob_path);
+      // Branch on media_type so video rows prefix-delete their HLS/fallback/
+      // poster dir, not just blob_path + thumbnail (which orphaned them).
+      for (const m of cliqueMedia) {
+        try { await deleteMediaAssets(m); } catch (_) { /* best-effort */ }
       }
       await execute('DELETE FROM cliques WHERE id = $1', [clique.id]);
     }
 
-    // 3. Delete remaining photos uploaded by user (in other cliques)
-    const userPhotos = await query<{ blob_path: string; thumbnail_blob_path: string | null }>(
-      'SELECT blob_path, thumbnail_blob_path FROM photos WHERE uploaded_by_user_id = $1',
+    // 3. Delete remaining media uploaded by user (in other cliques)
+    const userMedia = await query<{ blob_path: string; thumbnail_blob_path: string | null; media_type: string }>(
+      'SELECT blob_path, thumbnail_blob_path, media_type FROM photos WHERE uploaded_by_user_id = $1',
       [authUser.id],
     );
-    for (const photo of userPhotos) {
-      await deleteBlob(photo.blob_path);
-      if (photo.thumbnail_blob_path) await deleteBlob(photo.thumbnail_blob_path);
+    for (const m of userMedia) {
+      try { await deleteMediaAssets(m); } catch (_) { /* best-effort */ }
     }
     await execute('DELETE FROM photos WHERE uploaded_by_user_id = $1', [authUser.id]);
 
