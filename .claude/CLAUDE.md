@@ -549,6 +549,7 @@ photos/{cliqueId}/{eventId}/{videoId}/poster.jpg           # video poster frame
 **Expiration cleanup:**
 - Photo cleanup: delete `original.jpg` + `thumb.jpg` (two blob deletes per photo)
 - Video cleanup: **prefix-delete** all blobs under `photos/{cliqueId}/{eventId}/{videoId}/` — this includes HLS manifest + all segments (possibly 30+ files) + MP4 fallback + poster + original master. The timer Function must enumerate and delete, not just target specific paths.
+- **Canonical media-delete helper (added 2026-06-04, security audit C2):** ALL media deletion goes through `deleteMediaAssets(media)` in `backend/src/shared/services/blobService.ts` — it branches on `media_type` (video → prefix-delete the per-media dir; photo → original + thumbnail). Any new delete path MUST call it. Deleting only `blob_path` + `thumbnail_blob_path` for a row that could be a video orphans the HLS/fallback/poster blobs forever (the bug that hit `deleteEvent`, `deleteMe`, and the expiry safety-net before the fix). See `docs/SECURITY_AUDIT_2026-06-04.md`.
 
 ---
 
@@ -735,6 +736,8 @@ Serve from Azure Front Door or a simple static web app. Static JSON files that r
 - User belongs to the clique/event they are accessing (membership check)
 - On `DELETE /api/photos/{id}` and `DELETE /api/videos/{id}`: caller must be the uploader OR the event organizer (`events.created_by_user_id`). Use the shared `canDeleteMedia` helper in `backend/src/shared/utils/permissions.ts`; uploader takes precedence; record `deleterRole` ∈ `'uploader' | 'organizer'` on the `photo_deleted` / `video_deleted` telemetry event alongside `uploaderId` and `eventOrganizerId`. Both handlers JOIN `events` in the SELECT for a single round-trip.
 
+**Invite-code entropy (hard rule, security audit C1, 2026-06-04):** `generateInviteCode` in `backend/src/functions/cliques.ts` uses `crypto.randomBytes(16).toString('hex')` (128-bit). NEVER shrink it. `POST /api/cliques/_/join` resolves a clique by `invite_code` alone and there is NO APIM rate limiting (deliberately removed) — anything weaker is brute-forceable to join private cliques.
+
 ### Blob Storage Access — RBAC + User Delegation SAS:
 - **No storage account keys in application code.** All CliquePix blob/queue access uses `DefaultAzureCredential` (managed identity). No account-key-based SAS tokens anywhere.
 - `allowSharedKeyAccess` is `true` on the storage account — required because the Azure Functions runtime (`AzureWebJobsStorage`) uses shared keys internally for timer triggers, leases, and deployment. Migrate to identity-based `AzureWebJobsStorage__accountName` in v1.5 to fully disable.
@@ -805,6 +808,10 @@ Separate scheduled check (every 15 minutes):
 3. **Video processing failures:** Query photos where `media_type = 'video'` AND `processing_status = 'failed'` AND `created_at < now() - 1 hour`. Prefix-delete any partially-written HLS outputs, delete the record.
 4. Log `orphaned_uploads_cleaned` and `failed_video_processing_cleaned` telemetry with counts
 
+**Atomic-claim invariant (added 2026-06-04, security audit H2):** the orphan-cleanup DELETE and the upload-confirm UPDATE race. Both sides MUST use a guarded atomic claim — do NOT revert to read-then-update or unconditional `DELETE WHERE id=$1`:
+- **Confirm** (`confirmUpload`, `commitVideoUpload`): the status UPDATE is `... WHERE id=$1 AND status='pending'`. 0 rows ⇒ the timer reaped the upload mid-confirm — clean up and tell the client to retry (telemetry `photo_commit_lost_to_orphan_cleanup` / `video_commit_lost_to_orphan_cleanup`); never enqueue a transcode for a deleted row.
+- **Orphan timer**: `DELETE ... WHERE id=$1 AND status='pending'`, and delete the blob ONLY after that guarded delete wins, so a confirming upload's blob is never deleted.
+
 ### Important
 
 - Device-saved copies remain untouched — only cloud-managed copies are deleted
@@ -850,7 +857,7 @@ See `pushVideoReady` in `backend/src/functions/videos.ts:284-348` and `docs/VIDE
 - **Backend:** query members' push tokens → FCM HTTP v1 `sendToMultipleTokens()` (`notification` + `data`) → write `notifications` rows for the in-app list → failed sends purge stale tokens (`DELETE FROM push_tokens WHERE token = ANY($1)`).
 - **Client display:** Foreground → `main.dart` `FirebaseMessaging.onMessage` → `flutter_local_notifications.show()` heads-up. Background/Terminated → OS auto-displays from the `notification` payload; tap → `onMessageOpenedApp` / `getInitialMessage()`. The `onMessage` listener is wired in `main.dart` **right after plugin init** so `show()` is always ready.
 - **Channels** (created in `main.dart`): `cliquepix_default` (HIGH — all pushes) + `cliquepix_reminders` (DEFAULT — Friday reminder only, separately mutable). Android 13+ permission requested once.
-- **Tokens:** `PushNotificationService` registers the FCM token post-auth via `POST /api/push-tokens`, re-registers on `onTokenRefresh`, removes on logout (backend upserts on conflict).
+- **Tokens:** `PushNotificationService` registers the FCM token post-auth via `POST /api/push-tokens`, re-registers on `onTokenRefresh`. **De-registers on sign-out / account delete** via `PushNotificationService.deregister()` → `DELETE /api/push-tokens` (body `{ token }`, scoped to the caller), wired into `AuthNotifier.signOut/deleteAccount` and run BEFORE the JWT is cleared — else the device keeps receiving pushes for the signed-out user (security audit H6, 2026-06-04). Backend upserts register on conflict.
 - **Tap nav (GoRouter via `data`):** `event_id` → `/events/$id` · `clique_id` → `/cliques/$id` · `video_id`+`event_id` (from `video_ready`) → `/events/$eventId?mediaId=$videoId`. Foreground taps: `onDidReceiveNotificationResponse` → `PushNotificationService.onNotificationTap`.
 
 ---
@@ -1157,3 +1164,4 @@ The full 18-point acceptance checklist lives in **`docs/PRD.md`**. In short, v1 
 | `docs/BETA_OPERATIONS_RUNBOOK.md` | Incident response, troubleshooting, DB backup/restore, key rotation, cost monitoring. §7 includes avatar telemetry + welcome-prompt funnel KQL queries; §2 adds avatar-specific incident playbooks |
 | `docs/WEB_CLIENT_ARCHITECTURE.md` | Web client architecture, deployment, CORS/CSP config, MSAL.js setup, video upload parity, §8.5 avatar upload + welcome prompt |
 | `docs/INVITE_INSTALL_REFERRER.md` | Install-aware QR invites + deferred deep linking: Phase A (web install banner), Phase B (Android Play Install Referrer), Phase C (iOS Smart App Banner — deferred until App Store listing live), telemetry, verification with `adb shell am broadcast` |
+| `docs/SECURITY_AUDIT_2026-06-04.md` | Pre-submission security & detrimental-bug audit: methodology, all findings (Critical→Low) + disposition, fixes shipped (commit SHAs + file:line), verified-clean list, remaining items, and the **don't-regress invariants** (invite-code entropy, `deleteMediaAssets`, upload-confirm atomic claim, `forceSync` lag guard, FCM de-register, callback function-key auth) |

@@ -1,6 +1,37 @@
 # DEPLOYMENT_STATUS.md — Clique Pix v1
 
-Last updated: 2026-05-13 (Install-aware QR invites — Phase A web banner + Phase B Android Play Install Referrer + Phase C-interim iOS TestFlight badge shipped in two commits; versionCode bumped 3 → 4 and release AAB built; Phase C-final iOS Smart App Banner gated on App Store listing approval)
+Last updated: 2026-06-04 (Pre-submission security & detrimental-bug audit — 4 fix commits on branch `security/audit-fixes-2026-06-04`; no remote-unauth breach found; hardened invite-code entropy, video-blob cleanup on all delete paths, entitlement lag-lockout + upload-confirm race, FCM de-register, dependency CVEs)
+
+## Pre-submission security & detrimental-bug audit (2026-06-04)
+
+**Status:** ✅ code complete on branch `security/audit-fixes-2026-06-04` (4 commits), ✅ backend 181/181 jest (was 174 — +7 new regression tests) + tsc clean, ✅ Flutter `analyze` 54-issue baseline preserved + 96/96 tests, ✅ webapp lint clean + build green. **Pending:** branch review/merge to `main`, backend `func publish` + mobile/web ship, and the Gene-applied config item (H4 assetlinks). **Not yet deployed.**
+
+**Why now.** RevenueCat paywall went live in prod 2026-06-02 and App Store submission is days away. Gene asked for a deep audit for "anything detrimental — above all, major security holes" before real subscribers arrive. Full methodology, every finding (Critical→Low), the verified-clean list, and the don't-regress invariants are in **`docs/SECURITY_AUDIT_2026-06-04.md`** — that is the canonical record; this entry is the deploy-tracking summary.
+
+**Headline:** no remote, unauthenticated data-breach-class hole. Fundamentals verified sound (parameterized SQL, `execFile` ffmpeg, blob-scoped SAS, JWT validation, constant-time webhook compare, no committed secrets, no token/PII logging). Six adversarial audit dimensions; every Critical/High independently re-verified against source.
+
+**What shipped (4 commits):**
+
+| Commit | IDs | Change |
+|---|---|---|
+| `85116d2` | C1, H5, L1 | Invite codes 32-bit → 128-bit (`crypto.randomBytes(16)`); `npm audit fix` cleared HIGH axios (webapp) + fast-xml-builder (backend/transcoder); avatar snooze SQL → `make_interval(days => $2)` |
+| `7e2dd75` | C2 | New `blobService.deleteMediaAssets` wired into `deleteEvent`, `deleteMe` (×2), and the expiry timer safety-net so video HLS/fallback/poster blobs are actually deleted (+4 regression tests) |
+| `b40e978` | H1, H2 | `forceSyncFromRcApi` no longer locks out a just-paid subscriber off a stale RC API read (+3 tests); atomic `status='pending'` claim closes the orphan-cleanup vs upload-confirm race on both sides |
+| `ae37344` | H6, H3 | `DELETE /api/push-tokens` + Flutter `deregister()` wired into sign-out/delete before the JWT clears; corrected the false "managed-identity" transcoder-callback claim (it's an Azure Functions function key) in CLAUDE.md + ARCHITECTURE.md |
+
+**New telemetry events:** `photo_commit_lost_to_orphan_cleanup`, `video_commit_lost_to_orphan_cleanup` (upload reaped mid-confirm — should be rare; a spike means the orphan windows are too tight), `entitlement_force_sync_skipped_api_lag` (H1 guard fired — confirms the lockout path is being avoided).
+
+**Deploy order when merged:** backend `func azure functionapp publish func-cliquepix-fresh` (additive — new DELETE endpoint, old clients unaffected) → webapp auto-deploy on merge (axios bump) → mobile build (FCM de-register + version bump). No DB migration. No infra change.
+
+**Left for Gene (config, not code):**
+- **H4 (before Android production):** `webapp/public/.well-known/assetlinks.json` carries the **debug** keystore SHA256 — replace with the release upload-key + Play App Signing fingerprints and redeploy SWA, else App Links break on Play-signed installs and are sideload-spoofable.
+- Medium/Low items (403-vs-404 oracles, `entitlement/refresh` distributed throttle, paywall-allowlist `/invite`+`/diagnostics`, open-redirect param validation, webapp test gap) tracked in `docs/SECURITY_AUDIT_2026-06-04.md` "Remaining."
+
+**Trial farming** (delete account → re-signup = fresh 7-day trial) was adjudicated **accepted-by-design** for a no-card trial — documented, not fixed.
+
+**Rollback:** the branch is unmerged; if merged, each fix is an independent commit with no migration/infra. `git revert <sha>` restores prior behavior (re-introducing the corresponding finding).
+
+---
 
 ## Install-aware QR invites — Phase A/B/C-interim shipped (2026-05-13)
 

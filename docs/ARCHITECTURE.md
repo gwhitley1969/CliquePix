@@ -391,6 +391,8 @@ Error:
 
 `effective_active = active || in_trial` is the value clients gate on. The trial is time-based and computed live; only subscription expiry has a reconciliation timer (6h). `requireActiveEntitlement` 402s `SUBSCRIPTION_REQUIRED` unless `effective_active`. See `docs/superpowers/specs/2026-06-01-paywall-trial-and-review-prompts-design.md` and the base RevenueCat plan.
 
+**RC-API-lag lockout guard (security audit H1, 2026-06-04):** `forceSyncFromRcApi` (the `POST /api/users/me/entitlement/refresh` recovery path) must NEVER down-grade a subscriber via a synthetic event. RC's REST API is eventually-consistent and lags webhook delivery by seconds–minutes — exactly the window when the client's post-purchase auto-recovery calls it. If the DB already shows `active` + a future `entitlement_expires_at`, the sync skips deactivation and keeps the webhook-driven state (the 6h reconciliation timer handles genuine expiry); a synthetic EXPIRATION would otherwise win the ordering guard AND make the real RENEWAL webhook get rejected as stale — a sticky lockout of a paying customer. Synthetic events are RENEWAL-only. See `docs/SECURITY_AUDIT_2026-06-04.md`.
+
 ---
 
 # 7. Data Architecture
@@ -798,7 +800,7 @@ Timer-triggered Azure Function on a schedule (every 15 minutes):
 3. Update photo records: set `status = 'deleted'`, set `deleted_at = now()`
 4. If all photos in an event are deleted, mark event `status = 'expired'`
 5. Mark DM threads as `read_only` for expired events
-6. Delete any remaining blobs for expired events (safety net)
+6. Delete any remaining blobs for expired events (safety net). **All blob deletion across delete paths (`deleteEvent`, `deleteMe`, this safety-net) goes through the shared `deleteMediaAssets` helper in `backend/src/shared/services/blobService.ts`**, which branches on `media_type` so video rows prefix-delete the whole `photos/{cliqueId}/{eventId}/{videoId}/` directory (HLS + fallback + poster), not just the original — see security audit C2 (2026-06-04) and `docs/SECURITY_AUDIT_2026-06-04.md`.
 7. **Hard-delete expired event records** from the database — CASCADE removes:
    - `photos` (FK `event_id` ON DELETE CASCADE)
    - `reactions` (FK `photo_id` ON DELETE CASCADE, cascaded from photos)
@@ -1205,3 +1207,4 @@ The architecture is:
 | `NOTIFICATION_SYSTEM.md` | Push notification architecture: FCM payloads, Web PubSub events, token lifecycle |
 | `BETA_TEST_PLAN.md` | Manual smoke test checklist for beta releases |
 | `BETA_OPERATIONS_RUNBOOK.md` | Incident response, troubleshooting, DB backup/restore, key rotation, cost monitoring |
+| `SECURITY_AUDIT_2026-06-04.md` | Pre-submission security audit: findings, fixes shipped, remaining items, and the don't-regress invariants |
