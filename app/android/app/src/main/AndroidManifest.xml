@@ -70,7 +70,24 @@
             </intent-filter>
         </activity>
 
-        <!-- MSAL browser redirect for Entra External ID auth -->
+        <!-- MSAL browser redirect for Entra External ID auth.
+
+             Each <data> path is base64(SHA1(signing cert)) for one build's cert.
+             BOTH are registered so the auth-callback redirect is caught whichever
+             cert signs the running build:
+               /4FsaiJ4wJWgM09R/hUh3osYJhgg=  → RELEASE / Play App Signing key
+               /W28+gAaZ9fNu1yL/GMRe94rK0dY=  → DEBUG keystore (local dev)
+             The redirect_uri MSAL actually SENDS is chosen at build time by
+             MsalConstants.androidRedirectUri (String.fromEnvironment; defaults to
+             the release hash, debug opts in via
+             --dart-define-from-file=dart_defines/debug.json). Both hashes must
+             also be registered as redirect URIs in the Entra app registration
+             (7db01206-135b-4a34-a4d5-2622d1a888bf).
+             Regenerate the release hash from the Play App Signing cert:
+               Play Console > Protected with Play > Play Store protection >
+               Protect app signing key > Manage Play app signing  → download cert →
+               openssl sha1 -binary <cert.der> | openssl base64
+             See docs/SECURITY_AUDIT_2026-06-04.md (AUTH-1 / H4). -->
         <activity
             android:name="com.microsoft.identity.client.BrowserTabActivity"
             android:exported="true">
@@ -78,6 +95,12 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
+                <!-- RELEASE / Play App Signing key cert hash -->
+                <data
+                    android:host="com.cliquepix.clique_pix"
+                    android:path="/4FsaiJ4wJWgM09R/hUh3osYJhgg="
+                    android:scheme="msauth" />
+                <!-- DEBUG keystore cert hash (local dev) -->
                 <data
                     android:host="com.cliquepix.clique_pix"
                     android:path="/W28+gAaZ9fNu1yL/GMRe94rK0dY="
