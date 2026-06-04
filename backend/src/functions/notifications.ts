@@ -84,6 +84,26 @@ async function registerPushToken(req: HttpRequest, context: InvocationContext): 
   }
 }
 
+// DELETE /api/push-tokens — de-register this device's FCM token on sign-out /
+// account delete so the device stops receiving pushes addressed to the old
+// user. Ungated (must work for a lapsed user signing out) and scoped to the
+// caller so a user can only remove their own token rows.
+async function deletePushToken(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
+  try {
+    const authUser = await authenticateRequest(req);
+    const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+    const token = validateRequiredString(body.token, 'token', 500);
+
+    const deleted = await execute(
+      'DELETE FROM push_tokens WHERE token = $1 AND user_id = $2',
+      [token, authUser.id],
+    );
+    return successResponse({ message: 'Push token removed.', count: deleted });
+  } catch (error) {
+    return handleError(error, context.invocationId);
+  }
+}
+
 async function deleteNotification(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   try {
     const authUser = await authenticateRequest(req);
@@ -137,6 +157,13 @@ app.http('registerPushToken', {
   authLevel: 'anonymous',
   route: 'push-tokens',
   handler: registerPushToken,
+});
+
+app.http('deletePushToken', {
+  methods: ['DELETE'],
+  authLevel: 'anonymous',
+  route: 'push-tokens',
+  handler: deletePushToken,
 });
 
 app.http('deleteNotification', {

@@ -7,7 +7,7 @@ import { query, queryOne, execute } from '../shared/services/dbService';
 import { trackEvent } from '../shared/services/telemetryService';
 import { validateRequiredString, validateOptionalString, validateRetentionHours, isValidUUID } from '../shared/utils/validators';
 import { NotFoundError, ForbiddenError, ValidationError } from '../shared/utils/errors';
-import { deleteBlob } from '../shared/services/blobService';
+import { deleteMediaAssets } from '../shared/services/blobService';
 import { sendToMultipleTokens } from '../shared/services/fcmService';
 import { sendToUser } from '../shared/services/webPubSubService';
 import { Event } from '../shared/models/event';
@@ -382,16 +382,19 @@ async function deleteEvent(req: HttpRequest, context: InvocationContext): Promis
 
     await checkCliqueMembership(event.clique_id, authUser.id);
 
-    // Delete blobs BEFORE cascade DB delete (blobs are not auto-deleted)
-    const photos = await query<{ blob_path: string; thumbnail_blob_path: string | null }>(
-      `SELECT blob_path, thumbnail_blob_path FROM photos WHERE event_id = $1 AND status IN ('active', 'pending')`,
+    // Delete blobs BEFORE cascade DB delete (blobs are not auto-deleted).
+    // Branch on media_type so video rows prefix-delete their HLS/fallback/
+    // poster dir — not just blob_path + thumbnail (which would orphan them).
+    const media = await query<{ blob_path: string; thumbnail_blob_path: string | null; media_type: string }>(
+      `SELECT blob_path, thumbnail_blob_path, media_type FROM photos WHERE event_id = $1 AND status IN ('active', 'pending')`,
       [eventId],
     );
 
-    for (const photo of photos) {
-      await deleteBlob(photo.blob_path);
-      if (photo.thumbnail_blob_path) {
-        await deleteBlob(photo.thumbnail_blob_path);
+    for (const m of media) {
+      try {
+        await deleteMediaAssets(m);
+      } catch (err) {
+        context.error(`Failed to delete media assets for event ${eventId}:`, err);
       }
     }
 
@@ -449,7 +452,7 @@ async function deleteEvent(req: HttpRequest, context: InvocationContext): Promis
       eventId,
       cliqueId: event.clique_id,
       userId: authUser.id,
-      photoCount: String(photos.length),
+      photoCount: String(media.length),
     });
 
     return successResponse({ message: 'Event deleted.' });

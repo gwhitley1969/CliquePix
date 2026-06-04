@@ -238,7 +238,11 @@ async function confirmUpload(req: HttpRequest, context: InvocationContext): Prom
     const finalWidth = width;
     const finalHeight = height;
 
-    // Update photo record to active
+    // Update photo record to active. Guard on status='pending' so this is an
+    // atomic claim: the orphan-cleanup timer can delete a still-pending row at
+    // any point between our initial read above and now. If it won, this UPDATE
+    // matches 0 rows and updatedPhoto is null — we must NOT proceed as if the
+    // photo were live (it would push a notification for a deleted row).
     const updatedPhoto = await queryOne<Photo>(
       `UPDATE photos
        SET status = 'active',
@@ -247,10 +251,21 @@ async function confirmUpload(req: HttpRequest, context: InvocationContext): Prom
            height = $3,
            file_size_bytes = $4,
            original_filename = $5
-       WHERE id = $6
+       WHERE id = $6 AND status = 'pending'
        RETURNING *`,
       [mimeType, finalWidth, finalHeight, fileSizeBytes, originalFilename, photoId],
     );
+
+    if (!updatedPhoto) {
+      // The orphan-cleanup timer deleted this pending upload before we could
+      // confirm it (it also deleted the blob). Tell the client to retry.
+      trackEvent('photo_commit_lost_to_orphan_cleanup', {
+        photoId,
+        eventId,
+        userId: authUser.id,
+      });
+      throw new ValidationError('This upload expired before it was confirmed. Please try again.');
+    }
 
     // Trigger async thumbnail generation (non-blocking, non-fatal)
     generateThumbnailAsync(photo.blob_path, photoId).catch((err) => {

@@ -14,7 +14,12 @@ import { enrichUserAvatar } from '../shared/services/avatarEnricher';
 import * as crypto from 'crypto';
 
 function generateInviteCode(): string {
-  return crypto.randomBytes(4).toString('hex'); // 8 alphanumeric chars
+  // 16 bytes = 128 bits of entropy (32 hex chars). 4 bytes (32 bits) was
+  // brute-forceable given no APIM rate limiting + invite-code-only join
+  // resolution — an attacker could probabilistically enumerate valid codes to
+  // join private cliques. Longer codes are backward-compatible (join resolves
+  // by exact match; existing shorter codes keep working).
+  return crypto.randomBytes(16).toString('hex');
 }
 
 // POST /api/cliques

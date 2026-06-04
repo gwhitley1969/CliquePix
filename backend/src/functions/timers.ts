@@ -1,6 +1,6 @@
 import { app, InvocationContext, Timer } from '@azure/functions';
 import { query, execute } from '../shared/services/dbService';
-import { deleteBlob, deleteBlobsByPrefix } from '../shared/services/blobService';
+import { deleteBlob, deleteBlobsByPrefix, deleteMediaAssets } from '../shared/services/blobService';
 import { sendToMultipleTokens, sendSilentToMultipleTokens } from '../shared/services/fcmService';
 import { trackEvent } from '../shared/services/telemetryService';
 import { initTelemetry } from '../shared/services/telemetryService';
@@ -125,16 +125,18 @@ async function cleanupExpired(myTimer: Timer, context: InvocationContext): Promi
   );
 
   if (expiredEvents.length > 0) {
-    // Safety net: delete any remaining blobs before cascade-deleting DB records
+    // Safety net: delete any remaining blobs before cascade-deleting DB records.
+    // Branch on media_type so video rows prefix-delete their HLS/fallback/
+    // poster dir — the prior photo-only cleanup orphaned those blobs forever
+    // for any video not already swept by the per-video loop above.
     for (const event of expiredEvents) {
-      const remainingPhotos = await query<{ blob_path: string; thumbnail_blob_path: string | null }>(
-        `SELECT blob_path, thumbnail_blob_path FROM photos WHERE event_id = $1`,
+      const remainingMedia = await query<{ blob_path: string; thumbnail_blob_path: string | null; media_type: string }>(
+        `SELECT blob_path, thumbnail_blob_path, media_type FROM photos WHERE event_id = $1`,
         [event.id],
       );
-      for (const photo of remainingPhotos) {
+      for (const m of remainingMedia) {
         try {
-          await deleteBlob(photo.blob_path);
-          if (photo.thumbnail_blob_path) await deleteBlob(photo.thumbnail_blob_path);
+          await deleteMediaAssets(m);
         } catch (_) { /* blob may already be deleted */ }
       }
     }
@@ -191,8 +193,16 @@ async function cleanupOrphans(myTimer: Timer, context: InvocationContext): Promi
   let cleanedPhotoCount = 0;
   for (const orphan of photoOrphans) {
     try {
+      // Atomically claim the row, still guarded on status='pending'. A confirm
+      // in flight may have moved it to 'active' between our SELECT and now;
+      // if so this matches 0 rows and we MUST NOT delete its blob (the upload
+      // is live). Delete the blob only after we own the row.
+      const claimed = await execute(
+        "DELETE FROM photos WHERE id = $1 AND status = 'pending'",
+        [orphan.id],
+      );
+      if (claimed === 0) continue; // confirm won the race; leave it alone
       await deleteBlob(orphan.blob_path);
-      await execute('DELETE FROM photos WHERE id = $1', [orphan.id]);
       cleanedPhotoCount++;
     } catch (err) {
       context.error(`Failed to clean up photo orphan ${orphan.id}:`, err);
@@ -212,10 +222,17 @@ async function cleanupOrphans(myTimer: Timer, context: InvocationContext): Promi
   let cleanedVideoCount = 0;
   for (const orphan of videoOrphans) {
     try {
+      // Atomic claim guarded on status='pending' — a commit in flight may have
+      // moved it to 'processing' between our SELECT and now; if so this matches
+      // 0 rows and we leave the (now-confirming) upload's blob alone.
+      const claimed = await execute(
+        "DELETE FROM photos WHERE id = $1 AND status = 'pending'",
+        [orphan.id],
+      );
+      if (claimed === 0) continue; // commit won the race
       // Pending videos may have partial blocks committed but not finalized.
       // deleteBlob handles both committed and uncommitted blocks.
       await deleteBlob(orphan.blob_path);
-      await execute('DELETE FROM photos WHERE id = $1', [orphan.id]);
       cleanedVideoCount++;
     } catch (err) {
       context.error(`Failed to clean up video orphan ${orphan.id}:`, err);

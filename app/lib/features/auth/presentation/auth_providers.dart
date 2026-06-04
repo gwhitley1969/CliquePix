@@ -17,6 +17,7 @@ import '../domain/auth_repository.dart';
 import '../domain/auth_state.dart';
 import '../domain/background_token_service.dart';
 import '../../../services/revenuecat_service.dart';
+import '../../../services/push_notification_service.dart';
 
 final authApiProvider = Provider<AuthApi>((ref) {
   final apiClient = ref.watch(apiClientProvider);
@@ -64,6 +65,12 @@ final authStateProvider =
     ref.watch(dmRepositoryProvider),
     ref.watch(revenueCatServiceProvider),
     bootstrap: ref.watch(authBootstrapStateProvider),
+    // De-register this device's FCM token on sign-out / delete BEFORE the auth
+    // token is cleared. Injected as a callback (not a typed field) so
+    // AuthNotifier doesn't import PushNotificationService — auth_providers is
+    // already imported BY that service, and a typed field would tighten the
+    // cycle. Read lazily so a push-init failure can't block auth construction.
+    deregisterPush: () => ref.read(pushNotificationServiceProvider).deregister(),
   );
 });
 
@@ -97,6 +104,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   final DmRealtimeService _realtime;
   final DmRepository _dmRepo;
   final RevenueCatService _revenueCat;
+  final Future<void> Function()? _deregisterPush;
   AppLifecycleService? _lifecycle;
 
   bool _signingIn = false;
@@ -110,7 +118,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
     this._dmRepo,
     this._revenueCat, {
     required AuthState bootstrap,
-  }) : super(bootstrap) {
+    Future<void> Function()? deregisterPush,
+  })  : _deregisterPush = deregisterPush,
+        super(bootstrap) {
     // Optimistic bootstrap: if we seeded AuthAuthenticated from cached
     // storage, start the Layer-3 lifecycle observer and fire background
     // verification so the cached user is replaced with the authoritative
@@ -251,6 +261,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
   void clearError() => state = const AuthUnauthenticated();
 
   Future<void> signOut() async {
+    // De-register the FCM token while the JWT is still valid, so this device
+    // stops receiving pushes for the signed-out user. Best-effort (the
+    // callback swallows its own errors) — never block sign-out.
+    if (_deregisterPush != null) await _deregisterPush();
     try {
       await _repository.signOut();
     } finally {
@@ -260,6 +274,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> deleteAccount() async {
+    if (_deregisterPush != null) await _deregisterPush();
     try {
       await _repository.deleteAccount();
     } finally {

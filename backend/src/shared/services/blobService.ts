@@ -1,5 +1,6 @@
 import { BlobServiceClient, ContainerClient } from '@azure/storage-blob';
 import { DefaultAzureCredential } from '@azure/identity';
+import * as path from 'path';
 
 let blobServiceClient: BlobServiceClient | null = null;
 let containerClient: ContainerClient | null = null;
@@ -100,6 +101,42 @@ export async function deleteBlobsByPrefix(prefix: string): Promise<number> {
     }
   }
   return count;
+}
+
+/**
+ * Delete all blobs belonging to a single media row (photo OR video), given its
+ * row. Photos store original.jpg + thumb.jpg under
+ * `photos/{cliqueId}/{eventId}/{mediaId}/`; videos store original.mp4 + the
+ * whole `hls/` dir + fallback.mp4 + poster.jpg under the same per-media dir.
+ *
+ * For videos we prefix-delete that directory so HLS segments + fallback +
+ * poster are removed — NOT just `blob_path`. Several destructive paths
+ * (deleteEvent, deleteMe, the expiry safety-net) historically deleted only
+ * `blob_path` + `thumbnail_blob_path`, orphaning video HLS/fallback/poster
+ * blobs in storage forever (cost + the product's "everything disappears"
+ * promise). This helper is the single correct cleanup for both media types.
+ *
+ * Best-effort: individual blob delete failures are swallowed by the underlying
+ * helpers, so a missing blob does not throw.
+ */
+export async function deleteMediaAssets(media: {
+  blob_path: string;
+  thumbnail_blob_path?: string | null;
+  media_type?: string | null;
+}): Promise<void> {
+  if (media.media_type === 'video') {
+    // The per-video directory is the parent of original.mp4. Trailing slash
+    // guarantees `{videoId}/` cannot match a sibling `{videoId}X/` prefix.
+    const dirPrefix = path.posix.dirname(media.blob_path) + '/';
+    await deleteBlobsByPrefix(dirPrefix);
+    return;
+  }
+  // Photo (or unknown/legacy): delete original + thumbnail explicitly to
+  // preserve the exact pre-existing behavior for photo rows.
+  await deleteBlob(media.blob_path);
+  if (media.thumbnail_blob_path) {
+    await deleteBlob(media.thumbnail_blob_path);
+  }
 }
 
 /**

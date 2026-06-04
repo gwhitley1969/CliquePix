@@ -31,4 +31,8 @@ class NotificationsRepository {
   Future<void> registerPushToken(String platform, String token) async {
     await api.registerPushToken(platform, token);
   }
+
+  Future<void> deletePushToken(String token) async {
+    await api.deletePushToken(token);
+  }
 }
