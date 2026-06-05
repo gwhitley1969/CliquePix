@@ -91,7 +91,6 @@ export async function uploadVideo(input: {
 
 async function putBlockWithRetry(url: string, chunk: Blob, index: number): Promise<void> {
   let attempt = 0;
-  // eslint-disable-next-line no-constant-condition
   while (true) {
     try {
       const response = await fetch(url, {
