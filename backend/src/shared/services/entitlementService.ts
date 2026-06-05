@@ -262,23 +262,33 @@ export async function forceSyncFromRcApi(userId: string): Promise<EntitlementRow
   const plus = subscriber.subscriber.entitlements?.plus;
   const subscriptionsByProduct = subscriber.subscriber.subscriptions ?? {};
 
+  // A promotional / lifetime entitlement (the mechanism CLAUDE.md mandates for
+  // the App Store reviewer + beta testers) has expires_date === null and never
+  // expires — treat it as active-forever. A non-null expiry is active only when
+  // it's still in the future; RC keeps a LAPSED entitlement in `entitlements`
+  // with a PAST expires_date. Without the null-expiry case, a reviewer/tester
+  // tapping "Refresh Subscription" would be force-deactivated and hard-paywalled
+  // out of the entire app (App Store reviewer-rejection risk).
   const expiresAtMs = plus?.expires_date ? Date.parse(plus.expires_date) : null;
-  const isActive = !!plus && expiresAtMs != null && expiresAtMs > Date.now();
+  const isLifetime = plus != null && plus.expires_date === null;
+  const isActive =
+    plus != null && (isLifetime || (expiresAtMs !== null && expiresAtMs > Date.now()));
 
   if (!isActive) {
     // RC API says inactive. BUT RC's REST API is eventually-consistent and can
     // lag webhook events by seconds–minutes — exactly the window when the
-    // client's 30s post-purchase auto-recovery calls this endpoint. If our DB
-    // already shows an active entitlement with a future expiry (a RENEWAL
-    // webhook we already processed), DO NOT deactivate a just-paid user off a
-    // stale API read: a synthetic EXPIRATION would win the ordering guard AND
-    // make the real RENEWAL webhook get rejected as stale — a sticky lockout
-    // of a paying customer. Let the webhook-driven state stand; the 6h
-    // reconciliation timer flips active=false only when the stored
-    // entitlement_expires_at genuinely passes.
+    // client's 30s post-purchase auto-recovery calls this endpoint. Do NOT
+    // deactivate off a stale/incomplete API read when our DB already shows an
+    // active entitlement that should still be active:
+    //   - a FUTURE expiry → a just-paid subscriber (the original H1 guard), or
+    //   - a NULL expiry    → a lifetime/promotional grant (reviewer + testers;
+    //                         the reconciliation timer already skips these).
+    // A synthetic EXPIRATION would win the ordering guard AND make the real
+    // RENEWAL webhook get rejected as stale — a sticky lockout of a legitimate
+    // customer. Only deactivate when the stored expiry has genuinely passed.
     const current = await getEntitlement(userId);
     const dbExpiresMs = current?.expires_at ? new Date(current.expires_at).getTime() : null;
-    if (current?.active && dbExpiresMs != null && dbExpiresMs > Date.now()) {
+    if (current?.active && (dbExpiresMs == null || dbExpiresMs > Date.now())) {
       trackEvent('entitlement_force_sync_skipped_api_lag', { userId });
       return current;
     }
