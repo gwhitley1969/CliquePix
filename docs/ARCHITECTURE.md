@@ -391,7 +391,9 @@ Error:
 
 `effective_active = active || in_trial` is the value clients gate on. The trial is time-based and computed live; only subscription expiry has a reconciliation timer (6h). `requireActiveEntitlement` 402s `SUBSCRIPTION_REQUIRED` unless `effective_active`. See `docs/superpowers/specs/2026-06-01-paywall-trial-and-review-prompts-design.md` and the base RevenueCat plan.
 
-**RC-API-lag lockout guard (security audit H1, 2026-06-04):** `forceSyncFromRcApi` (the `POST /api/users/me/entitlement/refresh` recovery path) must NEVER down-grade a subscriber via a synthetic event. RC's REST API is eventually-consistent and lags webhook delivery by seconds–minutes — exactly the window when the client's post-purchase auto-recovery calls it. If the DB already shows `active` + a future `entitlement_expires_at`, the sync skips deactivation and keeps the webhook-driven state (the 6h reconciliation timer handles genuine expiry); a synthetic EXPIRATION would otherwise win the ordering guard AND make the real RENEWAL webhook get rejected as stale — a sticky lockout of a paying customer. Synthetic events are RENEWAL-only. See `docs/SECURITY_AUDIT_2026-06-04.md`.
+**RC-API-lag lockout guard (security audit H1, 2026-06-04; extended to lifetime grants 2026-06-04):** `forceSyncFromRcApi` (the `POST /api/users/me/entitlement/refresh` recovery path) must NEVER down-grade an entitled user via a synthetic event. A present `plus` entitlement with `expires_date === null` is a **lifetime/promotional grant** (the mandated App Store reviewer + beta-tester mechanism) and is treated as active-forever; a non-null expiry is active only if still in the future. RC's REST API is eventually-consistent and lags webhook delivery by seconds–minutes — exactly the window when the client's post-purchase auto-recovery calls it. If the DB already shows `active` AND (`entitlement_expires_at IS NULL` for a lifetime/promo grant **OR** a future expiry for a just-paid subscriber), the sync skips deactivation and keeps the webhook-driven state (the 6h reconciliation timer handles genuine subscription expiry). A synthetic EXPIRATION would otherwise win the ordering guard AND make the real RENEWAL webhook get rejected as stale — a sticky lockout (and an App Store reviewer-rejection risk). Synthetic events are RENEWAL-only. See `docs/SECURITY_AUDIT_2026-06-04.md`.
+
+**Webhook retry-storm + markExpired TOCTOU hardening (PAY, 2026-06-04):** the `POST /api/internal/revenuecat-webhook` handler returns HTTP 200 on every path except an authentication failure (a missing `REVENUECAT_WEBHOOK_SECRET` throws a loud 401) — RC retries on any non-2xx, so an unexpected 500 would mask real subscription events in a retry-storm. A non-UUID resolved `app_user_id` (e.g. `$RCAnonymousID:...` before `Purchases.logIn` aliasing) is rejected by `upsertEntitlement` as a clean logged no-op (`entitlement_webhook_invalid_user_id`) BEFORE the UUID-typed `WHERE id=$1` UPDATE, rather than raising a Postgres uuid-cast error into the 500 path. Separately, `markExpired` is self-validating to close a TOCTOU: its UPDATE requires `entitlement_active=TRUE AND entitlement_expires_at IS NOT NULL AND entitlement_expires_at < NOW()`, so a RENEWAL webhook landing between the reconciliation-timer snapshot and the per-row UPDATE cannot deactivate a just-renewed payer, and null-expiry lifetime/promotional grants are left untouched. See `docs/SECURITY_AUDIT_2026-06-04.md`.
 
 ---
 
@@ -811,10 +813,17 @@ Timer-triggered Azure Function on a schedule (every 15 minutes):
 
 ### Orphan Cleanup
 
-Separate scheduled check for orphaned uploads:
-- Query photos where `status = 'pending'` and `created_at < now() - 10 minutes`
-- Delete the orphaned blob if it exists
-- Delete the pending record
+Separate scheduled check (every 15 min) for uploads whose confirm never arrived. Photos and videos have different windows because video uploads take longer:
+
+- **Photos:** `media_type='photo'` AND `status='pending'` AND `created_at < now() - 10 minutes`
+- **Videos:** `media_type='video'` AND `status='pending'` AND `created_at < now() - 30 minutes`
+- **Failed video processing:** `media_type='video'` AND `processing_status='failed'` AND `created_at < now() - 1 hour` (prefix-delete any partial HLS outputs)
+
+**Atomic-claim invariant (security audit H2, 2026-06-04):** the orphan-cleanup DELETE and the upload-confirm UPDATE race the same row. Both sides MUST use a guarded atomic claim — do NOT revert to read-then-update or an unconditional `DELETE WHERE id=$1`:
+- **Confirm** (`confirmUpload`, `commitVideoUpload`): the status UPDATE is `... WHERE id=$1 AND status='pending'`. 0 rows ⇒ the timer reaped the upload mid-confirm — clean up and tell the client to retry (telemetry `photo_commit_lost_to_orphan_cleanup` / `video_commit_lost_to_orphan_cleanup`); never enqueue a transcode for a deleted row.
+- **Orphan timer**: `DELETE FROM photos WHERE id=$1 AND status='pending'`, and delete the blob ONLY after that guarded delete wins, so a confirming upload's blob is never deleted.
+
+See `docs/SECURITY_AUDIT_2026-06-04.md`.
 
 ### Important Behavior
 
@@ -940,6 +949,7 @@ Every API endpoint must enforce:
 - user is authenticated (valid Entra token verified by the Function)
 - user belongs to the clique/event they are accessing (membership check)
 - on media delete: caller must be the uploader OR the event organizer (`events.created_by_user_id`); see `canDeleteMedia` in `backend/src/shared/utils/permissions.ts`
+- **Invite-code entropy (security audit C1, 2026-06-04):** `generateInviteCode` uses `crypto.randomBytes(16).toString('hex')` (128-bit). `POST /api/cliques/_/join` resolves a clique by `invite_code` alone and there is NO APIM rate limiting (deliberately removed — see §3), so the code's entropy is the sole brute-force defense against joining private cliques. NEVER shrink it; the join validator bounds `invite_code` by `INVITE_CODE_MAX_LENGTH` (64) coupled to the generator.
 
 ## Blob Storage Security
 

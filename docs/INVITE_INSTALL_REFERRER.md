@@ -203,6 +203,8 @@ If you need a real invite code instead of a fake one, generate it from another d
 
 ### Real Play Store install
 
+> **Prerequisite — Android App Links must auto-verify on the running build.** The whole installed-app path (Play Install Referrer auto-join here, and the Universal/App Link retap routing) only fires if Android verifies the `clique-pix.com/invite` App Link for the running APK/AAB. That verification reads `https://clique-pix.com/.well-known/assetlinks.json`, which MUST list the SHA-256 fingerprint of the key that signed the running build. Because production AABs are re-signed by **Play App Signing** (not the upload key), `assetlinks.json` carries **both** fingerprints — the upload/debug key (`BD:B3:DE:...`) and the Play App Signing key (`4F:6E:1A:...`) — in both copies (`infrastructure/well-known/assetlinks.json` and `webapp/public/.well-known/assetlinks.json`). If the Play App Signing fingerprint is missing (it was, until the 2026-06-04 H4 fix), `clique-pix.com/invite` links open in the browser on production builds instead of routing into the app, silently defeating both the auto-join and the retap flows. The matching `<intent-filter android:autoVerify="true">` lives in `app/android/app/src/main/AndroidManifest.xml`. Baseline App Links / assetlinks setup is owned by `docs/AUTHENTICATION.md` / `docs/ARCHITECTURE.md`; this doc only depends on it being correct.
+
 1. Ship a new AAB to Open Testing or Production with the `play_install_referrer` integration (current AAB versionCode=3 is pre-integration; you'll need versionCode=4+ for Phase B to take effect).
 2. Wait for Play approval.
 3. On a clean Android device, navigate to `https://clique-pix.com/invite/{any-real-code}` in Chrome → tap the Play Store badge → install → sign in.
