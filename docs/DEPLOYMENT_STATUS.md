@@ -1,6 +1,24 @@
 # DEPLOYMENT_STATUS.md — Clique Pix v1
 
-Last updated: 2026-06-04 (Re-audit follow-up — 4 ship-blockers fixed & **deployed**: INV-1 invite-join regression [backend live], BLOB-1 clique-blob orphan [backend live], TQ-1 transcoder poison loop [v0.1.8 live], AUTH-1/H4 Android signing-cert [assetlinks live; app side pending next Play build]. Prior: pre-submission security audit — 4 commits, no remote-unauth breach.)
+Last updated: 2026-06-05 (Post-audit cluster #24–#28: Flutter polish/auth-state hardening [next app build], webapp DM/EntitlementGuard/Lightbox fixes [SWA live], CI bumped to Node 24 @v6 [live]; added SWA staging-env auto-cleanup workflow. Prior: 2026-06-04 re-audit ship-blockers + #21/#22/#23 entitlement & notification hardening.)
+
+## Post-audit hardening cluster #24–#28 + SWA cleanup (2026-06-05)
+
+**Status:** mixed by channel (see table). The pre-submission audit (#17) surfaced follow-ups that landed as #24–#27; #28 is unrelated CI maintenance.
+
+| PR | Area | Change | Deploy channel | Live? |
+|---|---|---|---|---|
+| **#24** | Flutter | briefError launch-crash RangeError (bounded by full multi-line length, applied to first line) fixed; 9 bootstrap screens swapped error.toString()→friendlyApiErrorMessage; gallery-save temp-file leaks plugged; FCM token fragment removed from debugPrint | next Play/TestFlight build | ⏳ app build pending |
+| **#25** | Flutter | 5-layer-defense hardening: _authEpoch session-resurrection guard, 401 retry-loop guard, single-flight refresh mutex, optimistic-entitlement reset on identity change | next Play/TestFlight build | ⏳ app build pending |
+| **#26** | Webapp | DM sender-identity uses cached verified-user UUID; EntitlementGuard recoverable error state (no more permanent blank screen on non-401 /auth/verify failure); Lightbox downloads playable MP4 fallback for videos | SWA auto-deploy on merge | ✅ live (verify at clique-pix.com) |
+| **#27** | Webapp | web DM mark-read sends last_read_message_id (backend 400'd without it) | SWA auto-deploy on merge | ✅ live (verify at clique-pix.com) |
+| **#28** | CI | actions/checkout & actions/setup-node @v4 → @v6 (Node 24, ahead of GitHub's 2026-06-16 Node-20 cutoff) across all 4 workflows; dropped dead eslint-disable in webapp videoUpload.ts | merge to main | ✅ live (all workflows on @v6) |
+
+**SWA staging-env auto-cleanup fix (added this change set).** The Azure SWA PR-close cleanup job never ran: it lived in `webapp-deploy.yml` whose `pull_request` trigger has a `paths:` filter but no `types:`, defaulting to [opened, synchronize, reopened] — `closed` was never delivered, so the close job had 0 executions across ~30 PRs and staging envs orphaned until the Free-tier 3-env cap blocked the next deploy (the same orphan-env problem noted under the 2026-06-04 Ops line). Fix: a dedicated `.github/workflows/swa-cleanup.yml` workflow now triggers on `pull_request: types: [closed]` with NO paths filter; the dead `close_pull_request` job is removed from `webapp-deploy.yml` and its build_and_deploy `if` simplified. Both the new workflow and the deploy action are pinned to the immutable SHA `1a947af9992250f3bc2e68ad0754c0b0c11566c9` (v1) for supply-chain hardening. The new workflow only takes effect for PRs closed after it lands on `main` (it can't clean up a PR closed before it exists).
+
+**Deploy note:** #26/#27 are already live via SWA auto-deploy. #24/#25 require a new mobile build. #22 + #23 backend fixes remain on the pending `func publish` noted in the 2026-06-04 entry — confirm with Gene whether that publish has shipped.
+
+---
 
 ## Re-audit follow-up — ship-blocker fixes deployed (2026-06-04)
 
@@ -20,7 +38,7 @@ Last updated: 2026-06-04 (Re-audit follow-up — 4 ship-blockers fixed & **deplo
 
 **Ops:** deleted 3 orphaned SWA staging environments (PRs 13/15/17) that were maxing the Free-tier cap and failing PR previews; production `default` env untouched.
 
-**Follow-on hardening (the original 7 high/medium follow-ups):** ✅ **reviewer-lockout** `expires_date:null` promo grants (PR #21 — merged + **deployed**, health 200). ✅ **RC webhook 500 retry-storm** + non-UUID guard + missing-secret-now-401, ✅ **`markExpired` TOCTOU** (PR #22 — merged, **awaiting backend deploy**). ✅ **NOTIF-1** in-app notifications for web-only users, ✅ **NOTIF-2** FCM transient-failure token purge, ✅ **TQ-2** event-expiry vs in-flight transcode race (PR #23 — **awaiting backend deploy**). **Still open (1, Flutter):** `_briefError` startup `RangeError` — ships in the next app build, not a backend deploy. One backend deploy (`func publish`) will ship PR #22 + #23 together. Details + residual follow-ups in `docs/SECURITY_AUDIT_2026-06-04.md`.
+**Follow-on hardening (the original 7 high/medium follow-ups):** ✅ **reviewer-lockout** `expires_date:null` promo grants (PR #21 — merged + **deployed**, health 200). ✅ **RC webhook 500 retry-storm** + non-UUID guard + missing-secret-now-401, ✅ **`markExpired` TOCTOU** (PR #22 — merged, **awaiting backend deploy**). ✅ **NOTIF-1** in-app notifications for web-only users, ✅ **NOTIF-2** FCM transient-failure token purge, ✅ **TQ-2** event-expiry vs in-flight transcode race (PR #23 — **awaiting backend deploy**). The `_briefError` startup `RangeError` flagged here was fixed in PR #24 (merged 2026-06-05) and ships in the next app build — see the 2026-06-05 entry below. One backend deploy (`func publish`) still ships PR #22 + #23 together (see below for current status). Details + residual follow-ups in `docs/SECURITY_AUDIT_2026-06-04.md`.
 
 ---
 

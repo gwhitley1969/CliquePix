@@ -32,7 +32,7 @@ Severity legend: 🔴 Critical · 🟠 High · 🟡 Medium · ⚪ Low/latent.
 | H1 | 🟠 | `forceSyncFromRcApi` could permanently lock out a just-paid subscriber (RC API lag) | ✅ Fixed `b40e978` |
 | H2 | 🟠 | Orphan-cleanup raced upload-confirm with no atomic claim | ✅ Fixed `b40e978` |
 | H3 | 🟠 | Internal transcoder callback is a function key, not managed identity — docs claimed otherwise | ✅ Docs corrected `ae37344` (code change deferred to v1.5) |
-| H4 | 🟠 | `assetlinks.json` carries the debug keystore fingerprint | ⏳ Gene to apply before Android prod |
+| H4 | 🟠 | `assetlinks.json` carries the debug keystore fingerprint | ✅ Fingerprints added #18/#19 — SWA redeploy pending (see re-audit) |
 | H5 | 🟠 | Dependency CVEs (HIGH axios + fast-xml-builder) | ✅ Fixed `85116d2` |
 | H6 | 🟠 | FCM token never de-registered on sign-out / account delete | ✅ Fixed `ae37344` |
 | M1 | 🟡 | `entitlement_ids` empty-array bypasses the non-plus filter (latent) | ⬜ Open (low urgency) |
@@ -105,7 +105,7 @@ New `DELETE /api/push-tokens` (authenticated, ungated, scoped to the caller: `DE
 
 | Item | Action |
 |------|--------|
-| **H4 assetlinks** | Before Android production: replace the debug SHA256 in `webapp/public/.well-known/assetlinks.json` (and the `infrastructure/well-known/` template) with both the release upload-key and the Play App Signing fingerprint; redeploy SWA. Else App Links break on Play-signed installs and are sideload-spoofable. |
+| **H4 assetlinks** | `assetlinks.json` already carries both the release Play App Signing and upload-key SHA-256 (#18/#19). Only remaining step: redeploy the SWA so `clique-pix.com/.well-known/assetlinks.json` serves the updated file. Also register `msauth://com.cliquepix.clique_pix/4FsaiJ4wJWgM09R%2FhUh3osYJhgg%3D` in the Entra app registration (Authentication → Android) per AUTH-1. |
 | **M1** | `entitlementService.ts:80-83` — require `entitlement_ids.includes('plus')` unless the event type is entitlement-agnostic (TRANSFER). |
 | **M2** | `auth.ts` `entitlementRefresh` — replace the in-process `Map` throttle with a DB column (`users.last_refresh_called_at`) so it holds across instances. |
 | **M3** | Convert `getPhoto` / `deletePhoto` / `deleteVideo` / `createOrGetDmThread` to a single JOINed membership SELECT → `NotFoundError` when absent (the `getVideo`/`getVideoPlayback` pattern), so non-members get 404 not 403. |

@@ -177,7 +177,8 @@ Operational procedures for the Clique Pix open beta. Covers incident response, c
 
 **Resolution:**
 - If FCM credentials expired: update `FCM_CREDENTIALS` in Key Vault, restart Function App
-- Stale tokens are cleaned up automatically on send failure
+- **Token purge is now permanent-error-only (since #23, NOTIF-2).** A token row is deleted ONLY when FCM reports it permanently invalid: HTTP 404 `NOT_FOUND`/`UNREGISTERED` (app uninstalled or token rotated) or HTTP 400 `INVALID_ARGUMENT` (malformed token). Every other failure — 401/403 (our OAuth credential), 429 throttle, 5xx, timeout, network — is treated as TRANSIENT and the token is KEPT. So a broad FCM outage will NOT de-register the device fleet (an earlier bug that also silently broke the Layer-2 silent-push refresh defense). If pushes stop for many users at once, suspect a transient FCM/credential outage, NOT mass token loss — check `push_tokens` row count is stable, not dropping.
+- A signed-out / deleted device de-registers itself via `DELETE /api/push-tokens` (caller-scoped, body `{ token }`; #17 H6) BEFORE the JWT is cleared. So a missing `push_tokens` row after a sign-out is expected, not a bug. See `backend/src/functions/notifications.ts:91`.
 
 ### User can't sign in — Entra token issues
 
@@ -479,6 +480,27 @@ If `create = true` is missing, the regression is back — re-add it, run `npm ru
    ```
 
 3. **Client cache check** — if DB and blob both look right but user STILL sees initials, `CachedNetworkImageProvider` may be serving a stale negative cache (404 was cached). Have the user kill + reopen the app; Flutter's cache entries with missing bytes are short-lived. Web users: hard refresh.
+
+### App Store reviewer / beta tester hard-paywalled after tapping "Refresh Subscription" (fixed #21/#22, 2026-06-04)
+
+**Symptoms:** A reviewer or beta tester who was granted access via a RevenueCat **Promotional/Lifetime** entitlement (the mandated no-DB-override mechanism) taps **Refresh Subscription** in Profile and is immediately bounced to the hard paywall — locked out of the whole app. Backend returns HTTP 402 `SUBSCRIPTION_REQUIRED` on every gated call (events, cliques, photos, videos, DMs).
+
+**Root cause (fixed):** Promotional/lifetime grants return `expires_date: null` from RevenueCat. `forceSyncFromRcApi` formerly required a non-null FUTURE expiry to be "active", so a null-expiry grant computed `isActive=false`, fell into `markExpired()`, and the #17 H1 lag-guard didn't save it (it required a non-null DB expiry). #21 makes a present `plus` with `expires_date === null` active-forever (`isLifetime`); #22 also guards `markExpired` on `entitlement_expires_at IS NOT NULL AND < NOW()` so a promo is never expired by the reconciliation timer. See `backend/src/shared/services/entitlementService.ts:289-311`.
+
+**Verify the fix is deployed:**
+```bash
+grep -n "isLifetime" backend/src/shared/services/entitlementService.ts
+# Expect: isLifetime = plus != null && plus.expires_date === null; and isActive uses (isLifetime || future expiry)
+```
+
+**Recover a stuck reviewer/tester WITHOUT a redeploy:**
+1. Confirm the grant exists in the RevenueCat dashboard for that customer (matched by display_name, not email) and that the customer object exists (RevenueCat won't accept a promo grant until the SDK has done `Purchases.logIn`, i.e. the user has signed in once on the built app).
+2. Have them tap **Refresh Subscription** again on the FIXED build — `POST /api/users/me/entitlement/refresh` (an UNGATED endpoint, the deliberate recovery path) calls `forceSyncFromRcApi`, which now honors the null-expiry grant. Look for `entitlement_refresh_invoked` in App Insights.
+3. Confirm the DB row reflects active with null expiry:
+   ```sql
+   SELECT user_id, entitlement_active, entitlement_expires_at FROM entitlements WHERE user_id = '<user-id>';
+   ```
+   Expected after refresh: `entitlement_active = true`, `entitlement_expires_at IS NULL` (lifetime/promo). If `entitlement_active` flipped back to false with a null expiry, the #21 fix is NOT deployed — redeploy the backend.
 
 ### Photo / video upload returns "Too many requests" (HTTP 429)
 
@@ -1358,7 +1380,11 @@ az rest --method DELETE \
 
 Then `gh run rerun <run-id>` on the failed workflow, or push an empty commit to re-trigger.
 
-Long-term fix: add a cleanup step to `.github/workflows/webapp-deploy.yml` that runs on PR close and deletes the associated staging env. Tracked as a follow-up; not yet implemented.
+**Automated cleanup (since 2026-06-05):** A dedicated workflow `.github/workflows/swa-cleanup.yml` now deletes the preview environment on every PR close. It triggers on `pull_request: types: [closed]` with NO `paths:` filter and runs `Azure/static-web-apps-deploy@<v1 SHA>` with `action: "close"`, which resolves the env from the PR number in the event payload (so it works even when the merge deleted the head branch).
+
+It is a SEPARATE workflow on purpose — do NOT fold it back into `webapp-deploy.yml`. That workflow's `pull_request` trigger has a `paths:` filter and no `types:`, so it defaults to `[opened, synchronize, reopened]`; `closed` is not a default type, so the old in-workflow close job never received the close event and ran 0 times across ~30 PRs (the original cause of the orphaned-env cap). A `paths:` filter also can't diff a deleted branch.
+
+The manual `az rest` list/delete commands above remain the fallback if the workflow itself fails (e.g., the SWA deploy token is rotated/invalid) or to clear envs that orphaned before this workflow shipped.
 
 ### "Invite accept on web shows a 404 or 'invalid invite' message"
 

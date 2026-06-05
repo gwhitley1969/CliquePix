@@ -37,6 +37,8 @@ FCM is a **transport mechanism only** — no Firebase backend services (Auth, Fi
 | **Token refresh (silent / invisible)** | `token_refresh` (silent) | Users inactive 9-11h, max 1/6h per user | -- | -- | `{ type: 'token_refresh', userId }` |
 | **Weekly Friday 5 PM reminder** | `friday_reminder` | -- (local-only via `zonedSchedule`) | -- | -- | `{ type: 'friday_reminder' }` |
 
+**In-app rows are decoupled from push tokens (PR #23, NOTIF-1):** for `member_joined`, `new_photo`, and `event_deleted` the `INSERT INTO notifications` runs independently of (and before) the FCM send, each in its own try/catch. Previously these INSERTs lived inside `if (tokens.length > 0)`, so web-only members — who register no FCM token — received no in-app notification row. Only the FCM send + stale-token purge remain token-gated.
+
 The `token_refresh` push is **silent** (no `notification` block, no user-visible UI). It wakes the app in the background so MSAL `acquireTokenSilent` can run before the Entra 12h inactivity cliff. Triggered by `refreshTokenPushTimer` in `backend/src/functions/timers.ts`. See `docs/ENTRA_REFRESH_TOKEN_WORKAROUND.md` for the full Layer 2 design.
 
 The `friday_reminder` is **local-only** — scheduled by the client via `flutter_local_notifications.zonedSchedule` on a `dayOfWeekAndTime` recurrence, with no backend involvement. See "Weekly Friday Reminder" below.
@@ -116,8 +118,9 @@ Other clique members need both channels: Web PubSub for instant feed refresh whe
 | Function | Purpose |
 |----------|---------|
 | `sendPushNotification(message)` | Single-token send via FCM HTTP v1 API. `message.silent` routes through `buildFcmMessageBody` for background delivery |
-| `sendToMultipleTokens(tokens, title, body, data)` | Batch visible-push send via `Promise.all()` — returns array of failed tokens for cleanup |
+| `sendToMultipleTokens(tokens, title, body, data)` | Batch visible-push send via `Promise.all()`. Returns `{ permanentlyInvalid, totalFailed }` — `permanentlyInvalid` is the subset of tokens FCM reports as dead (404 NOT_FOUND/UNREGISTERED or 400 INVALID_ARGUMENT); `totalFailed` counts ALL failures for telemetry |
 | `sendSilentToMultipleTokens(tokens, data)` | Batch silent-push send. Used by `refreshTokenPushTimer` (Entra Layer 2) |
+| `isPermanentTokenError(status, errorBody)` | Classifies an FCM error as a dead token (purge) vs transient (keep). Exported for unit tests |
 | `buildFcmMessageBody(message)` | Exported for unit tests — builds the FCM v1 body, branching on `message.silent` |
 
 **Visible payload structure** (`new_photo`, `video_ready`, DMs, etc.):
@@ -167,13 +170,13 @@ Client handling:
 
 ### Stale token cleanup
 
-After every `sendToMultipleTokens()` call, the backend collects failed tokens and deletes them:
+After every batch send the backend purges ONLY the **permanently-invalid** tokens (app uninstalled / token rotated away — FCM 404 UNREGISTERED or 400 INVALID_ARGUMENT):
 
 ```sql
-DELETE FROM push_tokens WHERE token = ANY($1)
+DELETE FROM push_tokens WHERE token = ANY($1)  -- $1 = sendResult.permanentlyInvalid
 ```
 
-This runs immediately after the send — no separate cleanup job needed. A token typically goes stale when a user reinstalls the app, changes devices, or revokes notification permissions.
+**Transient failures (401/403 OAuth, 429 throttle, 5xx, timeout, network) are NEVER purged** — they leave the token registered. Treating a transient blip as a dead token previously de-registered the entire device fleet during an FCM outage and silently broke the Layer-2 silent-push refresh defense (PR #23, NOTIF-2). Keep the `buildFcmMessageBody` payload shape stable: a malformed *message* also returns 400 INVALID_ARGUMENT and would purge every token.
 
 ---
 
@@ -230,8 +233,8 @@ FCM/APNs may rotate tokens at any time (app update, OS update, token invalidatio
 ### Cleanup
 
 - **On send failure:** Stale tokens deleted immediately after `sendToMultipleTokens()` (see above)
-- **On logout:** Token removed from backend via `DELETE FROM push_tokens WHERE user_id = $1`
-- **On account deletion:** CASCADE delete removes all push tokens with the user record
+- **On sign-out / account deletion (this device):** the client calls `PushNotificationService.deregister()` → `DELETE /api/push-tokens` with `{ token }` in the body, scoped to the caller (`DELETE FROM push_tokens WHERE token = $1 AND user_id = $2`). Wired into `AuthNotifier.signOut`/`deleteAccount` and run **before** the JWT is cleared (the DELETE needs a valid token). Best-effort — a failure never blocks sign-out. Without this, the device keeps receiving pushes addressed to the signed-out user (PR #17, H6).
+- **On account deletion (all devices):** the `users` row delete CASCADEs `push_tokens` server-side, removing every remaining device token.
 
 ### Database schema
 
@@ -359,6 +362,7 @@ Two callsites — keep them in sync.
 | `PATCH /api/notifications/{id}/read` | PATCH | Mark single notification as read |
 | `DELETE /api/notifications/{id}` | DELETE | Delete single notification |
 | `DELETE /api/notifications` | DELETE | Clear all user's notifications |
+| `DELETE /api/push-tokens` | DELETE | De-register this device's FCM token (body `{ token }`); caller-scoped, ungated so a lapsed user can still sign out |
 
 ### Database schema
 

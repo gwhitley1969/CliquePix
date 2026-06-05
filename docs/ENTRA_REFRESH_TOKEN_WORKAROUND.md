@@ -1,7 +1,7 @@
 # Microsoft Entra External ID Refresh Token Workaround — Clique Pix
 
-**Last updated:** 2026-04-19
-**Status:** 5-layer defense + optimistic auth bootstrap.
+**Last updated:** 2026-06-04
+**Status:** 5-layer defense + optimistic auth bootstrap + concurrency/state-machine hardening (PR #25).
 **Issue type:** Known Microsoft bug — no portal-based fix.
 
 ---
@@ -33,7 +33,7 @@ Hard caps layered across the auth stack so nothing can hang indefinitely:
 | `AuthRepository.signIn` → `verifyAndGetUser` (post-browser) | 10s |
 | `AuthRepository.signIn` → `backgroundTokenService.register` | 5s (catchError) |
 | `AppLifecycleService._onAppResumed` → `_refreshCallback` | 8s |
-| `AuthInterceptor.onError` (401) → `tokenStorage.refreshToken` | 8s |
+| `AuthInterceptor.onError` (401) → `AuthRepository.refreshTokenDetailed` | 8s (refresh+replay capped at once per request via `extra['authRetried']`; session-expired codes routed to Layer 5) |
 | `AuthRepository.signIn` → `pca.acquireToken` (browser) | *untimed* — user types password |
 
 One flag-ordering bug fixed in the same branch: `AppLifecycleService` now clears `pendingRefreshFlagKey` **before** awaiting the refresh. Previously a hung refresh left the flag set forever, and every subsequent app resume re-triggered the same hang — the "force-quit doesn't fix it" feedback loop users reported.
@@ -153,9 +153,21 @@ backend/src/
 6. If step 5 throws (iOS plugin-channel limits in a background isolate are a known risk), the handler writes `SharedPreferences[pendingRefreshFlagKey] = true` and records `silent_push_fallback_flag_set`.
 7. `AppLifecycleService._onAppResumed` reads both `isTokenStale()` and the pending flag; if either is set, it runs Layer 3 immediately, clears the flag, and reports success/failure.
 
+**Token-purge safety (PR #23 / NOTIF-2).** `refreshTokenPushTimer` purges a device's `push_tokens` row ONLY when FCM reports it permanently invalid (HTTP 404 `UNREGISTERED` or 400 `INVALID_ARGUMENT`, classified by `isPermanentTokenError` in `fcmService.ts`). A transient FCM failure (401/403 on our OAuth credential, 429, 5xx, timeout) leaves the token in place — previously such blips de-registered valid tokens and silently disabled the Layer-2 silent-push defense across the whole fleet.
+
 ### Cold-start recovery (Layer 5 entry)
 
 If the app is cold-started after > 12h, `AuthNotifier.checkAuthStatus` → `silentSignIn` → MSAL throws (`AADSTS700082` / `AADSTS500210` / "no account in the cache"). `_handleSilentSignInFailure` inspects the message and, if `lastKnownUser.email` is non-null, emits `AuthReloginRequired(email, name)`. `LoginScreen` watches `authStateProvider` and shows `WelcomeBackDialog.show()` with `loginHint = email` — one tap re-signs in.
+
+### Concurrency & state-machine hardening (PR #25)
+
+Four races across the auth state machine were closed in PR #25:
+
+- **Single-flight refresh mutex (A3).** Every main-isolate silent-refresh entry point — Layer 2 (foreground push → `refreshToken`), Layer 3 (app-resume → `refreshToken`), and the AuthInterceptor 401 path (`refreshTokenDetailed`) — now funnels through `AuthRepository.refreshTokenDetailed()`, which coalesces concurrent callers onto a single in-flight `acquireTokenSilent`. The first caller starts it and stores `_inFlightRefresh`; later callers await the same future; the field clears on settle. This stops parallel callers from racing the same `SingleAccountPca` and racing `saveTokens()` (last-writer-wins on `last_refresh_time`). The FCM background isolate (`main.dart`) and WorkManager isolate (`background_token_service.dart`) intentionally do NOT share this field — each creates its own PCA — because the MSAL token cache is process-wide and the writes are idempotent valid tokens. A `visibleForTesting acquireOverride` seam makes the coalescing unit-testable (`app/test/auth_repository_refresh_mutex_test.dart`).
+- **Session-resurrection epoch guard (A1).** `AuthNotifier` holds a monotonic `_authEpoch`, bumped by every explicit teardown (`signOut` / `deleteAccount` / `resetAndSignIn`). `_verifyInBackground` and `_handleSilentSignInFailure` capture the epoch before their awaits and refuse to assign state if it changed (also checking `mounted`). Without this, a late-resolving `silentSignIn` inside the ~8s background-verify window could resurrect a session the user just tore down.
+- **401 interceptor loop guard (A2).** `AuthInterceptor` retries refresh-and-replay AT MOST once per original request, gated on `requestOptions.extra['authRetried']`. Because `dio.fetch` re-enters the interceptor and `acquireTokenSilent` keeps returning a cached still-valid token, a persistently-401'ing request would otherwise recurse forever. On the second 401 the original error propagates; a genuine session expiry is still routed to `WelcomeBackDialog` by the parallel Layer-3 resume / background verify.
+
+(A fourth item in PR #25 — resetting the optimistic-entitlement flag on identity change — is paywall-scoped and is documented with the subscription paywall, not here.)
 
 ---
 
