@@ -154,6 +154,7 @@ Tax is verified, so these are moot: the IRS-147c call (`800-829-4933`, EIN name-
 - [x] **Apply migration 012 (+ 013)** to `pg-cliquepixdb` — 14 users backfilled, `trial_null=0`.
 - [x] `npm run build && npm test` — **174/174** green, tsc clean.
 - [x] Webhook route confirmed live through `api.clique-pix.com` (200 on correct Bearer).
+- [x] **Follow-up re-deploy 2026-06-05 (PR #21/#22/#23):** entitlement + webhook hardening re-published (`func azure functionapp publish func-cliquepix-fresh`). Webhook now returns **200 on any non-auth outcome** (no RC retry-storm) and **401 only** on bad/missing auth; non-UUID `app_user_id` is a clean no-op; `markExpired` TOCTOU closed; reviewer-lockout (null-expiry promo) fixed. `/api/health` 200; valid-signature webhook call verified 200. The two extra jest tests below (webhook event types + idempotency) shipped in #22/#23.
 
 ### Still TODO (non-blocking)
 
@@ -218,6 +219,8 @@ Required by Apple Guideline 3.1.2 + Google Play Subscriptions policy. Must ship 
 **HARD SEQUENCING RULE (CORRECTED 2026-06-02):** A promo grant requires the RevenueCat customer to ALREADY EXIST — created only when the account runs the SDK build and signs in (`Purchases.logIn(users.id)`). You **cannot** grant before the gated build ships (a grant to a never-seen App User ID returns 404). **Correct order: ship the gated build → reviewer + testers sign in once (the backfilled 7-day trial covers them, zero lockout) → grant the promos within that 7-day window.**
 
 > **Reviewer account is now `vwhitley1967@gmail.com`** (supersedes the old `appreview@cliquepix.com` in older notes) → `users.id 325e4455-b1b8-461e-a844-6f158cffaf84`, grant lifetime (~2100). Of the 11 tester emails, only 3 currently have `users` rows by email (`chasebatchelor`, `rfcarpen1`, + the reviewer); the rest signed in via Google/Apple federation where `email_or_phone` differs — reconcile via the full user list once each has signed in on the gated build.
+
+> **Backend prerequisite — now SAFE (PR #21, deployed 2026-06-05):** this promo-grant path had a reviewer-lockout bug until recently. `forceSyncFromRcApi` required a non-null future `expires_date`, but Promotional/lifetime grants return `expires_date: null`, so a reviewer/tester who got a promo grant and tapped "Refresh Subscription" (or hit the 30s post-purchase auto-recovery) was force-deactivated and hard-paywalled out of the WHOLE app — an App Store reviewer-rejection risk on exactly this mechanism. Fixed: a `plus` grant with `expires_date===null` is now active-forever, and the lag-guard shields null-expiry promos. Live in prod (#22/#23 backend deploy 2026-06-05, health 200, webhook valid-signature verified). Phase 6 grants can now be exercised safely.
 
 - [ ] Compile beta tester user IDs from Postgres:
   ```sql
