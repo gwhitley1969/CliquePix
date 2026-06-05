@@ -279,7 +279,7 @@ Useful Kusto queries: see `BETA_OPERATIONS_RUNBOOK.md` §2 ("User reports unexpe
 
 Apple App Review Guideline 2.1 requires working credentials reviewers can hand-type. The reviewer login is **`vwhitley1967@gmail.com`**.
 
-> ⚠️ **Corrected 2026-06-05:** the original design specced a *dedicated* `appreview@cliquepix.com` account, but that was **never created** — `cliquepix.com` is not an owned domain (the app domain is `clique-pix.com`, and it has no mailboxes). The reviewer account is `vwhitley1967@gmail.com` (per `GENE.md`). The password-storage, DOB, and seeding rows in the table below were inherited from the never-created `appreview` plan — **verify/update them against the real `vwhitley1967@gmail.com` account (incl. whether it signs in via email+password or Google) before each submission.**
+> ⚠️ **Corrected 2026-06-05:** the original design specced a *dedicated* `appreview@cliquepix.com` account, but that was **never created** — `cliquepix.com` is not an owned domain (the app domain is `clique-pix.com`, and it has no mailboxes). The real reviewer login is `vwhitley1967@gmail.com` — an **email + password** account (NOT Google/Apple sign-in); its password is **held by Gene out-of-band, NOT in Azure Key Vault**. The DOB shown below is illustrative (the real value is an adult one, past the 13+ gate).
 
 A dedicated reviewer login:
 
@@ -292,9 +292,9 @@ A dedicated reviewer login:
 | Attribute | Value |
 |---|---|
 | Username (email) | `vwhitley1967@gmail.com` |
-| Password | Strong random 16+ chars (mixed case + digits + symbols) |
-| Password storage | Azure Key Vault `kv-cliquepix-prod/apple-review-credentials` |
-| DOB | 1985-01-01 (clearly past age gate) |
+| Sign-in method | Email + password, hand-typed (NOT Google/Apple federation) |
+| Password | Held by Gene out-of-band — **NOT** in Azure Key Vault |
+| DOB | An adult DOB, past the 13+ age gate (exact value not tracked here) |
 | Membership | Member of "Apple Review Demo" Clique with one helper account (Gene's primary) |
 | Pre-seeded content | One 7-day Event with 4–6 sample photos + 1 short video (≤30 sec) uploaded by helper |
 
@@ -308,7 +308,7 @@ Events expire after 7 days. **Re-seed within 48 hours of every App Store submiss
 |---|---|
 | Sign-in required | Yes |
 | Username | `vwhitley1967@gmail.com` |
-| Password | (from Key Vault) |
+| Password | (held by Gene — not in Key Vault) |
 | Notes | Short paragraphs explaining (a) the pre-seeded Clique with sample content, (b) age gate (DOB ≥ 13), (c) Google + Apple federation also available but reviewer should use supplied credentials, (d) where Privacy Policy is linked from inside the app |
 | Contact | `genewhitley2017@gmail.com` + phone |
 
