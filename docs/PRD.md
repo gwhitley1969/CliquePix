@@ -221,8 +221,8 @@ Users can upload a headshot that replaces their initials everywhere in the app. 
 ### 5.15 Privacy & Controls
 - Private by default
 - No public feed
-- **Privacy Policy** — accessible from the profile screen, opens `https://clique-pix.com/privacy.html` in an in-app browser. Covers photos, videos, DMs, data retention, security, and user rights. 14 sections.
-- **Terms of Service** — accessible from the profile screen, opens `https://clique-pix.com/terms.html` in an in-app browser. 16 sections.
+- **Privacy Policy** — accessible from the profile screen, opens `https://clique-pix.com/docs/privacy` in an in-app browser. Covers photos, videos, DMs, data retention, security, and user rights. 14 sections.
+- **Terms of Service** — accessible from the profile screen, opens `https://clique-pix.com/docs/terms` in an in-app browser. 16 sections.
 - Controls:
   - Leave event
   - Remove own photos and videos

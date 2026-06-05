@@ -3,7 +3,7 @@
   "Values": {
     "AzureWebJobsStorage": "UseDevelopmentStorage=true",
     "FUNCTIONS_WORKER_RUNTIME": "node",
-    "PG_CONNECTION_STRING": "postgresql://user:password@pg-cliquepix.postgres.database.azure.com:5432/cliquepix?sslmode=require",
+    "PG_CONNECTION_STRING": "postgresql://user:password@pg-cliquepixdb.postgres.database.azure.com:5432/cliquepix?sslmode=require",
     "STORAGE_ACCOUNT_NAME": "stcliquepixprod",
     "ENTRA_TENANT_ID": "your-tenant-id",
     "ENTRA_CLIENT_ID": "your-client-id",
