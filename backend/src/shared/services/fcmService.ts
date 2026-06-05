@@ -91,7 +91,45 @@ export function buildFcmMessageBody(message: FcmMessage): Record<string, unknown
   };
 }
 
-export async function sendPushNotification(message: FcmMessage): Promise<boolean> {
+export type FcmSendResult =
+  | { ok: true }
+  | { ok: false; permanent: boolean };
+
+/**
+ * FCM HTTP v1 marks a token PERMANENTLY invalid via:
+ *   - HTTP 404 with error.status === 'NOT_FOUND' / details errorCode 'UNREGISTERED'
+ *     (app uninstalled or token rotated away)
+ *   - HTTP 400 with error.status === 'INVALID_ARGUMENT' / details errorCode
+ *     'INVALID_ARGUMENT' (malformed / non-existent token)
+ * Everything else — 401/403 (our OAuth credential), 429 (throttle), 5xx,
+ * timeout, network — is TRANSIENT and the token MUST be kept. Treating a
+ * transient failure as a dead token used to DELETE valid registrations, so an
+ * FCM outage silently de-registered the whole device fleet (and broke the
+ * Layer-2 silent-push refresh defense).
+ *
+ * NOTE: FCM's 400 INVALID_ARGUMENT is overloaded — it can mean a bad TOKEN or a
+ * malformed MESSAGE. We send a structurally-fixed payload (buildFcmMessageBody),
+ * so in practice a 400 here means the token; but a future change that ships a
+ * malformed message field would 400 EVERY token and purge the whole fleet. Keep
+ * the payload shape stable. Exported for unit testing.
+ */
+export function isPermanentTokenError(status: number, errorBody: string): boolean {
+  if (status !== 400 && status !== 404) return false;
+  try {
+    const parsed = JSON.parse(errorBody) as {
+      error?: { status?: string; details?: Array<{ '@type'?: string; errorCode?: string }> };
+    };
+    const errStatus = parsed.error?.status;
+    const fcmCode = parsed.error?.details?.find((d) => d['@type']?.includes('fcm.v1.FcmError'))
+      ?.errorCode;
+    if (status === 404) return errStatus === 'NOT_FOUND' || fcmCode === 'UNREGISTERED';
+    return errStatus === 'INVALID_ARGUMENT' || fcmCode === 'INVALID_ARGUMENT';
+  } catch {
+    return false; // unparseable body on a 400/404 (e.g. gateway HTML) — treat as transient
+  }
+}
+
+export async function sendPushNotification(message: FcmMessage): Promise<FcmSendResult> {
   try {
     const credentials = getCredentials();
     const token = await getAccessToken();
@@ -111,14 +149,22 @@ export async function sendPushNotification(message: FcmMessage): Promise<boolean
     if (!response.ok) {
       const errorBody = await response.text();
       console.error('FCM send failed:', response.status, errorBody);
-      return false;
+      return { ok: false, permanent: isPermanentTokenError(response.status, errorBody) };
     }
 
-    return true;
+    return { ok: true };
   } catch (error) {
+    // network / timeout / credential acquisition failure — all transient.
     console.error('FCM send error:', error);
-    return false;
+    return { ok: false, permanent: false };
   }
+}
+
+export interface MultiSendResult {
+  /** Tokens FCM reports as permanently invalid (uninstalled / malformed) — safe to DELETE. */
+  permanentlyInvalid: string[];
+  /** Count of ALL tokens that failed delivery (permanent + transient) — telemetry only. */
+  totalFailed: number;
 }
 
 export async function sendToMultipleTokens(
@@ -126,41 +172,47 @@ export async function sendToMultipleTokens(
   title: string,
   body: string,
   data?: Record<string, string>,
-): Promise<string[]> {
-  const failedTokens: string[] = [];
+): Promise<MultiSendResult> {
+  const permanentlyInvalid: string[] = [];
+  let totalFailed = 0;
 
   await Promise.all(
     tokens.map(async (token) => {
-      const success = await sendPushNotification({ token, title, body, data });
-      if (!success) {
-        failedTokens.push(token);
+      const result = await sendPushNotification({ token, title, body, data });
+      if (!result.ok) {
+        totalFailed++;
+        if (result.permanent) permanentlyInvalid.push(token);
       }
     }),
   );
 
-  return failedTokens;
+  return { permanentlyInvalid, totalFailed };
 }
 
 /**
  * Silent (background) push to multiple device tokens. Used by the
  * refresh-push timer to wake inactive users before the Entra 12h
  * refresh-token inactivity timeout. No visible UI is shown on either
- * platform. Returns the list of tokens that failed delivery.
+ * platform. Returns only the permanently-invalid tokens (for purge) plus a
+ * total-failed count (for telemetry) — a transient FCM blip must NOT delete a
+ * valid token and break the Layer-2 refresh defense.
  */
 export async function sendSilentToMultipleTokens(
   tokens: string[],
   data: Record<string, string>,
-): Promise<string[]> {
-  const failedTokens: string[] = [];
+): Promise<MultiSendResult> {
+  const permanentlyInvalid: string[] = [];
+  let totalFailed = 0;
 
   await Promise.all(
     tokens.map(async (token) => {
-      const success = await sendPushNotification({ token, data, silent: true });
-      if (!success) {
-        failedTokens.push(token);
+      const result = await sendPushNotification({ token, data, silent: true });
+      if (!result.ok) {
+        totalFailed++;
+        if (result.permanent) permanentlyInvalid.push(token);
       }
     }),
   );
 
-  return failedTokens;
+  return { permanentlyInvalid, totalFailed };
 }

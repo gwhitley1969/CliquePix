@@ -95,12 +95,22 @@ async function cleanupExpired(myTimer: Timer, context: InvocationContext): Promi
   // (Original photo-only counter retained for backwards compatibility with downstream queries)
   const deletedCount = deletedPhotoCount + deletedVideoCount;
 
-  // Check for events that should be marked expired
+  // Check for events that should be marked expired.
+  // TQ-2: do NOT expire an event that still has IN-FLIGHT media (a pending upload
+  // or an in-progress transcode). Hard-deleting here would CASCADE-drop the
+  // photos row mid-transcode, orphaning the blobs the transcoder is about to
+  // write (no row ⇒ no cleanup path). 'processing'/'pending' are bounded — a
+  // wedged transcode is forced terminal by the TQ-1 MAX_DEQUEUE_COUNT guard
+  // (→ 'rejected', reaped by the 1h failed-video orphan sweep), so this can't
+  // pin an event open forever. Terminal states ('deleted'/'rejected') correctly
+  // do NOT block expiry.
   const expiredEventRows = await query<{ id: string }>(
     `UPDATE events SET status = 'expired'
      WHERE status = 'active' AND expires_at < NOW()
      AND NOT EXISTS (
-       SELECT 1 FROM photos WHERE event_id = events.id AND status = 'active'
+       SELECT 1 FROM photos
+       WHERE event_id = events.id
+         AND status IN ('active', 'pending', 'processing')
      )
      RETURNING id`,
   );
@@ -311,7 +321,7 @@ async function notifyExpiring(myTimer: Timer, context: InvocationContext): Promi
       );
 
       if (tokens.length > 0) {
-        const failedTokens = await sendToMultipleTokens(
+        const sendResult = await sendToMultipleTokens(
           tokens.map(t => t.token),
           'Event Expiring Soon',
           `"${event.name}" expires in 24 hours. Save your photos!`,
@@ -328,8 +338,9 @@ async function notifyExpiring(myTimer: Timer, context: InvocationContext): Promi
           );
         }
 
-        if (failedTokens.length > 0) {
-          await execute('DELETE FROM push_tokens WHERE token = ANY($1)', [failedTokens]);
+        // NOTIF-2: only purge PERMANENTLY-invalid tokens, never transient failures.
+        if (sendResult.permanentlyInvalid.length > 0) {
+          await execute('DELETE FROM push_tokens WHERE token = ANY($1)', [sendResult.permanentlyInvalid]);
         }
 
         notifiedCount += userIds.length;
@@ -384,19 +395,20 @@ async function refreshTokenPushTimer(myTimer: Timer, context: InvocationContext)
 
   for (const [userId, tokens] of byUser.entries()) {
     try {
-      const failed = await sendSilentToMultipleTokens(tokens, {
+      const sendResult = await sendSilentToMultipleTokens(tokens, {
         type: 'token_refresh',
         userId,
       });
-      sentCount += tokens.length - failed.length;
-      failedCount += failed.length;
+      sentCount += tokens.length - sendResult.totalFailed;
+      failedCount += sendResult.totalFailed;
 
-      if (failed.length > 0) {
-        // Stale device tokens — same pattern as other timers
-        await execute('DELETE FROM push_tokens WHERE token = ANY($1)', [failed]);
+      // NOTIF-2: only purge PERMANENTLY-invalid tokens. A transient FCM blip must
+      // NOT delete a valid token — that would break the Layer-2 refresh defense.
+      if (sendResult.permanentlyInvalid.length > 0) {
+        await execute('DELETE FROM push_tokens WHERE token = ANY($1)', [sendResult.permanentlyInvalid]);
       }
 
-      if (tokens.length - failed.length > 0) {
+      if (tokens.length - sendResult.totalFailed > 0) {
         userIdsPushed.push(userId);
       }
     } catch (err) {

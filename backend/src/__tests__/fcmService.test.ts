@@ -1,4 +1,47 @@
-import { buildFcmMessageBody } from '../shared/services/fcmService';
+import { buildFcmMessageBody, isPermanentTokenError } from '../shared/services/fcmService';
+
+const FCM_ERR_TYPE = 'type.googleapis.com/google.firebase.fcm.v1.FcmError';
+
+describe('isPermanentTokenError — only purge genuinely-dead tokens', () => {
+  describe('PERMANENT (true) — token is dead, safe to delete', () => {
+    it('404 with FcmError UNREGISTERED details', () => {
+      const body = JSON.stringify({
+        error: { status: 'NOT_FOUND', details: [{ '@type': FCM_ERR_TYPE, errorCode: 'UNREGISTERED' }] },
+      });
+      expect(isPermanentTokenError(404, body)).toBe(true);
+    });
+    it('404 with only error.status=NOT_FOUND (no details)', () => {
+      expect(isPermanentTokenError(404, JSON.stringify({ error: { status: 'NOT_FOUND' } }))).toBe(true);
+    });
+    it('400 with error.status=INVALID_ARGUMENT', () => {
+      expect(isPermanentTokenError(400, JSON.stringify({ error: { status: 'INVALID_ARGUMENT' } }))).toBe(true);
+    });
+    it('400 with FcmError INVALID_ARGUMENT details', () => {
+      const body = JSON.stringify({
+        error: { details: [{ '@type': FCM_ERR_TYPE, errorCode: 'INVALID_ARGUMENT' }] },
+      });
+      expect(isPermanentTokenError(400, body)).toBe(true);
+    });
+  });
+
+  describe('TRANSIENT (false) — must NOT purge', () => {
+    it.each([401, 403, 429, 500, 502, 503])('status %i is transient', (status) => {
+      expect(isPermanentTokenError(status, JSON.stringify({ error: { status: 'UNAVAILABLE' } }))).toBe(false);
+    });
+    it('502 with non-JSON HTML body does not throw and is transient', () => {
+      expect(isPermanentTokenError(502, '<html>502 Bad Gateway</html>')).toBe(false);
+    });
+    it('404 with empty body is transient (no FCM signal)', () => {
+      expect(isPermanentTokenError(404, '')).toBe(false);
+    });
+    it('400 with malformed JSON is transient', () => {
+      expect(isPermanentTokenError(400, '{not valid json')).toBe(false);
+    });
+    it('404 whose error.status is INTERNAL (not NOT_FOUND/UNREGISTERED) is transient', () => {
+      expect(isPermanentTokenError(404, JSON.stringify({ error: { status: 'INTERNAL' } }))).toBe(false);
+    });
+  });
+});
 
 describe('buildFcmMessageBody', () => {
   describe('visible push (silent=false or omitted)', () => {

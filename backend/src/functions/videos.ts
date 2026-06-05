@@ -192,6 +192,40 @@ async function cleanupVideoBlobs(video: Photo): Promise<void> {
 }
 
 /**
+ * TQ-2: prefix-delete the per-video blob dir using ONLY the paths the transcoder
+ * reported writing, for the case where the photos row no longer exists (so we
+ * cannot use cleanupVideoBlobs, which takes a Photo). The transcoder writes
+ * everything under photos/{clique}/{event}/{video}/ — poster.jpg + fallback.mp4
+ * live directly there; the HLS manifest + segments under {video}/hls/. Derive
+ * the {video}/ dir from any reported derivative path and prefix-delete it. The
+ * trailing slash guarantees a sibling {video}X/ prefix is never matched.
+ */
+/**
+ * Pure: derive the per-video blob directory (with trailing slash) from any
+ * derivative path the transcoder reported. poster.jpg + fallback.mp4 live
+ * directly in {video}/; the HLS manifest lives in {video}/hls/, so strip a
+ * trailing 'hls/' to always land on the {video}/ dir. Returns null if no path is
+ * given. Exported for unit testing.
+ */
+export function deriveVideoDir(body: {
+  poster_blob_path?: string;
+  mp4_fallback_blob_path?: string;
+  hls_manifest_blob_path?: string;
+}): string | null {
+  const anyPath =
+    body.poster_blob_path ?? body.mp4_fallback_blob_path ?? body.hls_manifest_blob_path ?? null;
+  if (!anyPath) return null;
+  let dir = anyPath.substring(0, anyPath.lastIndexOf('/') + 1); // .../{video}/ or .../{video}/hls/
+  if (dir.endsWith('/hls/')) dir = dir.substring(0, dir.length - 'hls/'.length);
+  return dir || null;
+}
+
+async function discardOrphanedTranscodeOutputs(body: CallbackBody): Promise<void> {
+  const dir = deriveVideoDir(body);
+  if (dir) await deleteBlobsByPrefix(dir);
+}
+
+/**
  * Video row shape after JOINing uploader fields. Parallel to
  * PhotoRowWithUploader in photos.ts — kept separate so future video-only
  * columns don't bleed.
@@ -913,7 +947,25 @@ async function videoProcessingComplete(
       `SELECT * FROM photos WHERE id = $1 AND media_type = 'video'`,
       [body.video_id],
     );
-    if (!video) throw new NotFoundError('video');
+    if (!video) {
+      // TQ-2: the row is gone — almost always because cleanupExpired hard-deleted
+      // the event (CASCADE removed this photos row) while the transcode was in
+      // flight, or the uploader/organizer deleted it. Returning 404 here makes
+      // the transcoder's postCallback fail → the runner re-runs the WHOLE job and
+      // re-uploads HLS/fallback/poster blobs that now have NO DB row and therefore
+      // NO cleanup path (permanent orphans). Treat it as a terminal DISCARD:
+      // best-effort prefix-delete whatever the callback says it wrote, then return
+      // 200 so the runner deletes the queue message and stops re-uploading.
+      if (body.success) {
+        try {
+          await discardOrphanedTranscodeOutputs(body);
+        } catch (err) {
+          console.error('TQ-2 orphan cleanup after missing row failed (non-fatal):', err);
+        }
+      }
+      trackEvent('video_processing_discarded_orphan_row', { videoId: body.video_id });
+      return successResponse({ status: 'discarded_no_row' });
+    }
 
     // Idempotency: skip if already processed (transcoder may have retried after a network blip)
     if (video.status === 'active' && video.processing_status === 'complete') {
