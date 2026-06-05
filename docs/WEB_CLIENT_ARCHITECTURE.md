@@ -102,6 +102,15 @@ If the wiring is skipped, `getPca()` throws a loud developer error. This is deli
 
 `<React.StrictMode>` double-invokes effects in dev. `handleRedirectPromise` is awaited once in `main.tsx` BEFORE React mounts, so it can't fire twice. Use `@azure/msal-react` hooks (`useMsal`, `useIsAuthenticated`) instead of calling `handleRedirectPromise` from `useEffect`.
 
+### 4.3 Entitlement gating (paywall)
+
+The authenticated app shell is wrapped in `<EntitlementGuard>` (`auth/EntitlementGuard.tsx`), nested inside `<AuthGuard>`. After `useAuthVerify` returns, the guard reads `user.entitlement.effectiveActive` (the backend-computed `entitlement_active OR in_trial` flag) and **redirects users without effective access to `/subscribe`** via `<Navigate replace>`.
+
+- **`/subscribe`** renders `features/paywall/SubscribeInAppScreen.tsx`: authed but **NOT** entitlement-gated. There is **no web purchase flow in v1** — the screen points users at the mobile app (App Store / Play badges) plus a Sign-out link. A web subscription unlocks the app everywhere including web.
+- **`/profile`** is also reachable WITHOUT entitlement (account self-service): it sits inside `AuthGuard` + `AppLayout` but **outside** `EntitlementGuard`. Everything else (`/events`, `/cliques`, `/notifications`, DMs) requires effective access.
+- **Recoverable error state (PR #26)**: a 401 from `/auth/verify` self-heals via `logoutRedirect` inside `useAuthVerify`; any OTHER verify failure (transient 5xx / network / CORS) previously left a permanent blank screen (`isLoading=false` + `user` undefined → `return null` forever). The guard now renders a 'Could not load your account' retry UI that calls `refetch()`.
+- The `User` model carries `entitlement?: { active, inTrial, trialEndsAt, effectiveActive, productId, periodType, willRenew, expiresAt, store }` (`models/index.ts`). Absent on a pre-paywall backend → treated as no access.
+
 ## 5. SWA routing + CSP
 
 `webapp/public/staticwebapp.config.json`:
@@ -127,14 +136,19 @@ Treat CSP as iterative during development — new features occasionally surface 
   { path: '/auth/callback', element: <AuthCallback /> },
   { path: '/invite/:code', element: <InviteAcceptScreen /> },
   { path: '/cliques/:id/invite/print', element: <AuthGuard><InvitePrintScreen /></AuthGuard> },
+  { path: '/subscribe', element: <AuthGuard><SubscribeInAppScreen /></AuthGuard> }, // authed, NOT entitlement-gated
   {
-    element: <AuthGuard><AppLayout /></AuthGuard>,     // pathless parent; authed shell
+    element: <AuthGuard><EntitlementGuard><AppLayout /></EntitlementGuard></AuthGuard>, // entitlement-gated shell
     children: [
-      { path: '/events', ... }, { path: '/events/:id', ... },
-      { path: '/events/:id/messages', ... }, { path: '/events/:id/messages/:threadId', ... },
-      { path: '/cliques', ... }, { path: '/cliques/:id', ... },
-      { path: '/notifications', ... }, { path: '/profile', ... },
+      { path: '/events' }, { path: '/events/:id' },
+      { path: '/events/:id/messages' }, { path: '/events/:id/messages/new' }, { path: '/events/:id/messages/:threadId' },
+      { path: '/cliques' }, { path: '/cliques/:id' },
+      { path: '/notifications' },
     ],
+  },
+  {
+    element: <AuthGuard><AppLayout /></AuthGuard>,      // /profile: authed but NOT entitlement-gated
+    children: [ { path: '/profile' } ],
   },
   { path: '*', element: <NotFoundScreen /> },
 ]
@@ -183,6 +197,8 @@ All endpoints live at `api.clique-pix.com`. Backend is shared with mobile — no
 
 **Join-by-code oddity**: the backend route pattern is `cliques/{cliqueId}/join` but the handler ignores the path param and resolves the clique by `invite_code` in the body. Mobile Flutter passes `_` as a placeholder; the web client does the same — `POST /api/cliques/_/join` with `{ invite_code }`. Don't try `POST /api/cliques/join` — it returns 404 because the route segment is required.
 
+**DM mark-read** — `PATCH /api/dm-threads/:id/read` requires a `{ last_read_message_id }` body (a valid message UUID) or the backend 400s. `markThreadRead(threadId, lastReadMessageId)` sends it; `ThreadScreen` calls it with the latest message id once the list loads and on every new message, skipping empty threads (PR #27, mirrors mobile `dm_api.dart`).
+
 ## 8. Video upload + playback
 
 **Shipped in PR #9** (`feat(webapp): browser video upload + HLS playback (full mobile parity)`). No longer pending.
@@ -210,6 +226,7 @@ Mirrors `app/lib/features/videos/data/video_block_upload_service.dart`:
 
 - `features/photos/MediaUploader.tsx` routes video files through `uploadVideo()` with a progress bar (filename + percent + MB counter)
 - `features/photos/Lightbox.tsx` mounts `<VideoPlayer videoId=... />` when the item is an `active` video, shows a "transcoding" message for `processing`, and avoids hitting `/playback` on non-active videos (it returns 404 on those)
+- Lightbox Download on a video fetches `getVideoPlayback(id).mp4FallbackUrl` and downloads the playable MP4 (guarded on `status === 'active'`), NOT the poster JPEG (PR #26, mirrors MediaCard).
 
 ## 8.5 Avatar upload + welcome prompt (shipped 2026-04-24)
 
@@ -268,6 +285,8 @@ Lives under `features/landing/`. Public — no auth required. Composed of sectio
   - `notification_created` → `['notifications']`
   - **`new_event` — not yet handled (tracked follow-up)**: mobile shipped real-time `new_event` fan-out on 2026-04-30 (see `docs/NOTIFICATION_SYSTEM.md` "New Event Real-Time Fan-Out"). Backend already publishes `new_event` to every clique member's Web PubSub user channel. Web parity needs: (1) a dispatch branch in `realtimeClient.ts` that invalidates `['events', 'all']` and `['events', cliqueId]` and `['notifications']`, (2) any in-app notifications-list rendering for `new_event` rows. Estimated < 30 lines of code; deferred so the mobile fix could ship first against the user-reported bug.
 
+**DM message ownership** compares the cached verified-user UUID (`['auth','verify'].id`) to `senderUserId` — NOT the MSAL `localAccountId` (Entra oid), which is a different id space (PR #26).
+
 ## 11. App Insights (RUM)
 
 `lib/ai.ts` initializes `ApplicationInsights` when `VITE_APPLICATION_INSIGHTS_CONNECTION_STRING` is set. Auto page-view tracking is enabled. Events fired today (`web_*` prefix so they co-mingle cleanly with mobile's unprefixed events):
@@ -309,18 +328,20 @@ exceptions
 
 ## 13. Deployment
 
-GitHub Actions: `.github/workflows/webapp-deploy.yml` triggers on push/PR to `main` with paths under `webapp/**`. Uses `Azure/static-web-apps-deploy@v1` with `app_location: webapp`, `output_location: dist`, `app_build_command: npm ci && npm run build`. The `AZURE_STATIC_WEB_APPS_API_TOKEN` secret is reused across deploys — same SWA resource.
+GitHub Actions: `.github/workflows/webapp-deploy.yml` triggers on push/PR to `main` with paths under `webapp/**`. Uses `Azure/static-web-apps-deploy@v1` with `app_location: webapp`, `output_location: dist`, `app_build_command: npm ci && npm run build`. The `AZURE_STATIC_WEB_APPS_API_TOKEN` secret is reused across deploys — same SWA resource. The workflow runs on `actions/checkout@v6` + `actions/setup-node@v6` (Node 24 runner runtime, bumped in PR #28 ahead of GitHub forcing actions off Node 20 on 2026-06-16); the build itself still pins `node-version: 20`. The `Azure/static-web-apps-deploy` action is pinned to the immutable commit SHA `1a947af9992250f3bc2e68ad0754c0b0c11566c9` (v1) for supply-chain hardening — a moved tag can't inject code into a job holding the SWA deploy token. The same pin is used by swa-cleanup.yml (§13.1).
 
-### 13.1 Staging-environment quota ritual (temporary, until automated)
+### 13.1 Staging-environment quota cleanup (automated)
 
-The SWA Free tier caps staging environments at 3 concurrent previews. Every PR creates one. Once the cap is hit, subsequent deploys fail with:
+The SWA Free tier caps staging environments at 3 concurrent previews; every PR creates one. Cleanup is now **automated** by a dedicated workflow `.github/workflows/swa-cleanup.yml`, which triggers on `pull_request: types: [closed]` (no `paths:` filter, so it fires on every close including merges that delete the head branch) and runs `Azure/static-web-apps-deploy@<sha> action: close` to delete the preview env (resolved from the PR number). **Why a separate workflow:** the old close job lived inside `webapp-deploy.yml`, whose `pull_request` trigger has a `paths:` filter but NO `types:` — defaulting to `[opened, synchronize, reopened]`, so `closed` was never delivered and the job had 0 executions across ~30 PRs; envs orphaned until the 3-env cap blocked deploys.
+
+When the cap is hit (e.g. if the workflow ever fails), subsequent deploys fail with:
 
 ```
 The content server has rejected the request with: BadRequest
 Reason: This Static Web App already has the maximum number of staging environments. Please remove one and try again.
 ```
 
-The fix until the cleanup is automated in the workflow:
+The manual `az rest GET/DELETE` recipe below remains the break-glass fallback if the workflow ever fails:
 
 ```bash
 az rest --method GET \
@@ -331,8 +352,6 @@ az rest --method GET \
 az rest --method DELETE \
   --uri "https://management.azure.com/subscriptions/25410e67-b3c8-49a2-8cf0-ab9f77ce613f/resourceGroups/rg-cliquepix-prod/providers/Microsoft.Web/staticSites/swa-cliquepix-prod/builds/<N>?api-version=2023-12-01"
 ```
-
-Follow-up (tracked): add a "cleanup closed-PR staging envs" step to `webapp-deploy.yml` so this stops being manual.
 
 ### 13.2 PR previews + auth
 
@@ -358,7 +377,7 @@ Vite runs on `http://localhost:5173` with HMR. The dev server hits the **product
 6. **Thumbnail SAS cache-busting** — SAS URL query strings change on each refresh, so the browser HTTP cache misses on every load. Acceptable for v1 (thumbnails are ~50 KB).
 7. **Safari cross-origin blob download** — handled via `fetch() + URL.createObjectURL`, not naive `<a download>`.
 8. **App Store + Google Play badges** are placeholder `href="#"` with our own CSS + lucide/inline SVG glyphs. Swap in official SVGs + real URLs once the listings are authorized.
-9. **Staging-environment quota cleanup is manual** — see §13.1.
+9. **Staging-environment cleanup is automated** via swa-cleanup.yml (manual az rest is break-glass only) — see §13.1.
 10. **Legacy App Store / Play Store listings** may still point at `/privacy.html` and `/terms.html` — the 301 redirects cover the transition; update listings to `/docs/*` directly as post-launch cleanup.
 
 ## 16. Change log
@@ -377,3 +396,5 @@ Vite runs on `http://localhost:5173` with HMR. The dev server hits the **product
 | (pending merge) | Avatar upload + first-sign-in welcome prompt — tappable Profile avatar, `react-easy-crop` square crop, filter presets (Original / B&W / Warm / Cool), frame presets (5 gradients), `canvas-confetti` on first upload, `AvatarWelcomePromptGate` mounted in AppLayout |
 | (pending merge, 2026-04-28) | Organizer media moderation — `MediaCard` accepts `eventCreatedByUserId`; `canDelete = isUploader \|\| isOrganizerDeletingOthers`. The 3-dot menu is now visible on the event organizer's view of OTHER members' uploads (label reads "Remove" instead of "Delete"); `<ConfirmDestructive>` title and body branch on `isOrganizerDeletingOthers`; success toast says "Photo removed" / "Video removed" for the moderation path. Backed by the deployed `canDeleteMedia` API which accepts uploader OR `events.created_by_user_id`. `MediaFeed` + `EventDetailScreen` thread `event.createdByUserId` down. `Lightbox.tsx` was audited and is unchanged (read-only — no delete control). Pre-existing uploader self-delete copy is unchanged (uploader takes precedence over organizer). |
 | (pending merge, 2026-05-02) | "Who reacted?" reactor list — Facebook-style sheet listing who left each reaction. New `ReactorStrip.tsx` (avatar stack + "N reactions" text, gated on `totalReactions > 0`) renders above `ReactionBar` inside `MediaCard`. Tap → new `ReactorListDialog.tsx` (Radix `Dialog` + first consumer of `@radix-ui/react-tabs`) opens with `All N` tab pre-selected and one tab per non-empty reaction type (heart/laugh/fire/wow ordering, empty types skipped). Each row uses the existing `Avatar` component at `size={40}`. React-query keyed `['reactors', mediaType, mediaId]` with `enabled: open` + `staleTime: 0` so the dialog refetches on every open (no cross-card invalidation needed when the user reacts via a pill). New API methods `listPhotoReactions` / `listVideoReactions` in `api/endpoints/{photos,videos}.ts`; new `ReactorAvatar` / `ReactorEntry` / `ReactorList` types in `models/index.ts` plus `topReactors?: ReactorAvatar[]` on `MediaBase` (server-populated, up to 3 distinct most-recent reactor avatars per media). Telemetry: `web_reactor_list_viewed { mediaId, mediaType, reactionFilter, totalReactions }`. Long-press is mobile-only — web users tap the strip then click a Radix tab to filter. |
+| #26 | Fix DM sender-identity (UUID vs Entra oid), recoverable EntitlementGuard error state, Lightbox video MP4 download |
+| #27 | Web DM mark-read sends last_read_message_id (was silently 400ing) |

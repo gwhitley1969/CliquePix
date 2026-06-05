@@ -1,0 +1,37 @@
+name: Clean up SWA PR environment
+
+# Deletes the Azure Static Web Apps staging (preview) environment that the
+# Deploy Web App workflow creates for each pull request.
+#
+# WHY THIS IS A SEPARATE WORKFLOW (do not fold back into webapp-deploy.yml):
+# The old close job lived inside webapp-deploy.yml, whose trigger is
+# `on: pull_request:` with NO `types:` — which defaults to
+# [opened, synchronize, reopened]. `closed` is NOT a default type, so that
+# workflow was never delivered the close event and the close job NEVER ran
+# (verified: 0 executions across 30 PRs). Staging envs orphaned until the
+# SWA Free-tier 3-environment cap blocked the next PR's deploy.
+#
+# This workflow triggers on `closed` explicitly and has NO `paths:` filter,
+# so it fires on EVERY PR close — even when the head branch was deleted on
+# merge (a paths filter can't diff a deleted branch, which would re-break it).
+# The SWA `close` action identifies the environment from the PR number in the
+# event payload, so the head branch does not need to still exist.
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: read
+
+jobs:
+  close_staging_env:
+    runs-on: ubuntu-latest
+    name: Close SWA staging environment
+    steps:
+      - name: Close staging environment
+        # Pinned to the immutable v1 commit SHA (supply-chain hardening: a moved
+        # tag can't inject code into a job that holds the SWA deploy token).
+        uses: Azure/static-web-apps-deploy@1a947af9992250f3bc2e68ad0754c0b0c11566c9  # v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          action: "close"
