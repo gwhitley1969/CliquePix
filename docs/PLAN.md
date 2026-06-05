@@ -149,7 +149,7 @@ All to be executed subagent-driven on this branch, two-stage review per task (sp
 
 ## Plan 6 — Beta tester + reviewer migration (after backend live + mobile built, before TestFlight)
 - [ ] `SELECT id, email_or_phone FROM users WHERE created_at < '<cutoff>';`
-- [ ] RC dashboard → grant **Promotional** `plus`: `appreview@cliquepix.com` → lifetime; 4 beta testers → 1 year.
+- [ ] RC dashboard → grant **Promotional** `plus`: `vwhitley1967@gmail.com` → lifetime; 4 beta testers → 1 year.
 - [ ] App Store Connect review notes: explain promo grant + sandbox tester path. (Reviewer needs BOTH: promo grant to see the app, sandbox tester to exercise the IAP.)
 - [ ] Document grants in `docs/BETA_OPERATIONS_RUNBOOK.md`.
 
