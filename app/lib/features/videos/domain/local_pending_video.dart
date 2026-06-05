@@ -53,6 +53,11 @@ class LocalPendingVideo {
       uploadProgress: uploadProgress ?? this.uploadProgress,
       serverVideoId: serverVideoId ?? this.serverVideoId,
       previewUrl: previewUrl ?? this.previewUrl,
+      // NOTE: clear-on-omit (NOT `?? this.errorMessage` like the fields above).
+      // Any copyWith that does not explicitly pass errorMessage CLEARS it. This
+      // is intentional — a stage transition clears a prior error — but it is a
+      // footgun: a partial copyWith (e.g. only uploadProgress) would silently
+      // wipe a failure. Callers MUST pass errorMessage when preserving it.
       errorMessage: errorMessage,
     );
   }

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_gradients.dart';
 import '../../../core/utils/date_utils.dart';
+import '../../../core/utils/api_error_messages.dart';
 import '../../../widgets/avatar_widget.dart';
 import '../../../widgets/error_widget.dart';
 import '../../events/presentation/events_providers.dart';
@@ -34,7 +35,9 @@ class DmThreadListScreen extends ConsumerWidget {
         },
         error: (err, _) {
           debugPrint('[CliquePix DM] ThreadList: error=$err');
-          return AppErrorWidget(message: err.toString());
+          return AppErrorWidget(
+            message: friendlyApiErrorMessage(err, resourceLabel: 'messages'),
+          );
         },
         data: (threads) {
           debugPrint('[CliquePix DM] ThreadList: loaded ${threads.length} threads for eventId=$eventId');

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/lifecycle_aware_poller_mixin.dart';
+import '../../../core/utils/api_error_messages.dart';
 import '../../../core/theme/app_gradients.dart';
 import '../../../models/photo_model.dart';
 import '../../../models/video_model.dart';
@@ -190,7 +191,7 @@ class _EventFeedScreenState extends ConsumerState<EventFeedScreen>
       error: (err, _) {
         debugPrint('[CliquePix] EventFeed: error=$err');
         return AppErrorWidget(
-        message: err.toString(),
+        message: friendlyApiErrorMessage(err, resourceLabel: 'feed'),
         onRetry: () => ref.invalidate(eventPhotosProvider(widget.eventId)),
       );},
       data: (photos) {

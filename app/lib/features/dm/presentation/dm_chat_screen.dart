@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_gradients.dart';
 import '../../../core/utils/date_utils.dart';
+import '../../../core/utils/api_error_messages.dart';
 import '../../../models/dm_message_model.dart';
 import '../../../widgets/avatar_widget.dart';
 import '../../../widgets/error_widget.dart';
@@ -166,7 +167,9 @@ class _DmChatScreenState extends ConsumerState<DmChatScreen> {
           Expanded(
             child: messagesAsync.when(
               loading: () => const Center(child: CircularProgressIndicator(color: AppColors.electricAqua)),
-              error: (err, _) => AppErrorWidget(message: err.toString()),
+              error: (err, _) => AppErrorWidget(
+                message: friendlyApiErrorMessage(err, resourceLabel: 'messages'),
+              ),
               data: (serverMessages) {
                 // Combine server messages + locally added messages, deduplicate by ID
                 final allIds = <String>{};

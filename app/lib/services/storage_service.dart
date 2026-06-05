@@ -15,12 +15,15 @@ class StorageService {
     final filePath = '${tempDir.path}/cliquepix_$photoId.jpg';
 
     await dio.download(url, filePath);
-    await Gal.putImage(filePath);
-
-    // Clean up temp file
-    final file = File(filePath);
-    if (await file.exists()) {
-      await file.delete();
+    try {
+      await Gal.putImage(filePath);
+    } finally {
+      // Delete the temp file whether or not the gallery write succeeded — a Gal
+      // failure (permission denied, gallery full) used to leak a full-size copy.
+      final file = File(filePath);
+      if (await file.exists()) {
+        await file.delete();
+      }
     }
   }
 
@@ -59,11 +62,15 @@ class StorageService {
     final filePath = '${tempDir.path}/cliquepix_$videoId.mp4';
 
     await dio.download(mp4Url, filePath);
-    await Gal.putVideo(filePath);
-
-    final file = File(filePath);
-    if (await file.exists()) {
-      await file.delete();
+    try {
+      await Gal.putVideo(filePath);
+    } finally {
+      // Delete the temp file even if the gallery write throws (a video temp can
+      // be up to ~500MB — a leaked copy per failed save adds up fast).
+      final file = File(filePath);
+      if (await file.exists()) {
+        await file.delete();
+      }
     }
   }
 }

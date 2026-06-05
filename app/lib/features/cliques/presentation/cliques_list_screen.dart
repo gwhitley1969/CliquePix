@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_gradients.dart';
 import '../../../core/utils/lifecycle_aware_poller_mixin.dart';
+import '../../../core/utils/api_error_messages.dart';
 import '../../../widgets/branded_sliver_app_bar.dart';
 import '../../../widgets/empty_state_widget.dart';
 import '../../../widgets/error_widget.dart';
@@ -64,7 +65,7 @@ class _CliquesListScreenState extends ConsumerState<CliquesListScreen>
             ),
             error: (err, _) => SliverFillRemaining(
               child: AppErrorWidget(
-                message: err.toString(),
+                message: friendlyApiErrorMessage(err, resourceLabel: 'cliques'),
                 onRetry: () => ref.read(cliquesListProvider.notifier).refresh(),
               ),
             ),
