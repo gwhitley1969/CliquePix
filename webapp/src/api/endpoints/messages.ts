@@ -36,8 +36,16 @@ export async function sendMessage(threadId: string, body: string): Promise<DmMes
   return res.data.data;
 }
 
-export async function markThreadRead(threadId: string): Promise<void> {
-  await api.patch(`/api/dm-threads/${threadId}/read`);
+export async function markThreadRead(
+  threadId: string,
+  lastReadMessageId: string,
+): Promise<void> {
+  // Backend markDmRead REQUIRES a valid last_read_message_id and 400s without
+  // it — the web client previously sent no body, so web mark-read silently
+  // failed. Mirror mobile (dm_api.dart markRead): send the latest message id.
+  await api.patch(`/api/dm-threads/${threadId}/read`, {
+    last_read_message_id: lastReadMessageId,
+  });
 }
 
 export async function negotiateRealtime(): Promise<{ url: string }> {

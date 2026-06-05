@@ -39,9 +39,15 @@ export function ThreadScreen() {
     enabled: !!threadId,
   });
 
+  // Mark the thread read up to the latest message once the list has loaded
+  // (and whenever a new message arrives). The backend requires a valid
+  // last_read_message_id, so wait for messages and skip an empty thread.
+  const lastMessageId = messages.data?.[messages.data.length - 1]?.id;
   useEffect(() => {
-    if (threadId) markThreadRead(threadId).catch(console.error);
-  }, [threadId]);
+    if (threadId && lastMessageId) {
+      markThreadRead(threadId, lastMessageId).catch(console.error);
+    }
+  }, [threadId, lastMessageId]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
