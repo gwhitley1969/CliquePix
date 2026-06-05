@@ -17,6 +17,10 @@ class ImageCompressionService {
     final sourceImage = await completer.future;
     final srcWidth = sourceImage.width;
     final srcHeight = sourceImage.height;
+    // Dispose the decoded native bitmap immediately — we only needed its
+    // dimensions. ui.Image wraps GPU/heap-backed memory that leaks until the
+    // finalizer runs; on a batch upload that is several MB leaked per photo.
+    sourceImage.dispose();
 
     // Only constrain if image exceeds max dimension on longest edge
     final maxDim = AppConstants.maxImageDimension;

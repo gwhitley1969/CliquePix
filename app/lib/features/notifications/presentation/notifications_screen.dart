@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/date_utils.dart';
+import '../../../core/utils/api_error_messages.dart';
 import '../../../models/notification_model.dart';
 import '../../../widgets/branded_sliver_app_bar.dart';
 import '../../../widgets/confirm_destructive_dialog.dart';
@@ -187,7 +188,7 @@ class NotificationsScreen extends ConsumerWidget {
             ),
             error: (err, _) => SliverFillRemaining(
               child: AppErrorWidget(
-                message: err.toString(),
+                message: friendlyApiErrorMessage(err, resourceLabel: 'notifications'),
                 onRetry: () => ref.invalidate(notificationsListProvider),
               ),
             ),

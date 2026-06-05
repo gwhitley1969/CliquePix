@@ -5,6 +5,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_gradients.dart';
+import '../../../core/utils/api_error_messages.dart';
 import '../../../widgets/error_widget.dart';
 import 'cliques_providers.dart';
 
@@ -31,7 +32,9 @@ class InviteScreen extends ConsumerWidget {
         loading: () => const Center(
           child: CircularProgressIndicator(color: AppColors.electricAqua),
         ),
-        error: (err, _) => AppErrorWidget(message: err.toString()),
+        error: (err, _) => AppErrorWidget(
+          message: friendlyApiErrorMessage(err, resourceLabel: 'invite'),
+        ),
         data: (clique) {
           final inviteUrl = 'https://clique-pix.com/invite/${clique.inviteCode}';
 

@@ -96,7 +96,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(pendingRefreshFlagKey, true);
     await _recordIsolateEvent('silent_push_fallback_flag_set',
-        errorCode: _briefError(e));
+        errorCode: briefError(e));
   }
 }
 
@@ -118,11 +118,21 @@ Future<void> _recordIsolateEvent(String event, {String? errorCode}) async {
   }
 }
 
-String _briefError(Object e) {
+/// Short, log-safe summary of an error for telemetry. Visible for testing.
+///
+/// MUST NOT throw — it runs inside bootstrap catch blocks whose whole purpose is
+/// to keep the app launching on a storage failure. The previous version bounded
+/// the substring by `s.length` (the FULL multi-line string) but applied it to
+/// `s.split('\n').first` (the first line only): when the total exceeded 64 chars
+/// while the first line was shorter, `substring(0, 64)` threw RangeError on a
+/// shorter string, escaped the catch, and aborted `main()` before `runApp()` —
+/// a blank-screen launch crash. Bound by the FIRST LINE's own length instead.
+String briefError(Object e) {
   final s = e.toString();
   final match = RegExp(r'AADSTS\d{5,6}').firstMatch(s);
   if (match != null) return match.group(0)!;
-  return s.split('\n').first.substring(0, s.length > 64 ? 64 : s.length);
+  final first = s.split('\n').first;
+  return first.length > 64 ? first.substring(0, 64) : first;
 }
 
 /// Called when an FCM message arrives while the app is in the foreground.
@@ -159,7 +169,17 @@ void main() async {
   // for returning users — no splash, no "checking auth" spinner ever.
   // Background verification runs after runApp and either silently refreshes
   // the cached session or routes to the Welcome Back dialog on failure.
-  final AuthState bootstrapState = await _computeBootstrapAuthState();
+  // Defense-in-depth: _computeBootstrapAuthState catches its own errors and
+  // returns AuthUnauthenticated, but its catch block's telemetry could itself
+  // throw. NEVER let bootstrap abort launch before runApp — fall back to
+  // unauthenticated (→ LoginScreen) on any escape.
+  AuthState bootstrapState;
+  try {
+    bootstrapState = await _computeBootstrapAuthState();
+  } catch (e) {
+    debugPrint('[CliquePix] bootstrap computation threw: $e — unauthenticated');
+    bootstrapState = const AuthUnauthenticated();
+  }
 
   // Stale-while-revalidate cache hydration for events + cliques. Same
   // optimistic philosophy: render last-known data on the first frame; the
@@ -329,7 +349,7 @@ Future<AuthState> _computeBootstrapAuthState() async {
   } catch (e) {
     debugPrint('[CliquePix] bootstrap auth state failed: $e — unauthenticated');
     await _recordIsolateEvent('cold_start_bootstrap_failed',
-        errorCode: _briefError(e));
+        errorCode: briefError(e));
     return const AuthUnauthenticated();
   }
 }

@@ -47,7 +47,9 @@ class PushNotificationService {
 
       // Get and register the FCM token
       final token = await messaging.getToken();
-      debugPrint('[CliquePix] FCM token: ${token?.substring(0, 20)}...');
+      // Don't log any of the token itself (CLAUDE.md: no tokens in logs, even
+      // in debug). debugPrint is not stripped from release builds.
+      debugPrint('[CliquePix] FCM token acquired: ${token != null}');
       if (token != null) {
         await _registerToken(token);
       }
