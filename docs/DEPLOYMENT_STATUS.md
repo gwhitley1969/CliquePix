@@ -20,7 +20,7 @@ Last updated: 2026-06-04 (Re-audit follow-up — 4 ship-blockers fixed & **deplo
 
 **Ops:** deleted 3 orphaned SWA staging environments (PRs 13/15/17) that were maxing the Free-tier cap and failing PR previews; production `default` env untouched.
 
-**Still open (tracked, not started):** 7 high/medium follow-ups — reviewer-lockout `expires_date:null` (promotional grants deactivated by force-sync), RC webhook 500 retry-storm, `markExpired` TOCTOU, web-user in-app notifications gated on FCM-token presence, FCM transient-failure token purge, event-expiry vs in-flight transcode race, `_briefError` startup `RangeError`. Details in `docs/SECURITY_AUDIT_2026-06-04.md`.
+**Follow-on PAY hardening:** ✅ **reviewer-lockout** `expires_date:null` promo grants (PR #21 — merged + **deployed** via `func publish`, health 200); ✅ **RC webhook 500 retry-storm** + non-UUID `app_user_id` guard + missing-secret-now-401, ✅ **`markExpired` TOCTOU** (both PR #22 — pending merge + backend deploy). **Still open (4 of the original 7):** web-user in-app notifications gated on FCM-token presence, FCM transient-failure token purge, event-expiry vs in-flight transcode race, `_briefError` startup `RangeError`. Details in `docs/SECURITY_AUDIT_2026-06-04.md`.
 
 ---
 

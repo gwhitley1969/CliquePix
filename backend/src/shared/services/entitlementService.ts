@@ -1,6 +1,7 @@
 import { execute, query, queryOne } from './dbService';
 import { trackEvent } from './telemetryService';
 import { fetchSubscriberFromRc } from './revenuecatRestClient';
+import { isValidUUID } from '../utils/validators';
 
 // ============================================================================
 // RevenueCat webhook event payload shape (the subset we care about)
@@ -54,7 +55,10 @@ const PAUSING_EVENTS = new Set(['SUBSCRIPTION_PAUSED']);
 
 export type EntitlementUpsertResult =
   | { applied: true; active: boolean }
-  | { applied: false; reason: 'idempotent' | 'stale_timestamp' | 'not_plus_entitlement' };
+  | {
+      applied: false;
+      reason: 'idempotent' | 'stale_timestamp' | 'not_plus_entitlement' | 'invalid_user_id';
+    };
 
 /**
  * Apply a RevenueCat webhook event to the user's entitlement state.
@@ -85,6 +89,16 @@ export async function upsertEntitlement(
   // Resolve the user row. Prefer original_app_user_id (RC's canonical post-
   // alias identifier) but fall back to app_user_id.
   const appUserId = event.original_app_user_id ?? event.app_user_id;
+
+  // app_user_id must be our users.id UUID. RC can emit a non-UUID id (e.g.
+  // `$RCAnonymousID:...` before Purchases.logIn aliasing completes); feeding a
+  // non-UUID into the `WHERE id = $1` UPDATE raises a Postgres
+  // `invalid input syntax for type uuid` error that (pre-fix) bubbled to a 500
+  // and a RC retry-storm. Treat it as a clean, logged no-op instead.
+  if (!isValidUUID(appUserId)) {
+    trackEvent('entitlement_webhook_invalid_user_id', { eventType: event.type });
+    return { applied: false, reason: 'invalid_user_id' };
+  }
 
   // Decide active flag based on event type.
   let nextActive: boolean;
@@ -235,12 +249,22 @@ export async function findExpiredActive(limit = 500): Promise<{ id: string; last
 }
 
 export async function markExpired(userId: string): Promise<void> {
+  // Self-validating to close a TOCTOU: the reconciliation timer snapshots
+  // expired rows (findExpiredActive) then calls this per-row, and forceSync
+  // calls it after its lag-guard. A RENEWAL webhook landing in that window
+  // extends entitlement_expires_at into the future (active stays TRUE) — without
+  // re-checking expiry HERE, we would deactivate a customer who just paid. The
+  // IS NOT NULL clause also leaves lifetime/promotional grants (null expiry)
+  // untouched. Only deactivate a row whose stored expiry has genuinely passed.
   await execute(
     `UPDATE users SET
         entitlement_active = FALSE,
         entitlement_updated_at = NOW(),
         updated_at = NOW()
-       WHERE id = $1 AND entitlement_active = TRUE`,
+       WHERE id = $1
+         AND entitlement_active = TRUE
+         AND entitlement_expires_at IS NOT NULL
+         AND entitlement_expires_at < NOW()`,
     [userId],
   );
 }

@@ -28,6 +28,9 @@ import { forceSyncFromRcApi } from '../shared/services/entitlementService';
 
 const FUTURE = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // +7 days
 const PAST = new Date(Date.now() - 24 * 60 * 60 * 1000); // -1 day
+// forceSyncFromRcApi feeds userId into upsertEntitlement's synthetic event,
+// which validates it is a UUID — use a real UUID for the active-path tests.
+const REVIEWER_ID = '550e8400-e29b-41d4-a716-446655440000';
 
 // A getEntitlement() row shape (snake_case columns queryOne returns).
 function dbRow(overrides: Record<string, unknown> = {}) {
@@ -132,7 +135,7 @@ describe('forceSyncFromRcApi — lifetime/promotional grants (reviewer-lockout f
       dbRow({ entitlement_active: true, entitlement_expires_at: null }),
     );
 
-    const result = await forceSyncFromRcApi('reviewer-1');
+    const result = await forceSyncFromRcApi(REVIEWER_ID);
 
     // Takes the ACTIVE branch (synthetic RENEWAL upsert), NOT markExpired.
     expect(execMock).toHaveBeenCalled();
@@ -157,7 +160,7 @@ describe('forceSyncFromRcApi — lifetime/promotional grants (reviewer-lockout f
       dbRow({ entitlement_active: true, entitlement_expires_at: null }),
     );
 
-    const result = await forceSyncFromRcApi('reviewer-1');
+    const result = await forceSyncFromRcApi(REVIEWER_ID);
 
     // Lag-guard now protects active + null expiry → no markExpired, no upsert.
     expect(execMock).not.toHaveBeenCalled();
