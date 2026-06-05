@@ -19,7 +19,11 @@ import { UnauthorizedError } from '../utils/errors';
 function getExpectedHeader(): string {
   const secret = process.env.REVENUECAT_WEBHOOK_SECRET;
   if (!secret) {
-    throw new Error('REVENUECAT_WEBHOOK_SECRET is not configured');
+    // Misconfiguration (secret missing/cleared). Throw UnauthorizedError — NOT a
+    // plain Error — so the webhook handler surfaces a loud 401 (caught by the
+    // apim-401 alert) instead of letting it fall through to the always-200 error
+    // fallback, where a disabled webhook auth would otherwise be silently masked.
+    throw new UnauthorizedError('RevenueCat webhook secret is not configured');
   }
   return `Bearer ${secret}`;
 }

@@ -3,7 +3,6 @@ import { authenticateRevenueCatWebhook } from '../shared/middleware/revenuecatAu
 import { upsertEntitlement, type RcWebhookEvent } from '../shared/services/entitlementService';
 import { trackEvent } from '../shared/services/telemetryService';
 import { successResponse, errorResponse } from '../shared/utils/response';
-import { handleError } from '../shared/middleware/errorHandler';
 import { UnauthorizedError } from '../shared/utils/errors';
 
 // ============================================================================
@@ -36,7 +35,7 @@ interface RcWebhookEnvelope {
   event?: RcWebhookEvent;
 }
 
-async function revenuecatWebhook(
+export async function revenuecatWebhook(
   req: HttpRequest,
   context: InvocationContext,
 ): Promise<HttpResponseInit> {
@@ -90,11 +89,18 @@ async function revenuecatWebhook(
       trackEvent('entitlement_webhook_unauthorized');
       return errorResponse('UNAUTHORIZED', 'Webhook authentication failed.', 401);
     }
-    // Unexpected error — log via handleError (App Insights) and return 200
-    // so RC doesn't retry. A 500 here would create a thundering retry herd
-    // for an issue we need to diagnose offline anyway.
+    // Unexpected error — log to App Insights and return 200 so RC does NOT
+    // retry-storm this endpoint (the documented invariant above). A persistent
+    // error (code bug, poison event) retried with exponential backoff would mask
+    // real subscription events behind queue backlog; transient drops are
+    // recovered by the client's 30s post-purchase force-sync + the 6h
+    // reconciliation timer. (The most common poison case — a non-UUID
+    // app_user_id — is already caught as a clean no-op in upsertEntitlement.)
     context.error('RevenueCat webhook handler error', error);
-    return handleError(error, context.invocationId);
+    trackEvent('entitlement_webhook_error', {
+      message: error instanceof Error ? error.message : String(error),
+    });
+    return successResponse({ ignored: 'error' });
   }
 }
 
