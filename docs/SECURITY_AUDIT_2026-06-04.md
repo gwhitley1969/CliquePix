@@ -163,7 +163,11 @@ High/medium to schedule:
 - ✅ `LocalPendingVideo.copyWith` clear-on-omit footgun documented.
 
 ### Still open (deferred — separate careful PR)
-- **Flutter auth/refresh state-machine** (heavily invariant-laden per CLAUDE.md — deliberately NOT bundled into the polish batch): background-verify can resurrect a signed-out session; concurrent silent-refresh has no mutex; `AuthInterceptor` 401 retry has no per-request loop guard; optimistic-entitlement flag not reset on account switch.
+- **Flutter auth/refresh state-machine** — ✅ **FIXED** (PR #25, Flutter). All four, each spec'd via parallel analysis + adversarially verified against the 5-layer-defense invariants:
+  - **A1** background-verify could **resurrect a signed-out session** → added an `_authEpoch` counter bumped by every teardown (signOut/deleteAccount/resetAndSignIn); `_verifyInBackground` + `_handleSilentSignInFailure` capture the epoch before their awaits and bail (`epoch != _authEpoch || !mounted`) before any state assignment. Session-expired regex untouched (Layer-5 3-site sync preserved).
+  - **A2** `AuthInterceptor` 401 refresh+replay could **loop unbounded** → per-request `extra['authRetried']` guard so it happens at most once; a 2nd 401 propagates and is routed by Layer-3/verify.
+  - **A3** concurrent silent-refresh **raced parallel `acquireTokenSilent`+`saveTokens`** → all main-isolate entry points (Layers 2/3 + interceptor) coalesce onto a single in-flight `Future` in `AuthRepository`; `pendingRefreshFlagKey` clear-before-await left in `AppLifecycleService` (NOT moved into the mutex); per-isolate by design. +5 coalescing tests.
+  - **A4** optimistic-entitlement flag **not reset on account switch** (next user got the app shell) → `ref.invalidate(optimisticEntitlementProvider)` in `_invalidateUserScopedState` (fires on sign-out / account-switch, not first sign-in); tightens the paywall. *Ships in the next app build, not a backend deploy.*
 - Block-upload "resume" is dead code (design decision); iOS SAS-recovery missing the HLS bypass; `event_expiring` web-only gap (NOTIF-1 4th site).
 - Webapp + infra low/info: web DM ownership OID-vs-UUID; `EntitlementGuard` blank-on-verify-error; Lightbox video-download-poster; transcoder HDR poster not tone-mapped; transcoder Docker runs as root; CI workflows lack `permissions:`; webapp `post_login_redirect` validation; M1/M2/M3, L2–L7.
 

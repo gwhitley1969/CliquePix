@@ -109,6 +109,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   bool _signingIn = false;
   bool _verifying = false;
+  /// Monotonic generation counter, bumped by every explicit teardown
+  /// (signOut / deleteAccount / resetAndSignIn). An in-flight _verifyInBackground
+  /// captures this before its await and refuses to assign state if it changed —
+  /// otherwise a late-resolving silentSignIn could resurrect a session the user
+  /// just tore down during the ~8s verify window (ITEM A1).
+  int _authEpoch = 0;
 
   AuthNotifier(
     this._repository,
@@ -151,24 +157,33 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<void> _verifyInBackground() async {
     if (_verifying) return;
     _verifying = true;
+    final epoch = _authEpoch; // captured before any await — see ITEM A1
     _telemetry.record('background_verification_started');
     try {
       final user = await _repository
           .silentSignIn()
           .timeout(const Duration(seconds: 8));
+      // Bail if the user tore the session down (signOut / delete / reset) or the
+      // notifier was disposed while silentSignIn was in flight — never resurrect
+      // a deliberately-ended session.
+      if (epoch != _authEpoch || !mounted) {
+        _telemetry.record('background_verification_discarded_stale');
+        return;
+      }
       state = AuthAuthenticated(user);
       _telemetry.record('background_verification_success');
     } on TimeoutException {
       _telemetry.record('background_verification_timeout');
-      await _handleSilentSignInFailure(Exception('silent_signin_timeout'));
+      await _handleSilentSignInFailure(
+          Exception('silent_signin_timeout'), epoch);
     } catch (e) {
-      await _handleSilentSignInFailure(e);
+      await _handleSilentSignInFailure(e, epoch);
     } finally {
       _verifying = false;
     }
   }
 
-  Future<void> _handleSilentSignInFailure(Object error) async {
+  Future<void> _handleSilentSignInFailure(Object error, int epoch) async {
     final msg = error.toString();
     final isSessionExpired = msg.contains('AADSTS700082') ||
         msg.contains('AADSTS500210') ||
@@ -179,6 +194,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
         msg.toLowerCase().contains('ui_required');
 
     final hint = await _tokenStorage.getLastKnownUser();
+    // Teardown (signOut / delete / reset) raced ahead of this failure handler,
+    // or the notifier was disposed — do not clobber the deliberate terminal
+    // state. See ITEM A1.
+    if (epoch != _authEpoch || !mounted) return;
     if (isSessionExpired && hint.email != null && hint.email!.isNotEmpty) {
       debugPrint('[AUTH-LAYER-5] cold_start_relogin_required email=${hint.email}');
       _telemetry.record('cold_start_relogin_required');
@@ -251,6 +270,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   /// a hung spinner for 15+ seconds. Clears MSAL cache and stored tokens,
   /// then starts a fresh interactive sign-in.
   Future<void> resetAndSignIn() async {
+    _authEpoch++; // invalidate any in-flight background verify — see ITEM A1
     _telemetry.record('login_screen_escape_hatch_tapped');
     await _repository.resetSession();
     _stopLifecycle();
@@ -261,6 +281,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   void clearError() => state = const AuthUnauthenticated();
 
   Future<void> signOut() async {
+    _authEpoch++; // invalidate any in-flight background verify — see ITEM A1
     // De-register the FCM token while the JWT is still valid, so this device
     // stops receiving pushes for the signed-out user. Best-effort (the
     // callback swallows its own errors) — never block sign-out.
@@ -274,6 +295,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> deleteAccount() async {
+    _authEpoch++; // invalidate any in-flight background verify — see ITEM A1
     if (_deregisterPush != null) await _deregisterPush();
     try {
       await _repository.deleteAccount();

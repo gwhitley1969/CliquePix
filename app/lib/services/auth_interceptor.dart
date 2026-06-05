@@ -24,6 +24,17 @@ class AuthInterceptor extends Interceptor {
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) async {
     if (err.response?.statusCode == 401) {
+      // Per-request loop guard: refresh+replay happens AT MOST once per original
+      // request. dio.fetch below re-enters this interceptor; without this bail a
+      // persistently-401'ing request recurses forever (acquireTokenSilent keeps
+      // returning the cached still-valid token => success=true each cycle). On
+      // the second 401 we propagate the original error; a genuine session expiry
+      // is still surfaced by the parallel Layer-3 resume / background verify,
+      // which route to WelcomeBackDialog. See ITEM A2.
+      if (err.requestOptions.extra['authRetried'] == true) {
+        handler.next(err);
+        return;
+      }
       try {
         // Use refreshTokenDetailed (returns RefreshResult with errorCode)
         // instead of the bool refreshToken so we can distinguish a recoverable
@@ -44,6 +55,9 @@ class AuthInterceptor extends Interceptor {
           final tokenStorage = ref.read(tokenStorageServiceProvider);
           final accessToken = await tokenStorage.getAccessToken();
           err.requestOptions.headers['Authorization'] = 'Bearer $accessToken';
+          // Mark BEFORE replay so the re-entrant onError sees the guard and
+          // bails instead of refreshing+replaying again (ITEM A2).
+          err.requestOptions.extra['authRetried'] = true;
           final response = await dio.fetch(err.requestOptions);
           return handler.resolve(response);
         }

@@ -27,6 +27,25 @@ class AuthRepository {
 
   SingleAccountPca? _pca;
 
+  /// Single in-flight silent-refresh future. ALL main-isolate silent-refresh
+  /// entry points — Layer 2 foreground push (refreshToken), Layer 3 app-resume
+  /// (refreshToken via AppLifecycleService), and the AuthInterceptor 401 path
+  /// (refreshTokenDetailed) — funnel through refreshTokenDetailed(), so
+  /// concurrent callers await ONE acquireTokenSilent instead of racing parallel
+  /// ones against the same SingleAccountPca and racing saveTokens()
+  /// (last-writer-wins on last_refresh_time). PER-ISOLATE by design: the FCM
+  /// background isolate (main.dart) and WorkManager isolate
+  /// (background_token_service.dart) create their own PCA and do NOT share this
+  /// field — acceptable because the MSAL token cache is process-wide and the
+  /// saveTokens writes are idempotent valid tokens. See ITEM A3.
+  Future<RefreshResult>? _inFlightRefresh;
+
+  /// Test seam: when set, the refresh worker calls this instead of the real PCA
+  /// acquisition, so the coalescing logic is unit-testable without a live
+  /// SingleAccountPca. Null in production — the production path is unchanged.
+  @visibleForTesting
+  Future<RefreshResult> Function()? acquireOverride;
+
   AuthRepository({
     required this.api,
     required this.tokenStorage,
@@ -180,7 +199,27 @@ class AuthRepository {
   }
 
   /// Silent refresh that surfaces the MSAL error code for Layer-5 routing.
-  Future<RefreshResult> refreshTokenDetailed() async {
+  ///
+  /// Coalesces concurrent callers (Layers 2/3 + the interceptor) onto a SINGLE
+  /// in-flight acquisition: the first caller starts it and stores the future;
+  /// later callers await the SAME future; the field clears on completion so a
+  /// genuinely-later refresh starts fresh. See ITEM A3.
+  Future<RefreshResult> refreshTokenDetailed() {
+    final existing = _inFlightRefresh;
+    if (existing != null) {
+      debugPrint('[AUTH-REFRESH] coalesced onto in-flight refresh');
+      return existing;
+    }
+    // Store the RAW value-bearing future so coalesced callers also get the
+    // RefreshResult; the first caller returns the whenComplete-wrapped future
+    // (whenComplete preserves the value/error type). Clear on settle.
+    final future = _doRefreshTokenDetailed();
+    _inFlightRefresh = future;
+    return future.whenComplete(() => _inFlightRefresh = null);
+  }
+
+  Future<RefreshResult> _doRefreshTokenDetailed() async {
+    if (acquireOverride != null) return acquireOverride!();
     try {
       final pca = await _getOrCreatePca();
       final result = await pca.acquireTokenSilent(scopes: MsalConstants.scopes);

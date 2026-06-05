@@ -19,6 +19,7 @@ import '../features/events/presentation/events_providers.dart';
 import '../features/notifications/presentation/notifications_providers.dart';
 import '../features/photos/presentation/photos_providers.dart';
 import '../features/videos/presentation/videos_providers.dart';
+import '../features/paywall/presentation/paywall_providers.dart';
 
 class CliquePix extends ConsumerStatefulWidget {
   const CliquePix({super.key});
@@ -187,6 +188,11 @@ class _CliquePixState extends ConsumerState<CliquePix> {
     ref.invalidate(dmThreadsProvider);
     ref.invalidate(dmThreadDetailProvider);
     ref.invalidate(dmMessagesProvider);
+    // Entitlement — reset the optimistic post-purchase paywall flag so a stale
+    // `true` (slow webhook at User A's purchase) cannot grant User B the app
+    // shell on the same device before backend reconcile. Re-running the
+    // provider's create fn rebuilds the notifier with super(false). See A4.
+    ref.invalidate(optimisticEntitlementProvider);
     // In-memory image cache (no disk dep — `painting.dart` is in flutter SDK)
     PaintingBinding.instance.imageCache.clear();
     PaintingBinding.instance.imageCache.clearLiveImages();
