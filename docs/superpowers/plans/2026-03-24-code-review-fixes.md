@@ -348,7 +348,7 @@ Change line 41:
 ```
 to:
 ```dart
-  static const deepLinkHost = 'cliquepix.app';
+  static const deepLinkHost = 'clique-pix.com';
 ```
 
 - [ ] **Step 2: Fix environment.dart**
@@ -359,7 +359,7 @@ Change line 13 (prod API URL):
 ```
 to:
 ```dart
-        return 'https://api.cliquepix.app';
+        return 'https://api.clique-pix.com';
 ```
 
 Change line 28:
@@ -368,7 +368,7 @@ Change line 28:
 ```
 to:
 ```dart
-  static const deepLinkDomain = 'cliquepix.app';
+  static const deepLinkDomain = 'clique-pix.com';
 ```
 
 - [ ] **Step 3: Fix invite_screen.dart**
@@ -379,14 +379,14 @@ Change line 26:
 ```
 to:
 ```dart
-          final inviteUrl = 'https://cliquepix.app/invite/${circle.inviteCode}';
+          final inviteUrl = 'https://clique-pix.com/invite/${circle.inviteCode}';
 ```
 
 - [ ] **Step 4: Commit**
 
 ```bash
 git add app/lib/core/constants/app_constants.dart app/lib/core/constants/environment.dart app/lib/features/circles/presentation/invite_screen.dart
-git commit -m "fix: correct deep link host to cliquepix.app per spec"
+git commit -m "fix: correct deep link host to clique-pix.com per spec"
 ```
 
 ---
