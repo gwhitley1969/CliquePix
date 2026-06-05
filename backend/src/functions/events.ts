@@ -204,15 +204,16 @@ async function pushNewEvent(
       ? `${creatorName} started "${eventName}" in ${cliqueName}`
       : `A new event was created in ${cliqueName}`;
     try {
-      const failed = await sendToMultipleTokens(
+      const sendResult = await sendToMultipleTokens(
         tokens.map((t) => t.token),
         'New Event!',
         body,
         payload,
       );
-      fcmFailures = failed.length;
-      if (failed.length > 0) {
-        await execute('DELETE FROM push_tokens WHERE token = ANY($1)', [failed]);
+      fcmFailures = sendResult.totalFailed; // full-failure telemetry (permanent + transient)
+      // NOTIF-2: only purge PERMANENTLY-invalid tokens, never transient failures.
+      if (sendResult.permanentlyInvalid.length > 0) {
+        await execute('DELETE FROM push_tokens WHERE token = ANY($1)', [sendResult.permanentlyInvalid]);
       }
     } catch (err) {
       console.error('sendToMultipleTokens for new_event failed:', err);
@@ -418,7 +419,23 @@ async function deleteEvent(req: HttpRequest, context: InvocationContext): Promis
     // CASCADE deletes photos and reactions
     await execute('DELETE FROM events WHERE id = $1', [eventId]);
 
-    // Notify clique members (except the deleter)
+    // Create in-app notification records for clique members (except deleter).
+    // NOTIF-1: independent of push tokens so web-only members still get notified.
+    // notifications has no FK on event_id, so the CASCADE above leaves these
+    // intact; the INSERT must stay AFTER the event delete + the stale-notif cleanup.
+    try {
+      await execute(
+        `INSERT INTO notifications (id, user_id, type, payload_json)
+         SELECT gen_random_uuid(), cm.user_id, 'event_deleted', $1::jsonb
+         FROM clique_members cm
+         WHERE cm.clique_id = $2 AND cm.user_id != $3`,
+        [JSON.stringify({ event_id: eventId, event_name: event.name }), event.clique_id, authUser.id],
+      );
+    } catch (err) {
+      console.error('INSERT notifications for event_deleted failed:', err);
+    }
+
+    // Notify clique members (except the deleter) via FCM where they have tokens.
     const tokens = await query<{ token: string }>(
       `SELECT pt.token FROM push_tokens pt
        JOIN clique_members cm ON cm.user_id = pt.user_id
@@ -427,24 +444,16 @@ async function deleteEvent(req: HttpRequest, context: InvocationContext): Promis
     );
 
     if (tokens.length > 0) {
-      const failedTokens = await sendToMultipleTokens(
+      const sendResult = await sendToMultipleTokens(
         tokens.map(t => t.token),
         'Event Deleted',
         `"${event.name}" was deleted by ${authUser.displayName}`,
         { event_id: eventId },
       );
 
-      // Create in-app notification records
-      await execute(
-        `INSERT INTO notifications (id, user_id, type, payload_json)
-         SELECT gen_random_uuid(), cm.user_id, 'event_deleted', $1::jsonb
-         FROM clique_members cm
-         WHERE cm.clique_id = $2 AND cm.user_id != $3`,
-        [JSON.stringify({ event_id: eventId, event_name: event.name }), event.clique_id, authUser.id],
-      );
-
-      if (failedTokens.length > 0) {
-        await execute('DELETE FROM push_tokens WHERE token = ANY($1)', [failedTokens]);
+      // NOTIF-2: only purge PERMANENTLY-invalid tokens, never transient failures.
+      if (sendResult.permanentlyInvalid.length > 0) {
+        await execute('DELETE FROM push_tokens WHERE token = ANY($1)', [sendResult.permanentlyInvalid]);
       }
     }
 

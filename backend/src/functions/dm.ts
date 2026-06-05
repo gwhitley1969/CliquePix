@@ -410,14 +410,15 @@ async function sendDmMessage(req: HttpRequest, context: InvocationContext): Prom
       [recipientId],
     );
     if (tokens.length > 0) {
-      const failedTokens = await sendToMultipleTokens(
+      const sendResult = await sendToMultipleTokens(
         tokens.map(t => t.token),
         `Message from ${authUser.displayName}`,
         body.length > 100 ? body.substring(0, 100) + '...' : body,
         { thread_id: threadId, event_id: thread.event_id, type: 'dm_message' },
       );
-      if (failedTokens.length > 0) {
-        await execute('DELETE FROM push_tokens WHERE token = ANY($1)', [failedTokens]);
+      // NOTIF-2: only purge PERMANENTLY-invalid tokens, never transient failures.
+      if (sendResult.permanentlyInvalid.length > 0) {
+        await execute('DELETE FROM push_tokens WHERE token = ANY($1)', [sendResult.permanentlyInvalid]);
       }
     }
 

@@ -202,7 +202,23 @@ async function joinClique(req: HttpRequest, context: InvocationContext): Promise
       [clique.id],
     );
 
-    // Send push notifications to existing clique members
+    // Create in-app notification records for existing members (except joiner).
+    // NOTIF-1: independent of push tokens so web-only members (who register no
+    // FCM token) still get notified. Own try/catch so a failure can't erase the
+    // FCM path below.
+    try {
+      await execute(
+        `INSERT INTO notifications (id, user_id, type, payload_json)
+         SELECT gen_random_uuid(), cm.user_id, 'member_joined', $1::jsonb
+         FROM clique_members cm
+         WHERE cm.clique_id = $2 AND cm.user_id != $3`,
+        [JSON.stringify({ clique_id: clique.id, clique_name: clique.name, joined_user_name: authUser.displayName }), clique.id, authUser.id],
+      );
+    } catch (err) {
+      console.error('INSERT notifications for member_joined failed:', err);
+    }
+
+    // Send FCM push to existing members who have device tokens.
     const tokens = await query<{ token: string }>(
       `SELECT pt.token FROM push_tokens pt
        JOIN clique_members cm ON cm.user_id = pt.user_id
@@ -211,26 +227,19 @@ async function joinClique(req: HttpRequest, context: InvocationContext): Promise
     );
 
     if (tokens.length > 0) {
-      const failedTokens = await sendToMultipleTokens(
+      const sendResult = await sendToMultipleTokens(
         tokens.map(t => t.token),
         'New Member!',
         `${authUser.displayName} joined ${clique.name}`,
         { clique_id: clique.id },
       );
 
-      await execute(
-        `INSERT INTO notifications (id, user_id, type, payload_json)
-         SELECT gen_random_uuid(), cm.user_id, 'member_joined', $1::jsonb
-         FROM clique_members cm
-         WHERE cm.clique_id = $2 AND cm.user_id != $3`,
-        [JSON.stringify({ clique_id: clique.id, clique_name: clique.name, joined_user_name: authUser.displayName }), clique.id, authUser.id],
-      );
-
-      if (failedTokens.length > 0) {
-        await execute('DELETE FROM push_tokens WHERE token = ANY($1)', [failedTokens]);
+      // NOTIF-2: only purge PERMANENTLY-invalid tokens, never transient failures.
+      if (sendResult.permanentlyInvalid.length > 0) {
+        await execute('DELETE FROM push_tokens WHERE token = ANY($1)', [sendResult.permanentlyInvalid]);
       }
 
-      const successCount = tokens.length - failedTokens.length;
+      const successCount = tokens.length - sendResult.totalFailed;
       if (successCount > 0) {
         trackEvent('notification_sent', { cliqueId: clique.id, type: 'member_joined', count: String(successCount) });
       }

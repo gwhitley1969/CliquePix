@@ -273,6 +273,22 @@ async function confirmUpload(req: HttpRequest, context: InvocationContext): Prom
     });
 
     // Send push notifications to other event members
+    // Create in-app notification records for event members (except uploader).
+    // NOTIF-1: independent of push tokens so web-only members still get notified.
+    try {
+      await execute(
+        `INSERT INTO notifications (id, user_id, type, payload_json)
+         SELECT gen_random_uuid(), cm.user_id, 'new_photo', $1::jsonb
+         FROM clique_members cm
+         JOIN events e ON e.clique_id = cm.clique_id
+         WHERE e.id = $2 AND cm.user_id != $3`,
+        [JSON.stringify({ event_id: eventId, photo_id: photoId }), eventId, authUser.id],
+      );
+    } catch (err) {
+      console.error('INSERT notifications for new_photo failed:', err);
+    }
+
+    // Send FCM push to event members who have device tokens.
     const tokens = await query<{ token: string }>(
       `SELECT pt.token FROM push_tokens pt
        JOIN clique_members cm ON cm.user_id = pt.user_id
@@ -282,38 +298,28 @@ async function confirmUpload(req: HttpRequest, context: InvocationContext): Prom
     );
 
     if (tokens.length > 0) {
-      const failedTokens = await sendToMultipleTokens(
+      const sendResult = await sendToMultipleTokens(
         tokens.map(t => t.token),
         'New Photo!',
         `${authUser.displayName} shared a photo`,
         { event_id: eventId, photo_id: photoId },
       );
 
-      // Create notification records for event members
-      await execute(
-        `INSERT INTO notifications (id, user_id, type, payload_json)
-         SELECT gen_random_uuid(), cm.user_id, 'new_photo', $1::jsonb
-         FROM clique_members cm
-         JOIN events e ON e.clique_id = cm.clique_id
-         WHERE e.id = $2 AND cm.user_id != $3`,
-        [JSON.stringify({ event_id: eventId, photo_id: photoId }), eventId, authUser.id],
-      );
-
-      // Remove stale tokens
-      if (failedTokens.length > 0) {
+      // NOTIF-2: only purge PERMANENTLY-invalid tokens, never transient failures.
+      if (sendResult.permanentlyInvalid.length > 0) {
         await execute(
           'DELETE FROM push_tokens WHERE token = ANY($1)',
-          [failedTokens],
+          [sendResult.permanentlyInvalid],
         );
       }
 
-      // Track notification telemetry
-      const successCount = tokens.length - failedTokens.length;
+      // Track notification telemetry (push delivery, not in-app row creation)
+      const successCount = tokens.length - sendResult.totalFailed;
       if (successCount > 0) {
         trackEvent('notification_sent', { eventId, photoId: photoId as string, count: String(successCount) });
       }
-      if (failedTokens.length > 0) {
-        trackEvent('notification_send_failed', { eventId, photoId: photoId as string, count: String(failedTokens.length) });
+      if (sendResult.totalFailed > 0) {
+        trackEvent('notification_send_failed', { eventId, photoId: photoId as string, count: String(sendResult.totalFailed) });
       }
     }
 
