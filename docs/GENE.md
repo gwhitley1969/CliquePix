@@ -218,7 +218,7 @@ Required by Apple Guideline 3.1.2 + Google Play Subscriptions policy. Must ship 
 
 **HARD SEQUENCING RULE (CORRECTED 2026-06-02):** A promo grant requires the RevenueCat customer to ALREADY EXIST — created only when the account runs the SDK build and signs in (`Purchases.logIn(users.id)`). You **cannot** grant before the gated build ships (a grant to a never-seen App User ID returns 404). **Correct order: ship the gated build → reviewer + testers sign in once (the backfilled 7-day trial covers them, zero lockout) → grant the promos within that 7-day window.**
 
-> **Reviewer account is now `vwhitley1967@gmail.com`** (supersedes the old `appreview@cliquepix.com` in older notes) → `users.id 325e4455-b1b8-461e-a844-6f158cffaf84`, grant lifetime (~2100). Of the 11 tester emails, only 3 currently have `users` rows by email (`chasebatchelor`, `rfcarpen1`, + the reviewer); the rest signed in via Google/Apple federation where `email_or_phone` differs — reconcile via the full user list once each has signed in on the gated build.
+> **Reviewer account is `vwhitley1967@gmail.com`** (supersedes the bogus `appreview@cliquepix.com` from older notes — `cliquepix.com` is not an owned domain and never had a mailbox; the app domain is `clique-pix.com`, which also has no email addresses) → `users.id 325e4455-b1b8-461e-a844-6f158cffaf84`, grant lifetime (~2100). Of the 11 tester emails, only 3 currently have `users` rows by email (`chasebatchelor`, `rfcarpen1`, + the reviewer); the rest signed in via Google/Apple federation where `email_or_phone` differs — reconcile via the full user list once each has signed in on the gated build.
 
 > **Backend prerequisite — now SAFE (PR #21, deployed 2026-06-05):** this promo-grant path had a reviewer-lockout bug until recently. `forceSyncFromRcApi` required a non-null future `expires_date`, but Promotional/lifetime grants return `expires_date: null`, so a reviewer/tester who got a promo grant and tapped "Refresh Subscription" (or hit the 30s post-purchase auto-recovery) was force-deactivated and hard-paywalled out of the WHOLE app — an App Store reviewer-rejection risk on exactly this mechanism. Fixed: a `plus` grant with `expires_date===null` is now active-forever, and the lag-guard shields null-expiry promos. Live in prod (#22/#23 backend deploy 2026-06-05, health 200, webhook valid-signature verified). Phase 6 grants can now be exercised safely.
 
@@ -227,7 +227,7 @@ Required by Apple Guideline 3.1.2 + Google Play Subscriptions policy. Must ship 
   SELECT id, email_or_phone, created_at FROM users WHERE created_at < '<cutoff>';
   ```
 - [ ] In RC dashboard → Customers → each ID → Grant Promotional Entitlement `plus`:
-  - `appreview@cliquepix.com` → **lifetime**
+  - `vwhitley1967@gmail.com` → **lifetime**
   - Each of the 4 current beta testers → **1 year**
 - [ ] Update App Store Connect review notes with the reviewer + sandbox tester instructions
 - [ ] Document grants in `docs/BETA_OPERATIONS_RUNBOOK.md` under new "Subscription comp grants" section

@@ -277,7 +277,11 @@ Useful Kusto queries: see `BETA_OPERATIONS_RUNBOOK.md` §2 ("User reports unexpe
 
 ### Why dedicated
 
-Apple App Review Guideline 2.1 requires working credentials reviewers can hand-type. The dedicated `appreview@cliquepix.com` account:
+Apple App Review Guideline 2.1 requires working credentials reviewers can hand-type. The reviewer login is **`vwhitley1967@gmail.com`**.
+
+> ⚠️ **Corrected 2026-06-05:** the original design specced a *dedicated* `appreview@cliquepix.com` account, but that was **never created** — `cliquepix.com` is not an owned domain (the app domain is `clique-pix.com`, and it has no mailboxes). The reviewer account is `vwhitley1967@gmail.com` (per `GENE.md`). The password-storage, DOB, and seeding rows in the table below were inherited from the never-created `appreview` plan — **verify/update them against the real `vwhitley1967@gmail.com` account (incl. whether it signs in via email+password or Google) before each submission.**
+
+A dedicated reviewer login:
 
 - Decouples reviewer access from any real user account (revocable post-review without disrupting anyone)
 - Stays usable across resubmissions (Apple reuses the same credentials)
@@ -287,7 +291,7 @@ Apple App Review Guideline 2.1 requires working credentials reviewers can hand-t
 
 | Attribute | Value |
 |---|---|
-| Username (email) | `appreview@cliquepix.com` |
+| Username (email) | `vwhitley1967@gmail.com` |
 | Password | Strong random 16+ chars (mixed case + digits + symbols) |
 | Password storage | Azure Key Vault `kv-cliquepix-prod/apple-review-credentials` |
 | DOB | 1985-01-01 (clearly past age gate) |
@@ -296,14 +300,14 @@ Apple App Review Guideline 2.1 requires working credentials reviewers can hand-t
 
 ### Re-seed cadence
 
-Events expire after 7 days. **Re-seed within 48 hours of every App Store submission.** The seed user (`appreview`) and helper (Gene's primary) accounts are NEVER deleted — only the Event content is recreated. `events.created_by_user_id` is `ON DELETE SET NULL` (migration 004), so account deletion wouldn't cascade-remove the demo content, but the simpler operational rule is "never delete the seed accounts."
+Events expire after 7 days. **Re-seed within 48 hours of every App Store submission.** The seed user (`vwhitley1967@gmail.com`) and helper (Gene's primary) accounts are NEVER deleted — only the Event content is recreated. `events.created_by_user_id` is `ON DELETE SET NULL` (migration 004), so account deletion wouldn't cascade-remove the demo content, but the simpler operational rule is "never delete the seed accounts."
 
 ### App Store Connect → App Review Information
 
 | Field | Value |
 |---|---|
 | Sign-in required | Yes |
-| Username | `appreview@cliquepix.com` |
+| Username | `vwhitley1967@gmail.com` |
 | Password | (from Key Vault) |
 | Notes | Short paragraphs explaining (a) the pre-seeded Clique with sample content, (b) age gate (DOB ≥ 13), (c) Google + Apple federation also available but reviewer should use supplied credentials, (d) where Privacy Policy is linked from inside the app |
 | Contact | `genewhitley2017@gmail.com` + phone |

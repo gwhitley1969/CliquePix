@@ -18,7 +18,7 @@ export function Footer() {
           <a href="/docs/terms" className="hover:text-white transition-colors">
             Terms
           </a>
-          <a href="mailto:hello@clique-pix.com" className="hover:text-white transition-colors">
+          <a href="mailto:support@xtend-ai.com" className="hover:text-white transition-colors">
             Contact
           </a>
         </nav>
