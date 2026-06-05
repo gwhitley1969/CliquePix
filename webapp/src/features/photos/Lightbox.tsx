@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { ChevronLeft, ChevronRight, Download, X } from 'lucide-react';
 import type { Media } from '../../models';
 import { downloadBlob } from '../../lib/downloadBlob';
+import { getVideoPlayback } from '../../api/endpoints/videos';
 import { toast } from 'sonner';
 import { VideoPlayer } from '../videos/VideoPlayer';
 
@@ -28,16 +29,24 @@ export function Lightbox({
   }, [media.length, onClose]);
 
   const onDownload = async () => {
-    const url =
-      item.mediaType === 'photo'
-        ? item.originalUrl ?? item.thumbnailUrl
-        : item.posterUrl;
-    if (!url) {
-      toast.error('Nothing to download yet');
-      return;
-    }
     try {
-      await downloadBlob(url, `cliquepix-${item.id}.jpg`);
+      if (item.mediaType === 'photo') {
+        const url = item.originalUrl ?? item.thumbnailUrl;
+        if (!url) {
+          toast.error('Nothing to download yet');
+          return;
+        }
+        await downloadBlob(url, `cliquepix-${item.id}.jpg`);
+      } else {
+        // Video: download the playable MP4 fallback, NOT the poster JPEG
+        // (mirrors MediaCard). Only available once the video is active.
+        if (item.status !== 'active') {
+          toast.error('This video is not ready yet');
+          return;
+        }
+        const { mp4FallbackUrl } = await getVideoPlayback(item.id);
+        await downloadBlob(mp4FallbackUrl, `cliquepix-${item.id}.mp4`);
+      }
     } catch {
       toast.error('Download failed');
     }

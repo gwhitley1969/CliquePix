@@ -18,7 +18,13 @@ export function ThreadScreen() {
   const { id: eventId, threadId } = useParams<{ id: string; threadId: string }>();
   const qc = useQueryClient();
   const { accounts } = useMsal();
-  const myUserId = accounts[0]?.localAccountId;
+  const myOid = accounts[0]?.localAccountId;
+  // MSAL's localAccountId is the Entra oid, but m.senderUserId is the backend
+  // users.id UUID (a different id space). Compare UUIDs — read the cached verified
+  // user id (mirrors MediaCard) so the sender's OWN messages render as "mine"
+  // (right-aligned) instead of as the other participant.
+  const verifiedUser = qc.getQueryData<{ id: string }>(['auth', 'verify']);
+  const myUserId = verifiedUser?.id ?? myOid;
   const [draft, setDraft] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
 
