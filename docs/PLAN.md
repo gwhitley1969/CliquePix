@@ -12,7 +12,7 @@ Monetization is now **in scope for v1**. We are shipping a hard paywall fronted 
 
 - ✅ **Design spec** approved + committed.
 - ✅ **5 implementation plans** written + committed.
-- ✅ **Plan 1 (backend trial) — code complete AND DEPLOYED LIVE 2026-06-02.** Migrations 012+013 applied to prod (14 users backfilled, `trial_null=0`), `func publish` succeeded, `/api/health` 200, webhook verified. 174/174 tests.
+- ✅ **Plan 1 (backend trial) — code complete AND DEPLOYED LIVE 2026-06-02.** Migrations 012+013 applied to prod (14 users backfilled, `trial_null=0`), `func publish` succeeded, `/api/health` 200, webhook verified. 174/174 tests. **(Entitlement/webhook hardening PR #21/#22 re-deployed 2026-06-05.)**
 - ✅ **Plan 3 (store review prompts) — complete + committed** (5 commits; 91/91 tests, release APK built).
 - ✅ **Plan 5 (docs/legal/pricing) — done + deployed.** Legal pages live + verified at `clique-pix.com/docs/*` (Task 7 web deploy ✅ 2026-06-03).
 - ✅ **RevenueCat + Azure config — largely done this session** (see "Session 2026-06-02" below).
@@ -117,6 +117,7 @@ Deployed live by the assistant (Azure + RC MCP). Both migration 012 and 013 appl
 - [x] Deployed: `func azure functionapp publish func-cliquepix-fresh`; `GET https://api.clique-pix.com/api/health` → **200**; app **Running**.
 - [x] Smoke: webhook 401 on bad/missing auth, **200** on correct Bearer. (The `/api/users/me` trial-token check is left for Gene on-device — needs a real user JWT.)
 - [x] Migration 012 (RevenueCat columns) confirmed applied alongside 013.
+- [x] **Follow-up backend deploy 2026-06-05 (PR #22/#23):** entitlement + webhook hardening re-published via `func azure functionapp publish func-cliquepix-fresh`. The RevenueCat webhook now returns **200 on any non-auth outcome** (so RC never retry-storms) and **401 only** on an unauthenticated call; non-UUID `app_user_id` is a clean logged no-op; `markExpired` TOCTOU closed; lifetime/promo force-sync fix (PR #21) live. `GET /api/health` → 200 verified. See `docs/DEPLOYMENT_STATUS.md`.
 
 > **Hard rule:** backend (012 + 013) MUST be deployed BEFORE the Plan 2 mobile build reaches TestFlight/Play. Old backend returns no `entitlement` object → mobile null-crash.
 
@@ -153,6 +154,8 @@ All to be executed subagent-driven on this branch, two-stage review per task (sp
 - [ ] Document grants in `docs/BETA_OPERATIONS_RUNBOOK.md`.
 
 > **Hard rule (CORRECTED 2026-06-02):** A promo grant requires the RevenueCat **customer to already exist**, and a customer is only created when the account runs the SDK build and signs in (`Purchases.logIn(users.id)`). So you **cannot** grant before the gated build ships — a grant to a never-seen App User ID returns **404 `resource_missing`** (verified). Correct order: **ship the gated build → reviewer + testers sign in once (the backfilled 7-day trial covers them, zero lockout) → grant the promo within that 7-day window.** Reviewer UUID already resolved: `vwhitley1967@gmail.com` → `users.id 325e4455-b1b8-461e-a844-6f158cffaf84`.
+
+> **Backend prerequisite (landed 2026-06-04, PR #21 / deployed 2026-06-05):** the promo-grant path itself was a ship-blocker until recently. `forceSyncFromRcApi` previously required a non-null future `expires_date`, but Promotional/lifetime grants return `expires_date: null`, so a reviewer tapping "Refresh Subscription" (or the client's 30s post-purchase auto-recovery calling forceSync) was force-deactivated and hard-paywalled out of the entire app — an App Store reviewer-rejection risk. Fixed in `entitlementService.ts:forceSyncFromRcApi` (`backend/src/shared/services/entitlementService.ts:296-299`): a `plus` grant with `expires_date===null` is now active-forever (`isLifetime`), and the lag-guard shields null-expiry promos. This is live in prod (see #22/#23 backend deploy 2026-06-05). Plan 6 grants can now be exercised safely.
 
 ---
 
