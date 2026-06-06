@@ -561,7 +561,7 @@ Name: `photos`
 ```
 photos/{cliqueId}/{eventId}/{photoId}/original.jpg     # event photo original
 photos/{cliqueId}/{eventId}/{photoId}/thumb.jpg        # event photo thumbnail
-avatars/{userId}/original.jpg                          # user avatar (512x512 q85)
+avatars/{userId}/original.jpg                          # user avatar (512x512 q90)
 avatars/{userId}/thumb.jpg                             # user avatar thumb (128x128 q75)
 ```
 

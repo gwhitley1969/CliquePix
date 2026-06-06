@@ -232,7 +232,7 @@ Mirrors `app/lib/features/videos/data/video_block_upload_service.dart`:
 
 Matches mobile 1:1 in user flow and final image output. Code under `features/profile/`:
 
-- `useAvatarUpload.ts` — hook orchestrating the pipeline: filter bake (canvas + color matrix) → `browser-image-compression` to 512 px JPEG q85 → `getAvatarUploadUrl()` → direct `PUT` with `x-ms-blob-type: BlockBlob` → `confirmAvatar()` → `queryClient.setQueryData(['users', 'me'], user)`. Also exposes `remove`, `setFrame`, `setPrompt` mutations
+- `useAvatarUpload.ts` — hook orchestrating the pipeline: filter bake (canvas + color matrix) → `browser-image-compression` to 512 px JPEG (capped at `maxSizeMB: 0.5`, default quality 1.0 → effectively near-lossless at 512 px; mobile uses a fixed q90) → `getAvatarUploadUrl()` → direct `PUT` with `x-ms-blob-type: BlockBlob` → `confirmAvatar()` → `queryClient.setQueryData(['users', 'me'], user)`. Also exposes `remove`, `setFrame`, `setPrompt` mutations
 - `AvatarEditor.tsx` — Radix Dialog with `react-easy-crop` (1:1 aspect, round crop shape, pan + zoom slider). Filter row (Original / B&W / Warm / Cool) + frame preset row (5 gradient swatches). Save calls the hook
 - `AvatarWelcomePromptModal.tsx` — branded first-sign-in modal. Non-dismissible via overlay click (`onPointerDownOutside={e => e.preventDefault()}`). Three buttons: Add a Photo / Maybe Later / No Thanks. Escape or dismiss resolves to `later` (safer default than permanent dismiss)
 - `AvatarWelcomePromptGate.tsx` — invisible component mounted in `AppLayout`. Self-gates on the backend-computed `shouldPromptForAvatar` flag plus a session-local "already shown" React state. Wires the `yes` path through to a hidden `<input type="file">` + `AvatarEditor`

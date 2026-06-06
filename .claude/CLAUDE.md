@@ -98,7 +98,7 @@ If a feature does not directly support one of these loops, it does not belong in
 - First-sign-in welcome prompt on Home screen — three choices (Yes / Maybe Later / No Thanks) with backend-persisted state (`avatar_prompt_dismissed`, `avatar_prompt_snoozed_until`) so the decision survives reinstall + honors across mobile/web devices
 - Square crop via `image_cropper` (mobile) / `react-easy-crop` (web) — native UIs on both platforms
 - 4 filter presets (Original / B&W / Warm / Cool) + 5 gradient frame presets (0 = auto-hash from name, 1..4 = explicit palette). Identical filter matrices and gradients across mobile + web
-- Compression: 512×512 JPEG q85 (original), 128×128 JPEG q75 (sharp thumb generated synchronously at confirm time)
+- Compression: 512×512 JPEG q90 (original), 128×128 JPEG q75 (sharp thumb generated synchronously at confirm time)
 - Avatar view SAS: 1-hour expiry (longer than photos/videos because avatars render on every screen). Client-side cache key: `avatar_${userId}_v${avatar_updated_at.ms}` — URL churns hourly, cache key only churns on actual avatar change
 - Confetti burst on first-ever upload (one-shot via `canvas-confetti` on web / `confetti` package on Flutter, gated on SharedPreferences/localStorage flag)
 - `AuthNotifier.updateUserAvatar` is pure in-memory state swap — MUST NOT trigger token refresh (spurious calls would disturb the 5-layer Entra defense counters)
@@ -678,7 +678,7 @@ Client does **validation only** (no meaningful client compression): extension MP
 
 ### Avatar Pipeline (migration 010)
 
-Headshots replace the initials-gradient-ring fallback everywhere a user is surfaced. Per-user fixed paths `avatars/{userId}/original.jpg` (512×512 q85) + `thumb.jpg` (128×128 q75, `sharp` at confirm). Client: pick → square crop (native) → optional filter (Original/B&W/Warm/Cool, **identical matrices Flutter+web**) → 512px q85 → upload-url SAS (write+create) → confirm (≤3MB, JPEG/PNG, stamps `avatar_updated_at`, returns enriched `User`).
+Headshots replace the initials-gradient-ring fallback everywhere a user is surfaced. Per-user fixed paths `avatars/{userId}/original.jpg` (512×512 q90) + `thumb.jpg` (128×128 q75, `sharp` at confirm). Client: pick → square crop (native) → optional filter (Original/B&W/Warm/Cool, **identical matrices Flutter+web**) → 512px q90 (mobile; web caps at 0.5 MB ≈ near-lossless) → upload-url SAS (write+create) → confirm (≤3MB, JPEG/PNG, stamps `avatar_updated_at`, returns enriched `User`).
 
 **Hard rules:**
 - **1-hour view SAS** (`generateViewSas(path, 3600)`) — longer than photo (5min) / video (15min) because avatars render on every screen.
