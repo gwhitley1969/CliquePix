@@ -118,7 +118,7 @@ A persistent group of people (e.g., “Girls Night Out” or bachelor party)
 ---
 
 ### 5.6 Real-Time Photo Sharing
-- Photos compressed on-device before upload (resized to max 2048px, JPEG quality 80)
+- Photos compressed on-device before upload (resized to max 3024px, JPEG quality 88)
 - Photos uploaded directly to cloud storage via short-lived, scoped authorization
 - Instantly visible in Event feed (thumbnails for fast loading)
 - Push notifications:

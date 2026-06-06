@@ -10,10 +10,14 @@ class AppConstants {
   };
   static const defaultDuration = 168;
 
-  // Image compression
-  static const maxImageDimension = 2048;
-  static const jpegQuality = 80;
-  static const maxFileSizeBytes = 10 * 1024 * 1024; // 10MB
+  // Image compression. Balanced quality (2026-06): 3024px long edge keeps a
+  // 12MP phone photo at ~6.9MP (vs the old 2048px/~3.15MP); q88 is near-
+  // visually-lossless. NOTE: the pro_image_editor `maxOutputSize` in
+  // camera_capture_screen.dart MUST stay >= maxImageDimension or the editor
+  // silently re-caps every photo before this step ever runs.
+  static const maxImageDimension = 3024;
+  static const jpegQuality = 88;
+  static const maxFileSizeBytes = 10 * 1024 * 1024; // 10MB (3024/q88 lands ~2-4MB)
 
   // Thumbnail
   static const thumbnailDimension = 400;

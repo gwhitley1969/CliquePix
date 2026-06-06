@@ -611,8 +611,8 @@ Both roles are required on the storage account.
 1. User captures photo or selects from gallery
 2. User edits photo in `pro_image_editor` (crop, draw, stickers, emoji, filters, text)
 3. Strip EXIF data (removes GPS coordinates, device info, timestamps)
-4. Resize: longest edge max 2048px, maintain aspect ratio
-5. Compress: JPEG quality 80
+4. Resize: longest edge max 3024px, maintain aspect ratio
+5. Compress: JPEG quality 88
 6. Convert HEIC to JPEG on-device before upload
 7. Reject files over 10MB after compression (safety net)
 
@@ -629,9 +629,9 @@ Calling `Navigator.pop()` in both callbacks causes a double-pop that removes bot
 
 | Setting | Value | Why |
 |---------|-------|-----|
-| Max dimension | 2048px | Covers all current phone screens. This is a group photo app, not a stock photography service. |
-| JPEG quality | 80 | Industry standard for "visually indistinguishable." Quality 90+ wastes bytes; quality 70 shows artifacts on gradients and skin tones. |
-| Max file size | 10MB | Post-compression safety net. At 2048px / quality 80, photos land around 500KB–1.5MB. |
+| Max dimension | 3024px | ~6.9MP for a 12MP phone photo (raised from 2048px/~3.15MP 2026-06). Group photo app — balanced quality vs upload size, not stock photography. **Coupled to the `pro_image_editor` `maxOutputSize` (Size(4032,4032)) in `camera_capture_screen.dart`, which must stay ≥ this or it silently re-caps to 2000px.** |
+| JPEG quality | 88 | Near-visually-lossless (raised from 80). Quality 95+ wastes bytes; q80 showed faint banding on gradients/skin. |
+| Max file size | 10MB | Post-compression safety net. At 3024px / quality 88, photos land around ~2–4MB. |
 | Format | JPEG | Universal compatibility. HEIC converted client-side. |
 
 ## Upload Flow

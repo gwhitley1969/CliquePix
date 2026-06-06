@@ -19,8 +19,9 @@ export async function compressPhoto(file: File): Promise<CompressedPhoto> {
   }
 
   const compressed = await imageCompression(input as File, {
-    maxWidthOrHeight: 2048,
-    initialQuality: 0.8,
+    // Keep in lockstep with mobile AppConstants (3024px / q88 balanced quality).
+    maxWidthOrHeight: 3024,
+    initialQuality: 0.88,
     fileType: 'image/jpeg',
     useWebWorker: true,
     alwaysKeepResolution: false,
