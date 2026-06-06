@@ -60,7 +60,7 @@ If a feature does not directly support one of these loops, it does not belong in
 - Events: create Event first (pick or create Clique during creation), duration locked to three presets (24h / 3 days / 7 days default), list, expire, manual deletion by event organizer (with confirmation dialog)
 - In-app camera capture (photo + video)
 - Upload from camera roll (photo + video)
-- Client-side image compression before upload (strip EXIF, resize to max 2048px, JPEG quality 80, convert HEIC to JPEG)
+- Client-side image compression before upload (strip EXIF, resize to max 3024px, JPEG quality 88, convert HEIC to JPEG)
 - Photo upload via User Delegation SAS (two-phase: get upload URL, then confirm)
 - Event feed: vertical scroll, large photo/video cards, user attribution, timestamp, thumbnails/posters
 - Lightweight reactions: ❤️ 😂 🔥 😮 (unique constraint per user per media item per type)
@@ -647,13 +647,18 @@ Photos compress cheaply client-side (500KB–1.5MB); videos (50–150MB) transco
 
 ### Photo Pipeline — locked numbers
 
-Client (`flutter_image_compress`): strip EXIF → resize longest edge ≤2048px → JPEG q80 → HEIC→JPEG → reject >10MB. Server at confirm (Function never touches bytes mid-upload): verify blob, validate content-type **JPEG/PNG only** + size (reject >15MB), then fire-and-forget `sharp` thumbnail (400px longest edge, JPEG q70, ~30–80KB → `thumbnail_blob_path`; feed falls back to original on failure). See `backend/src/functions/photos.ts`.
+Client (`flutter_image_compress`): strip EXIF → resize longest edge ≤3024px → JPEG q88 → HEIC→JPEG → reject >10MB. Server at confirm (Function never touches bytes mid-upload): verify blob, validate content-type **JPEG/PNG only** + size (reject >15MB), then fire-and-forget `sharp` thumbnail (400px longest edge, JPEG q70, ~30–80KB → `thumbnail_blob_path`; feed falls back to original on failure). See `backend/src/functions/photos.ts`.
+
+**Balanced quality, raised 2026-06 (was 2048px/q80).** Three knobs move in lockstep — changing one alone silently does nothing:
+1. `AppConstants.maxImageDimension` (3024) + `jpegQuality` (88) — the authoritative compress step.
+2. **`pro_image_editor` `imageGenerationConfigs.maxOutputSize` in `camera_capture_screen.dart` (set to `Size(4032,4032)`)** — its DEFAULT is `Size(2000,2000)`, which would re-cap every photo below 3024 before compression ever runs. Keep it ≥ `maxImageDimension`.
+3. Web client `webapp/src/lib/compressPhoto.ts` (`maxWidthOrHeight: 3024`, `initialQuality: 0.88`) — kept in lockstep so web uploads match mobile.
 
 | Setting | Value | Rationale |
 |---------|-------|-----------|
-| Max dimension | 2048px | Covers all phone screens; group-photo app, not stock photography. |
-| JPEG quality | 80 | "Visually indistinguishable." 90+ wastes bytes; 70 shows artifacts on gradients/skin. |
-| Max file size | 10MB | Post-compression safety net (typical 500KB–1.5MB). |
+| Max dimension | 3024px | ~6.9MP for a 12MP phone photo (was 2048px/~3.15MP); group-photo app, balanced quality-vs-upload-size. |
+| JPEG quality | 88 | Near-visually-lossless; meaningfully cleaner than q80 on skies/skin without q95's bulk. |
+| Max file size | 10MB | Post-compression safety net (3024/q88 typically ~2–4MB). |
 | Format | JPEG | Universal; HEIC converted client-side. |
 
 ### Video Pipeline — locked numbers

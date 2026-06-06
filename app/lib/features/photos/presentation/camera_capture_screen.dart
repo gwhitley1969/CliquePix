@@ -83,7 +83,16 @@ class _CameraCaptureScreenState extends ConsumerState<CameraCaptureScreen> {
                 }
               },
             ),
-            configs: const ProImageEditorConfigs(),
+            // The editor's default maxOutputSize is 2000px, which would re-cap
+            // every photo BELOW our 3024px compression target. Lift it to 4032
+            // (full 12MP) so the editor hands off enough resolution and the
+            // single authoritative downscale happens in ImageCompressionService.
+            // Keep this >= AppConstants.maxImageDimension.
+            configs: const ProImageEditorConfigs(
+              imageGenerationConfigs: ImageGenerationConfigs(
+                maxOutputSize: Size(4032, 4032),
+              ),
+            ),
           ),
         ),
       );
