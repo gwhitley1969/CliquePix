@@ -14,10 +14,10 @@ import '../../photos/domain/blob_upload_service.dart';
 import 'avatar_api.dart';
 
 /// Avatar-specific compression knobs. Distinct from photo upload's
-/// AppConstants.maxImageDimension (2048) because avatars are always
+/// AppConstants.maxImageDimension (3024) because avatars are always
 /// square and much smaller. 512px covers the 88pt profile hero at 2x
-/// retina with headroom. JPEG quality 85 (vs photos' 80) because faces
-/// matter more than general scenery.
+/// retina with headroom. JPEG quality 85 — ample for a small 512px face
+/// crop; independent of the photo pipeline's quality.
 const int _avatarMaxDim = 512;
 const int _avatarJpegQuality = 85;
 

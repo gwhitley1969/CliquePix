@@ -643,7 +643,7 @@ The rules that bite if violated — step-by-step layer implementation lives in `
 
 ## Media Handling Pipeline
 
-Photos compress cheaply client-side (500KB–1.5MB); videos (50–150MB) transcode server-side; avatars are small square per-user fixed paths with synchronous thumb gen. Step-by-step upload flows are under **API Design** above; full FFmpeg invocations + parameter rationale live in **`docs/VIDEO_ARCHITECTURE_DECISIONS.md`** (Decision 3, Decisions 8–12).
+Photos compress cheaply client-side (~2–4MB at 3024px/q88); videos (50–150MB) transcode server-side; avatars are small square per-user fixed paths with synchronous thumb gen. Step-by-step upload flows are under **API Design** above; full FFmpeg invocations + parameter rationale live in **`docs/VIDEO_ARCHITECTURE_DECISIONS.md`** (Decision 3, Decisions 8–12).
 
 ### Photo Pipeline — locked numbers
 
