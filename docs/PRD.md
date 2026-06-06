@@ -196,7 +196,7 @@ Users can upload a headshot that replaces their initials everywhere in the app. 
   - Five selectable gradient frame colors (auto-hash from name by default)
   - Live "feed-card mockup" preview during crop
   - Haptic feedback + confetti burst on the user's first-ever upload
-- Images compressed to 512×512 JPEG quality 85. Backend generates a 128×128 thumbnail used on card-size avatars; the 512px original serves the 88pt profile hero
+- Images compressed to 512×512 JPEG quality 90. Backend generates a 128×128 thumbnail used on card-size avatars; the 512px original serves the 88pt profile hero
 - Photo and video cards show the uploader's current headshot; DM threads and chat headers show the other user's current headshot
 - Removing an avatar reverts to the initials-fallback everywhere; existing photos and videos re-show the initials after the next 30-second feed poll
 
