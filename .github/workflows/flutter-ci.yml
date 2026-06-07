@@ -28,6 +28,23 @@ jobs:
           distribution: temurin
           java-version: '17'   # AGP 8.9.1 requires JDK 17
 
+      # Cache the Gradle dependency cache + wrapper distributions across runs —
+      # dependency resolution + the Gradle download are the bulk of the APK-build
+      # time. Keyed on the gradle build files; restore-keys gives a warm start
+      # even when deps change. (GitHub scopes PR caches to the branch and shares
+      # the default-branch cache, so PR runs read main's cache without polluting
+      # it.) NOTE: the first run after this lands is a cache MISS that populates
+      # it; subsequent runs hit it and are noticeably faster.
+      - name: Cache Gradle (deps + wrapper)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('app/android/**/*.gradle*', 'app/android/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.35.5'
