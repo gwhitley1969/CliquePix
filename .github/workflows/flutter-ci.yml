@@ -10,6 +10,7 @@ on:
     branches: [main]
     paths:
       - 'app/**'
+      - '.github/workflows/flutter-ci.yml'
 
 defaults:
   run:
@@ -21,6 +22,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'   # AGP 8.9.1 requires JDK 17
 
       - uses: subosito/flutter-action@v2
         with:
@@ -35,3 +41,27 @@ jobs:
 
       - name: Test
         run: flutter test
+
+      # google-services.json is gitignored (not in the repo). Use the real file
+      # from a secret if one is configured, else a CI-only placeholder with the
+      # matching package name so the Firebase Gradle plugin
+      # (processDebugGoogleServices) is satisfied. This smoke APK is discarded,
+      # so dummy Firebase values are fine — we only care that it compiles + the
+      # manifest merges.
+      - name: Provide google-services.json (secret if set, else CI placeholder)
+        env:
+          GS: ${{ secrets.ANDROID_GOOGLE_SERVICES_JSON }}
+        run: |
+          if [ -n "$GS" ]; then
+            printf '%s' "$GS" > android/app/google-services.json
+          else
+            printf '%s' '{"project_info":{"project_number":"000000000000","project_id":"ci-smoke","storage_bucket":"ci-smoke.appspot.com"},"client":[{"client_info":{"mobilesdk_app_id":"1:000000000000:android:0000000000000000000000","android_client_info":{"package_name":"com.cliquepix.clique_pix"}},"oauth_client":[],"api_key":[{"current_key":"AIzaSyA00000000000000000000000000000000"}],"services":{"appinvite_service":{"other_platform_oauth_client":[]}}}],"configuration_version":"1"}' > android/app/google-services.json
+          fi
+
+      # Build a debug APK so manifest / Gradle / plugin-compile breakage that
+      # `analyze` + `test` cannot see is caught in CI. A malformed
+      # AndroidManifest.xml once broke ALL release builds undetected (PR #41) —
+      # the manifest merger runs here. Debug (not release) so no signing-keystore
+      # secret is needed; manifest merge + native compile still run.
+      - name: Build debug APK (smoke)
+        run: flutter build apk --debug
