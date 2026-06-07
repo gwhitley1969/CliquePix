@@ -10,6 +10,7 @@ on:
     branches: [main]
     paths:
       - 'app/**'
+      - '.github/workflows/flutter-ci.yml'
 
 defaults:
   run:
@@ -21,6 +22,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'   # AGP 8.9.1 requires JDK 17
 
       - uses: subosito/flutter-action@v2
         with:
@@ -35,3 +41,11 @@ jobs:
 
       - name: Test
         run: flutter test
+
+      # Build a debug APK so manifest / Gradle / plugin-compile breakage that
+      # `analyze` + `test` cannot see is caught in CI. A malformed
+      # AndroidManifest.xml once broke ALL release builds undetected (PR #41) —
+      # the manifest merger runs here. Debug (not release) so no signing-keystore
+      # secret is needed; manifest merge + native compile still run.
+      - name: Build debug APK (smoke)
+        run: flutter build apk --debug

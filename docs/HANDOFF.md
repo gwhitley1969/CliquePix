@@ -129,7 +129,7 @@ Deploy is a retag + job update (see §4) — the running job is pinned to a semv
 | Workflow | Runs | ⚠️ |
 |---|---|---|
 | **Backend CI** | `npm ci` → lint → `tsc --noEmit` → test | on `backend/**` |
-| **Flutter CI** | `flutter pub get` → analyze → test | **never builds an APK** — see §6 |
+| **Flutter CI** | `flutter pub get` → analyze → test → **debug APK (smoke)** | the APK build (added 2026-06-07) catches manifest/Gradle breakage `analyze`+`test` miss — see §6 |
 | **Transcoder Build** | `npm ci` → tsc → `docker build` (+ ACR push on main) | on `backend/transcoder/**` |
 | **Deploy Web App** | SWA action build + deploy | on `webapp/**` |
 | **Clean up SWA PR environment** (`swa-cleanup.yml`) | deletes the PR preview env on PR close | every PR close |
@@ -246,7 +246,7 @@ These are load-bearing rules — each was added after an incident, an audit find
 
 ### Build / CI — two recurring footguns
 - **Never put a literal `--` inside an XML comment (`<!-- … -->`)** — XML forbids it, and the parser rejects the whole file. **This has bitten twice:** `apim_policy.xml` (a `--protocols` comment broke the APIM Basic v2 deploy, 2026-05-05) and **`AndroidManifest.xml`** (`--dart-define-from-file` in a comment broke **all** release APK/AAB builds, fixed PR #41, 2026-06-06). Watch any hand-edited XML.
-- **Flutter CI does NOT build an APK** — it runs `analyze` + `test` only, so manifest/XML/R8 breakage that only fails at `flutter build apk` is invisible to CI (that's exactly how the manifest bug shipped). **Recommended follow-up:** add a `flutter build apk --debug` step to `flutter-ci.yml`. And `flutter clean` before every release build (project rule).
+- **Flutter CI now builds a debug APK** (added 2026-06-07) so manifest/XML/Gradle/plugin breakage that only fails at `flutter build apk` is caught — `analyze`+`test` alone missed the #41 manifest bug. It's a **debug** build (no signing-keystore secret needed; the manifest merger + native compile still run), so R8/minify-only *release* issues remain uncovered. And `flutter clean` before every release build (project rule).
 
 ---
 
@@ -284,7 +284,7 @@ This session opened by pulling the security-audit branch from a Mac workstation 
 
 **What's pending**
 - **Ship a new mobile build** (Play/TestFlight) to deliver the 3024/q88 photo + q90 avatar quality to mobile users (it's live on web).
-- **Optional:** add a `flutter build apk --debug` step to Flutter CI (would have caught the #41 manifest bug).
+- ✅ **Done (2026-06-07):** added a `flutter build apk --debug` smoke step to Flutter CI — catches the #41 manifest class going forward.
 - Finish the Play subscription setup (RevenueCat Android `goog_` SDK key + RTDN) and the App Store / Play review submissions.
 
 ---
