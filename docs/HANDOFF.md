@@ -207,6 +207,15 @@ Apple App ID `6766294274` · bundle `com.cliquepix.app` · Team `4ML27KY869` · 
 ### Android signing
 `app/android/key.properties` → the **upload key** (cert hash → `YtL16/JyfHiAzjIBnw2zbiY9QzY=`). Play App Signing re-signs to `4Fsai…`. The debug keystore (`~/.android/debug.keystore`) on Gene's machine matches the registered debug hash `W28+…`.
 
+### GitHub Actions secrets (repo → Settings → Secrets and variables → Actions)
+The CI/deploy workflows read these repo secrets:
+| Secret | Used by | Required? |
+|---|---|---|
+| `AZURE_STATIC_WEB_APPS_API_TOKEN` | `webapp-deploy.yml`, `swa-cleanup.yml` | yes — web deploy + preview-env cleanup |
+| `ACR_USERNAME` / `ACR_PASSWORD` | `transcoder-build.yml` (ACR push on `main`) | yes — transcoder image push |
+| `ANDROID_GOOGLE_SERVICES_JSON` | `flutter-ci.yml` (the debug-APK smoke build) | **optional** — if set, CI builds against the real `google-services.json`; if unset, CI writes a harmless placeholder (the smoke APK is discarded, so dummy Firebase values are fine). Set it only if you want CI to exercise the real Firebase config. |
+| `GITHUB_TOKEN` | all workflows | auto-provided by GitHub |
+
 ---
 
 ## 6. Known issues, gotchas & DON'T-REGRESS invariants
