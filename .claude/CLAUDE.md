@@ -1155,6 +1155,7 @@ The full 18-point acceptance checklist lives in **`docs/PRD.md`**. In short, v1 
 
 | Document | Purpose |
 |----------|---------|
+| `docs/HANDOFF.md` | **Start here for handoff/onboarding** — build/run/deploy per surface, accounts/keys/secrets index, current live state, don't-regress invariants, recent-work log |
 | `docs/PRD.md` | Product requirements, feature definitions, UX principles, branding |
 | `docs/ARCHITECTURE.md` | Full technical architecture, data model, security, deployment strategy |
 | `docs/AUTHENTICATION.md` | Single-source orientation doc for auth — providers, end-to-end flow, iOS/Android/web specifics, App Store reviewer demo account, configuration reference, migration history |
