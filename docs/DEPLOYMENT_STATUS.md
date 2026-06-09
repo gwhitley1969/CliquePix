@@ -1,6 +1,24 @@
 # DEPLOYMENT_STATUS.md — CLIQUE Pix v1
 
-Last updated: 2026-06-05 (Post-audit cluster #24–#28: Flutter polish/auth-state hardening [next app build], webapp DM/EntitlementGuard/Lightbox fixes [SWA live], CI bumped to Node 24 @v6 [live]; added SWA staging-env auto-cleanup workflow. Prior: 2026-06-04 re-audit ship-blockers + #21/#22/#23 entitlement & notification hardening.)
+Last updated: 2026-06-09 (Brand rename "Clique Pix" → "CLIQUE Pix" [PR #47] rolled out: web + backend + RevenueCat paywall live, Android AAB rebuilt pending Play upload; photo/avatar quality 3024-q88/q90 [#38–#40] live on web; version bumped to +6 [#46]; Flutter CI now builds a smoke APK [#43/#44]. Prior: 2026-06-05 post-audit cluster #24–#28 + SWA staging-env auto-cleanup; 2026-06-04 re-audit ship-blockers + #21/#22/#23 hardening.)
+
+## Brand rename "Clique Pix" → "CLIQUE Pix" (2026-06-09)
+
+**Status:** ✅ rolled out across all code channels **and** the RevenueCat paywall; manual store/console/design items remain (tracked in `docs/GENE.md`). The user-facing wordmark was capitalized to **CLIQUE Pix** (whole word CLIQUE) in **PR #47** — a fixed-string swap of the literal "Clique Pix" across **264 occurrences / 67 tracked files**. The two-word brand phrase only; identifiers (`cliquepix`/`clique_pix`/`clique-pix.com`/`com.cliquepix.*`/`CFBundleName`/FCM channel ID) and the feature noun "Clique"/"Cliques" deliberately untouched. Build number bumped `1.0.0+5 → +6` (**PR #46**) for the upcoming store upload.
+
+| Surface | Change | Deploy channel | Live? |
+|---|---|---|---|
+| **Web** | landing/nav/footer, `index.html` title/OG/twitter, legal `privacy.html` + `terms.html` | SWA auto-deploy on merge | ✅ **live** — verified "CLIQUE Pix" at `clique-pix.com` + `/docs/privacy` + `/docs/terms` |
+| **Backend** | 2 user-facing error strings (age-gate + subscription-required) | `func azure functionapp publish func-cliquepix-fresh` (2026-06-09) | ✅ **live** — `/api/health` 200 |
+| **Android** | in-app copy + `android:label="CLIQUE Pix"` | new AAB (versionCode 6) rebuilt 2026-06-09 at `app/build/app/outputs/bundle/release/app-release.aab` | ⏳ **built — pending Gene's Play upload** |
+| **iOS** | in-app copy + `CFBundleDisplayName="CLIQUE Pix"` | next `flutter build ipa` from the Mac (Windows can't build iOS — see HANDOFF §3) | ⏳ pending Mac build |
+| **RevenueCat paywall** | headline "Subscribe to CLIQUE Pix" + monthly/annual plan labels | RC Paywall AI Editor draft (assistant, verified) → **Gene published** | ✅ **live 2026-06-09** — Gene confirmed "Subscribe to CLIQUE Pix" + hit Publish |
+
+**Docs/memory:** `.claude/CLAUDE.md` + ~24 `/docs` files swept in #47; `HANDOFF.md` gained the iOS `.ipa` build path + GitHub Actions secrets table (#45/#48); `GENE.md` gained the rename follow-up checklist + paywall status (#49/#50); `feedback_app_name.md` memory updated to the new convention.
+
+**Manual/external still pending (Gene — no code; tracked in `docs/GENE.md`):** App Store Connect + Play Console app/listing names → "CLIQUE Pix"; subscription group/product display names; Entra app-registration display name + Google OAuth consent-screen name (the app name shown during auth); and the logo/icon/splash/store-screenshot **image assets** (wordmark rendered as pixels — design work).
+
+---
 
 ## Post-audit hardening cluster #24–#28 + SWA cleanup (2026-06-05)
 
