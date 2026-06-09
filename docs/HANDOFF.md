@@ -87,6 +87,24 @@ flutter analyze --no-fatal-infos
 flutter test
 ```
 
+**iOS build (`.ipa` for TestFlight / App Store) — macOS + Xcode ONLY:**
+You **cannot** build an iOS `.ipa` on Windows or Linux — it requires the macOS-only iOS toolchain (Xcode, iOS SDK, CocoaPods, and code-signing against the Apple provisioning profiles). The Windows box is fine for everything else (Android AAB/APK, web, backend); for iOS, do this on the Mac:
+
+```bash
+git checkout main && git pull          # main carries the same code that ships Android/web
+cd app
+flutter clean && flutter pub get
+cd ios && pod install && cd ..         # refresh CocoaPods (msal_auth, video_player, etc.)
+flutter build ipa --release            # → build/ios/ipa/*.ipa
+# upload via Xcode Organizer or Transporter (or xcrun altool/notarytool)
+```
+
+⚠️ **Build-number gotcha — Play and TestFlight track build numbers independently.** Flutter feeds the single pubspec `+N` to **both** Android `versionCode` and iOS `CFBundleVersion`, but the two stores don't share history. Before an iOS build, check **App Store Connect → TestFlight** for the highest build already uploaded under the current version (`1.0.0`): if a build with that `+N` already exists there, App Store Connect rejects the duplicate. Bump **only** the iOS build without disturbing the committed number:
+```bash
+flutter build ipa --release --build-number=<next>   # overrides CFBundleVersion for this build only
+```
+(`CFBundleDisplayName` = the brand name is baked into `app/ios/Runner/Info.plist` on `main` — no per-build step needed.)
+
 **Signing & the MSAL redirect-URI nuance (important):**
 - The MSAL Android redirect URI is chosen **at build time** by `MsalConstants.androidRedirectUri = String.fromEnvironment('MSAL_ANDROID_REDIRECT_URI', defaultValue: <release hash>)`. `dart_defines/release.json` = the **Play App Signing** hash (also the default); `dart_defines/debug.json` = the **debug keystore** hash. See `app/dart_defines/README.md`.
 - Local release builds are signed with the **upload key** (`app/android/key.properties`). **Google re-signs with the Play App Signing key only when you distribute via Play.** So a locally-built release APK's cert (hash `YtL16/JyfHiAzjIBnw2zbiY9QzY=`) is *not* the Play hash — but that doesn't matter for sign-in (next bullet).
