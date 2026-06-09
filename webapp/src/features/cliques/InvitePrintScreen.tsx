@@ -72,12 +72,12 @@ export function InvitePrintScreen() {
         >
           <img
             src="/assets/icon.png"
-            alt="Clique Pix"
+            alt="CLIQUE Pix"
             className="w-16 h-16 mx-auto mb-3 rounded-xl shadow-md"
             style={PRINT_COLORS}
           />
           <div className="text-3xl font-bold text-white tracking-tight leading-none">
-            Clique Pix
+            CLIQUE Pix
           </div>
           <div className="text-[11px] text-white/90 mt-2 uppercase tracking-[0.2em] font-medium">
             Private Event Photo Sharing

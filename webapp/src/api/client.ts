@@ -82,7 +82,7 @@ api.interceptors.response.use(
     const errorMessage = error.response?.data?.error?.message;
 
     if (status === 403 && errorCode === 'AGE_VERIFICATION_FAILED') {
-      toast.error(errorMessage ?? 'You must be at least 13 years old to use Clique Pix.');
+      toast.error(errorMessage ?? 'You must be at least 13 years old to use CLIQUE Pix.');
       const pca = getPca();
       setTimeout(() => {
         pca.logoutRedirect({ postLogoutRedirectUri: '/' }).catch(console.error);

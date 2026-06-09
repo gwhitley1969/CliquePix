@@ -21,7 +21,7 @@ export function InstallBanner({ inviteCode, platform }: { inviteCode: string; pl
 
   return (
     <div className="mb-6 rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-left">
-      <h2 className="text-base font-semibold text-white">Get the full Clique Pix experience</h2>
+      <h2 className="text-base font-semibold text-white">Get the full CLIQUE Pix experience</h2>
       <ul className="mt-3 space-y-1.5 text-sm text-white/70">
         <li className="flex gap-2">
           <span className="text-aqua">•</span> In-app camera + photo editor

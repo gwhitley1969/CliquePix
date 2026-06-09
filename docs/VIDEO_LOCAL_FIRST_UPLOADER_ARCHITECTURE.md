@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document defines the **required architecture and implementation changes** for Clique Pix video so that:
+This document defines the **required architecture and implementation changes** for CLIQUE Pix video so that:
 
 - the **uploader** can play their just-recorded or just-selected video **immediately from the local device**
 - other **members of the clique** continue to consume the **cloud-hosted processed version**

@@ -1,14 +1,14 @@
-# Clique Pix Video Feature Specification
+# CLIQUE Pix Video Feature Specification
 
 ## Purpose
-Add video upload, processing, playback, and sharing to Clique Pix.
+Add video upload, processing, playback, and sharing to CLIQUE Pix.
 
 This file is intended as a handoff specification for Claude Code so it can plan and implement video support in the app and backend.
 
 ---
 
 ## High-Level Goal
-Users must be able to upload, share, and view videos inside Clique Pix.
+Users must be able to upload, share, and view videos inside CLIQUE Pix.
 
 The feature is intended for normal consumer mobile usage, especially videos captured on iPhone and Android devices.
 
@@ -17,7 +17,7 @@ The feature is intended for normal consumer mobile usage, especially videos capt
 ## Core Product Requirements
 
 ### Required Capabilities
-1. Users can upload videos into Clique Pix.
+1. Users can upload videos into CLIQUE Pix.
 2. Users can share videos inside the same social/event/clique flows used by the app.
 3. Users can view uploaded videos reliably on mobile and web.
 4. Videos must support playback through adaptive streaming when appropriate.
@@ -192,7 +192,7 @@ Backend error codes must propagate cleanly to the user. The client should map st
 ---
 
 ## Sharing Requirements
-Videos must participate in Clique Pix sharing flows.
+Videos must participate in CLIQUE Pix sharing flows.
 
 Claude Code should wire videos into the same core sharing model as photos wherever sensible, including:
 - ownership
@@ -304,7 +304,7 @@ Claude Code should treat the feature as complete only when all of the following 
 10. Unsupported formats/codecs are rejected cleanly.
 11. A thumbnail/poster is generated.
 12. Media processing status is visible to the system and usable by the UI.
-13. Videos can be shared through Clique Pix in the intended feed/event/clique flows.
+13. Videos can be shared through CLIQUE Pix in the intended feed/event/clique flows.
 14. The uploader can preview the original video the moment commit succeeds, without waiting for transcoding (uploader-only instant preview).
 15. The uploader can delete a video from within the app, including videos whose playback fails to initialize (delete UI must remain reachable in the error state).
 16. Backend error codes propagate cleanly to user-friendly messages on the upload screen — no generic "Upload failed" when a specific code is available.
@@ -326,6 +326,6 @@ Claude Code should:
 ---
 
 ## Preferred Outcome
-The end result should feel like video is a first-class media type in Clique Pix, not a bolted-on afterthought.
+The end result should feel like video is a first-class media type in CLIQUE Pix, not a bolted-on afterthought.
 
 The v1 implementation should be dependable, cross-platform, and simple enough to operate without creating unnecessary complexity.

@@ -8,7 +8,7 @@
 
 ## 1. Summary
 
-Clique Pix is moving monetization in-scope for v1. The RevenueCat entitlement plumbing is already largely built (migration 012, webhook, entitlement service, `requireActiveEntitlement` on 39 endpoints — code complete, not yet deployed). This spec makes **two changes** on top of that base:
+CLIQUE Pix is moving monetization in-scope for v1. The RevenueCat entitlement plumbing is already largely built (migration 012, webhook, entitlement service, `requireActiveEntitlement` on 39 endpoints — code complete, not yet deployed). This spec makes **two changes** on top of that base:
 
 1. **Gate model:** flip from "hard paywall immediately after sign-in" to a **7-day, no-card free trial of the full app, then a hard paywall.**
 2. **New feature:** native **store-rating prompts** via the `in_app_review` package, triggered after a sharing-success milestone.
@@ -70,7 +70,7 @@ A store-side intro-offer trial would require the user to choose a plan and enter
   - State in `SharedPreferences`: `review_successful_upload_count`, `review_last_requested_at_ms`, `review_requested_for_version`.
   - **Guards (all must pass):** `InAppReview.isAvailable()` is true; successful-upload count ≥ 3; no prior request within ~120 days; the triggering action succeeded (never called from an error path); never invoked on the paywall / trial-expiry path.
   - On pass: `InAppReview.instance.requestReview()` (the OS decides whether to actually display — Apple throttles to ~3×/year; we never assume it showed).
-- **Manual path:** a "Rate Clique Pix" tile in `profile_screen.dart` calls `InAppReview.instance.openStoreListing(appStoreId: '6766294274')` — always available, not throttled.
+- **Manual path:** a "Rate CLIQUE Pix" tile in `profile_screen.dart` calls `InAppReview.instance.openStoreListing(appStoreId: '6766294274')` — always available, not throttled.
 - **Telemetry:** `review_prompt_requested`, `review_prompt_skipped { reason: 'unavailable'|'below_threshold'|'cooldown'|'version_repeat' }`, `review_store_listing_opened`.
 - Not gated on subscription state — but trial/subscription gating already means only active users reach the upload flow.
 

@@ -17,7 +17,7 @@ export function AppStoreBadge({ href = '#', className }: { href?: string; classN
         'focus:outline-none focus:ring-2 focus:ring-aqua/50',
         className,
       )}
-      aria-label="Download Clique Pix on the App Store (link coming soon)"
+      aria-label="Download CLIQUE Pix on the App Store (link coming soon)"
     >
       <Apple size={28} className="flex-shrink-0" strokeWidth={1.6} />
       <div className="text-left leading-tight">

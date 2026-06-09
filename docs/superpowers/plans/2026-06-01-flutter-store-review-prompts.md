@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ask happy users to rate Clique Pix on the App Store / Play Store via `in_app_review`, triggered after their 3rd successful media upload (counted across sessions), with a frequency cap and a manual "Rate Clique Pix" tile in Profile.
+**Goal:** Ask happy users to rate CLIQUE Pix on the App Store / Play Store via `in_app_review`, triggered after their 3rd successful media upload (counted across sessions), with a frequency cap and a manual "Rate CLIQUE Pix" tile in Profile.
 
 **Architecture:** A `ReviewPromptService` owns all eligibility logic (pure, unit-tested) and SharedPreferences state (upload counter, last-request timestamp). The photo and video upload success paths call `maybeRequestReview()`. The OS decides whether to actually show the system prompt; we never assume it did.
 
@@ -180,7 +180,7 @@ class ReviewPromptService {
     }
   }
 
-  /// Manual path from the Profile "Rate Clique Pix" tile. Always opens the
+  /// Manual path from the Profile "Rate CLIQUE Pix" tile. Always opens the
   /// store listing (not throttled). [appStoreId] is the numeric App Store ID.
   static Future<void> openStoreListing(
       {required String appStoreId,
@@ -265,7 +265,7 @@ git commit -m "feat(review): prompt after successful video upload"
 
 ---
 
-## Task 5: "Rate Clique Pix" Profile tile
+## Task 5: "Rate CLIQUE Pix" Profile tile
 
 **Files:** Modify `lib/features/profile/presentation/profile_screen.dart:121-244`
 
@@ -277,7 +277,7 @@ In the first `_SettingsGroup` (lines 121-244), set the current last tile ("Conta
             _SettingsTile(
               icon: Icons.star_outline_rounded,
               iconColors: [const Color(0xFFFBBF24), AppColors.electricAqua],
-              title: 'Rate Clique Pix',
+              title: 'Rate CLIQUE Pix',
               showDivider: false,
               onTap: () => ReviewPromptService.openStoreListing(
                 appStoreId: '6766294274',
@@ -286,7 +286,7 @@ In the first `_SettingsGroup` (lines 121-244), set the current last tile ("Conta
               ),
             ),
 ```
-Add imports for `review_prompt_service.dart` + `telemetry_service.dart` if not present. `6766294274` is the Clique Pix App Store ID (per GENE.md).
+Add imports for `review_prompt_service.dart` + `telemetry_service.dart` if not present. `6766294274` is the CLIQUE Pix App Store ID (per GENE.md).
 
 - [ ] **Step 2: Verify + commit**
 
@@ -294,7 +294,7 @@ Run: `flutter analyze lib/features/profile/presentation/profile_screen.dart`
 Expected: no new errors.
 ```bash
 git add lib/features/profile/presentation/profile_screen.dart
-git commit -m "feat(review): manual 'Rate Clique Pix' tile in Profile"
+git commit -m "feat(review): manual 'Rate CLIQUE Pix' tile in Profile"
 ```
 
 ---
@@ -315,7 +315,7 @@ Expected: green.
 
 - Upload media 3× across app restarts → on the 3rd, the OS review sheet MAY appear (Android shows it more reliably than iOS; Apple throttles). Token Diagnostics / App Insights shows `review_prompt_requested`.
 - Upload a 4th time within the same window → `review_prompt_skipped { reason: cooldown }`, no sheet.
-- Profile → "Rate Clique Pix" → store listing opens (always works).
+- Profile → "Rate CLIQUE Pix" → store listing opens (always works).
 - A failed upload does NOT increment the counter (verify by forcing an upload error, then a success — count advances by exactly 1).
 
 ---

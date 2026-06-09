@@ -1,8 +1,8 @@
-# Clique Pix — Beta Operations Runbook
+# CLIQUE Pix — Beta Operations Runbook
 
 **Last Updated:** May 4, 2026
 
-Operational procedures for the Clique Pix open beta. Covers incident response, common troubleshooting, and maintenance tasks.
+Operational procedures for the CLIQUE Pix open beta. Covers incident response, common troubleshooting, and maintenance tasks.
 
 ---
 
@@ -267,7 +267,7 @@ customEvents
    ```sql
    SELECT platform, LEFT(token, 20), created_at, updated_at FROM push_tokens WHERE user_id = '<user-id>';
    ```
-3. For Android users: confirm battery-optimization exemption was granted (`battery_exempt_granted` event for that user). If not, ask the user to grant it in system Settings → Apps → Clique Pix → Battery → Unrestricted.
+3. For Android users: confirm battery-optimization exemption was granted (`battery_exempt_granted` event for that user). If not, ask the user to grant it in system Settings → Apps → CLIQUE Pix → Battery → Unrestricted.
 
 ### User reports a raw "DioException [bad response]: ... 401" on the home screen
 
@@ -550,7 +550,7 @@ echo "=== bicep policy resources containing rate-limit-by-key ==="
 grep -nE 'rate-limit-by-key|<quota' /c/backup\ dev03/CliquePix/bicep/apim/main.bicep | tee "$BAK/bicep-rate-limit-matches.txt" || echo "bicep/apim/main.bicep: NO rate-limit-by-key declarations"
 ```
 
-Flagged file or bicep grep match → corresponding scope or IaC declaration is the source of the 429. Note: the Echo API sample (3 echo-api operation policies in bicep/apim/main.bicep) is the default APIM scaffolding and is unrelated to Clique Pix — its policies don't contain rate-limit-by-key, but if you ever see one there, it's still benign because Echo API isn't routed to from the client.
+Flagged file or bicep grep match → corresponding scope or IaC declaration is the source of the 429. Note: the Echo API sample (3 echo-api operation policies in bicep/apim/main.bicep) is the default APIM scaffolding and is unrelated to CLIQUE Pix — its policies don't contain rate-limit-by-key, but if you ever see one there, it's still benign because Echo API isn't routed to from the client.
 
 #### Phase B — Remove the rate-limit from the flagged scope
 
@@ -1154,7 +1154,7 @@ Required changes:
 1. **Resource name** in bicep: keep the bicep symbol name (`service_apim_cliquepix_002_name_resource`) for minimum diff, but change the `name:` property from `'apim-cliquepix-002'` to `'apim-cliquepix-v2'` (or whatever you want — pick a v2 suffix so the old/new can coexist during migration).
 2. **SKU**: `'Developer'` → `'BasicV2'` (note the capital V).
 3. **API version**: ensure it's `2024-05-01` or later — Basic v2 features require this. The current bicep uses `2025-03-01-preview` which is fine.
-4. **Remove classic-tier-only properties** (none in Clique Pix's bicep that I can see — but if the bicep references `virtualNetworkType`, `publicIpAddressId`, `additionalLocations`, or `multiRegion`, remove them; v2 has different schemas).
+4. **Remove classic-tier-only properties** (none in CLIQUE Pix's bicep that I can see — but if the bicep references `virtualNetworkType`, `publicIpAddressId`, `additionalLocations`, or `multiRegion`, remove them; v2 has different schemas).
 5. **Reference to APIM in dependent resources**: every resource with `parent: service_apim_cliquepix_002_name_resource` keeps that — the bicep symbol name doesn't change, only the deployed `name:` property.
 
 **Find/replace candidates** (do these carefully — review each match before replacing):
@@ -1200,7 +1200,7 @@ az role assignment create \
 
 **Verify** with `az role assignment list --assignee $NEW_PRINCIPAL_ID -o table`. Confirm the same roles the old APIM had (per `BETA_OPERATIONS_RUNBOOK.md §2`'s SAS error troubleshooting section, which lists APIM RBAC).
 
-If APIM doesn't actually use Key Vault for any named values (likely true for Clique Pix as of 2026-05-05 — verify with `az apim nv list -g rg-cliquepix-prod --service-name apim-cliquepix-002 -o table`), this step is a no-op.
+If APIM doesn't actually use Key Vault for any named values (likely true for CLIQUE Pix as of 2026-05-05 — verify with `az apim nv list -g rg-cliquepix-prod --service-name apim-cliquepix-002 -o table`), this step is a no-op.
 
 ### Phase 4 — Add new APIM as second Front Door origin (15 min)
 
@@ -1340,7 +1340,7 @@ After Phase 8 cleanup, ongoing cost is ~$525/month for Basic v2 alone. The ~$475
 
 ### Known gotchas captured during this incident
 
-- **Microsoft's `rate-limit` algorithm differs between classic and v2 tiers.** Classic = sliding window, v2 = token bucket. Clique Pix has no rate-limit policies as of 2026-05-05 (incident #6 cleanup), so this is moot for us. If we ever re-add rate-limit policies on Basic v2, expect modestly more burst-friendly behavior than Developer would have given.
+- **Microsoft's `rate-limit` algorithm differs between classic and v2 tiers.** Classic = sliding window, v2 = token bucket. CLIQUE Pix has no rate-limit policies as of 2026-05-05 (incident #6 cleanup), so this is moot for us. If we ever re-add rate-limit policies on Basic v2, expect modestly more burst-friendly behavior than Developer would have given.
 - **Backup/restore APIs don't support cross-tier restore** (Developer → Basic v2). The migration approach is bicep redeploy against a new instance, NOT backup/restore.
 - **The new APIM gets a different system-assigned managed identity principal ID.** Any RBAC role assignments on the OLD APIM's identity must be re-granted to the NEW one (Phase 3).
 - **The Echo API sample bicep resources** are default APIM scaffolding. They redeploy fine but contribute nothing — consider removing them from `bicep/apim/main.bicep` as a separate cleanup PR.

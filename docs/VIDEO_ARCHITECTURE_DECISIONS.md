@@ -1,4 +1,4 @@
-# Video Architecture Decisions — Clique Pix
+# Video Architecture Decisions — CLIQUE Pix
 
 ## Context
 
@@ -307,7 +307,7 @@ Does HLS deliver one quality (1080p) or multiple (360p / 720p / 1080p)?
 
 - Matches CLAUDE.md's "boring and proven" and "leave it out if in doubt" principles
 - Storage cost is meaningful on self-hosted infrastructure — single rendition gives breathing room while we learn real usage patterns
-- Most Clique Pix viewers will be on WiFi or high-speed LTE (friends looking at event media, not commuters on subways)
+- Most CLIQUE Pix viewers will be on WiFi or high-speed LTE (friends looking at event media, not commuters on subways)
 - Single rendition keeps the Container Apps Job simple: one FFmpeg invocation, one HLS manifest, one MP4 fallback, one poster. A ladder doubles or triples the work per video.
 - **Adaptive ladder can be added later without breaking single-rendition clients.** The HLS manifest format supports ladder upgrades transparently — we keep the originals and re-transcode into a ladder format when v1.5 lands.
 
@@ -529,7 +529,7 @@ How does the client know when a video has finished processing and is ready to pl
 
 - **Zero new infrastructure.** The Web PubSub service (`backend/src/shared/services/webPubSubService.ts`) already exists and supports the `sendToUser` pattern from the DM implementation.
 - **Foreground gets instant updates** via Web PubSub — no polling, no latency, no battery waste.
-- **Backgrounded/terminated apps get FCM push** — the standard Clique Pix notification flow handles tap-to-navigate.
+- **Backgrounded/terminated apps get FCM push** — the standard CLIQUE Pix notification flow handles tap-to-navigate.
 
 ### How it works
 

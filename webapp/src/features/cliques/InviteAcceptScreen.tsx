@@ -63,7 +63,7 @@ export function InviteAcceptScreen() {
         </div>
         <h1 className="text-2xl font-bold mb-2">You've been invited to a Clique</h1>
         <p className="text-white/60 mb-6">
-          Sign in or create a Clique Pix account to accept this invite.
+          Sign in or create a CLIQUE Pix account to accept this invite.
         </p>
         {code && <InstallBanner inviteCode={code} platform={platform} />}
         <Button size="lg" onClick={onSignIn} className="w-full">

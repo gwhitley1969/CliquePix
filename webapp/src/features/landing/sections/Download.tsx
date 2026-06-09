@@ -24,7 +24,7 @@ export function Download() {
           }`}
         >
           <div>
-            <h2 className="text-3xl md:text-4xl font-bold text-white">Get Clique Pix</h2>
+            <h2 className="text-3xl md:text-4xl font-bold text-white">Get CLIQUE Pix</h2>
             <p className="mt-3 text-white/70 max-w-lg">
               Install the app on your phone, or sign in from any browser. It's the same Cliques,
               same Events, same photos everywhere you go.

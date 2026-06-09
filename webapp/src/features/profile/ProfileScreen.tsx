@@ -168,7 +168,7 @@ export function ProfileScreen() {
       <ConfirmDestructive
         open={confirmDelete}
         onOpenChange={setConfirmDelete}
-        title="Delete your Clique Pix account?"
+        title="Delete your CLIQUE Pix account?"
         message="This permanently removes your account, your photos, your videos, your messages, and your clique memberships. Shared cliques and events are preserved for other members. This cannot be undone."
         confirmLabel="Delete account"
         onConfirm={() => deleteMut.mutate()}

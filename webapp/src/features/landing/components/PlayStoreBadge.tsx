@@ -26,7 +26,7 @@ export function PlayStoreBadge({
         'focus:outline-none focus:ring-2 focus:ring-aqua/50',
         className,
       )}
-      aria-label={isPlaceholder ? 'Get Clique Pix on Google Play (link coming soon)' : 'Get Clique Pix on Google Play'}
+      aria-label={isPlaceholder ? 'Get CLIQUE Pix on Google Play (link coming soon)' : 'Get CLIQUE Pix on Google Play'}
     >
       <svg
         width="24"

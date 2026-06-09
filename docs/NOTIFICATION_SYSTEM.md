@@ -1,14 +1,14 @@
-# Clique Pix Notification System
+# CLIQUE Pix Notification System
 
 **Last Updated**: April 10, 2026
 
-This document describes the notification architecture for Clique Pix — push notifications (FCM), real-time events (Web PubSub), in-app notification list, and the push token lifecycle.
+This document describes the notification architecture for CLIQUE Pix — push notifications (FCM), real-time events (Web PubSub), in-app notification list, and the push token lifecycle.
 
 ---
 
 ## Overview
 
-Clique Pix uses three notification channels:
+CLIQUE Pix uses three notification channels:
 
 | Channel | Technology | Purpose | Latency |
 |---------|-----------|---------|---------|
@@ -259,7 +259,7 @@ Created programmatically at app startup:
 | Property | Value |
 |----------|-------|
 | Channel ID | `cliquepix_default` |
-| Channel Name | `Clique Pix` |
+| Channel Name | `CLIQUE Pix` |
 | Description | `Photo sharing notifications` |
 | Importance | `HIGH` (heads-up banners) |
 
@@ -267,7 +267,7 @@ Created programmatically at app startup:
 await androidPlugin.createNotificationChannel(
   const AndroidNotificationChannel(
     'cliquepix_default',
-    'Clique Pix',
+    'CLIQUE Pix',
     description: 'Photo sharing notifications',
     importance: Importance.high,
   ),
@@ -303,7 +303,7 @@ When a push arrives while the app is open:
 const _fcmNotificationDetails = NotificationDetails(
   android: AndroidNotificationDetails(
     'cliquepix_default',
-    'Clique Pix',
+    'CLIQUE Pix',
     channelDescription: 'Photo sharing notifications',
     importance: Importance.high,
     priority: Priority.high,

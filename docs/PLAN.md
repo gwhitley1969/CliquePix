@@ -1,4 +1,4 @@
-# Clique Pix — Paywall + Free Trial + Review Prompts: Master Plan & Status
+# CLIQUE Pix — Paywall + Free Trial + Review Prompts: Master Plan & Status
 
 **Last updated:** 2026-06-02
 **Branch:** `feat/paywall-trial-and-review-prompts` (all work below lives here; not yet merged to `main`)
@@ -39,7 +39,7 @@ Monetization is now **in scope for v1**. We are shipping a hard paywall fronted 
 - Webhook `whintgr721b9e5264` → `api.clique-pix.com/api/internal/revenuecat-webhook` (all envs/events, Bearer secret) — verified 200.
 - iOS public SDK key captured: `appl_OvhNypnojnQSEebpQtBikJYTHBa`.
 - `plus_annual` price **$29.99 → $39.99** (US + 6 available territories equalized) **+ 7-day intro offer added** — both were wrong/missing in live App Store Connect; fixed via MCP.
-- Paywall `pw9ac01d9e31184633` — ✅ **published + attached to the `default` offering** (2026-06-03); `presentPaywall()` now renders it. Headline "Subscribe to Clique Pix".
+- Paywall `pw9ac01d9e31184633` — ✅ **published + attached to the `default` offering** (2026-06-03); `presentPaywall()` now renders it. Headline "Subscribe to CLIQUE Pix".
 
 **Still REMAINING (all dashboard/store, no code):** verify **Transfer Behavior = KEEP_ATTRIBUTION** (API can't read it); **submit** both IAPs (or attach to the version at App Store submission); build the iOS app (Mac) → **TestFlight**; **Plan 6 promo grants** (after testers sign in on the build, within their 7-day trial); ~~fix test-store prices~~ **(WON'T FIX 2026-06-03 — RC Test Store prices are immutable once set: greyed in dashboard, create-only API, no update/delete. Sandbox-only; real App Store prices already $3.99/$39.99)**; ~~Task 7 deploy legal pages~~ **(DONE 2026-06-03 — web client live + verified)**; **Android** Play setup (**tax verified 2026-06-03** — confirm identity in Play Console, then proceed).
 **Code remaining:** **Plan 2** (Flutter paywall, now unblocked) + **Plan 4** (web gating).
@@ -60,7 +60,7 @@ Monetization is now **in scope for v1**. We are shipping a hard paywall fronted 
 | Web client | Mobile-first; gated web routes → "subscribe in the mobile app." No Stripe in v1. |
 | Reviewer / beta | RevenueCat **Promotional** entitlement grants (no DB override). |
 | Transfer behavior | `KEEP_ATTRIBUTION`. |
-| Review prompts | Native `in_app_review`, trigger on 3rd successful media upload (cross-session), 120-day cap, availability-gated, never on error/paywall path. Manual "Rate Clique Pix" tile (App Store ID `6766294274`). |
+| Review prompts | Native `in_app_review`, trigger on 3rd successful media upload (cross-session), 120-day cap, availability-gated, never on error/paywall path. Manual "Rate CLIQUE Pix" tile (App Store ID `6766294274`). |
 
 ---
 
@@ -91,7 +91,7 @@ Monetization is now **in scope for v1**. We are shipping a hard paywall fronted 
 - [x] Configure webhook → `https://api.clique-pix.com/api/internal/revenuecat-webhook` with `Bearer <secret>`. **(webhook `whintgr721b9e5264` created + verified 200; secret in Key Vault)**
 - [x] Generate **Secret API Key** (`sk_...`) → saved to Key Vault as `revenuecat-secret-api-key`.
 - [x] Capture **iOS public SDK key** → `appl_OvhNypnojnQSEebpQtBikJYTHBa` (still needs to land in `revenuecat_constants.dart`, Plan 2). Android `goog_...` later (blocked).
-- [x] Paywalls v2 paywall `pw9ac01d9e31184633` — **published + attached to `default` offering 2026-06-03** (headline "Subscribe to Clique Pix"; Terms/Privacy buttons → `clique-pix.com/docs/*`).
+- [x] Paywalls v2 paywall `pw9ac01d9e31184633` — **published + attached to `default` offering 2026-06-03** (headline "Subscribe to CLIQUE Pix"; Terms/Privacy buttons → `clique-pix.com/docs/*`).
 
 ### C. Pricing change
 - [x] `plus_annual` price **$29.99 → $39.99** + **7-day intro offer** — done via MCP (US + 6 territories equalized). Live ASC was actually still $29.99 with no intro offer; now fixed.
@@ -134,7 +134,7 @@ All to be executed subagent-driven on this branch, two-stage review per task (sp
 - Scope: `purchases_flutter` + `purchases_ui_flutter`, `EntitlementState` model + `UserModel.entitlement` parsing, `RevenueCatService` (configure/logIn/logOut/presentPaywall/restore/manage), paywall screen, **router gate on `effective_active`** (allowlist `/paywall`,`/profile`,`/login`), hide bottom nav off-access, lifecycle login/logout + `resetSession` logout, `Purchases.configure` in `performDeferredInit`, Profile Manage/Restore tiles + diagnostics section, **purchase-success optimistic flag + 30s auto-recovery**. Version bump `1.0.0+5`.
 
 ### Plan 3 — Flutter store review prompts  ✅ DONE 2026-06-02 (5 commits; 91/91 tests, analyze 54, release APK built)
-- Add `in_app_review`; `ReviewPromptService` (unit-tested eligibility); hook photo (`camera_capture_screen.dart` after `confirmUpload`) + video (`video_upload_screen.dart` after `notifier.succeed`); "Rate Clique Pix" Profile tile; telemetry.
+- Add `in_app_review`; `ReviewPromptService` (unit-tested eligibility); hook photo (`camera_capture_screen.dart` after `confirmUpload`) + video (`video_upload_screen.dart` after `notifier.succeed`); "Rate CLIQUE Pix" Profile tile; telemetry.
 
 ### Plan 4 — Web subscription gating  ✅ DONE 2026-06-02 (3 commits; lint clean, build green)
 - `User.entitlement` (camelCase), `EntitlementGuard` → `/subscribe`, `SubscribeInAppScreen` (store badges + "subscribe in the mobile app"), router split (entitlement-gated shell + ungated `/profile` + `/subscribe`), Profile "Manage Subscription" link. No web purchase flow.
@@ -210,7 +210,7 @@ Plans that parallelize freely: Plan 3 + Plan 5 can run now alongside Gene's conf
 - `c04f504` ReviewPromptService + unit-tested eligibility
 - `268af53` prompt after successful photo upload
 - `0aaeb6a` prompt after successful video upload
-- `c6db13c` manual "Rate Clique Pix" Profile tile
+- `c6db13c` manual "Rate CLIQUE Pix" Profile tile
 
 **Plan 2 (Flutter paywall + trial gate) — 2026-06-02:**
 - `4cdbcb3` RevenueCat deps + SDK key constants, bump to 1.0.0+5

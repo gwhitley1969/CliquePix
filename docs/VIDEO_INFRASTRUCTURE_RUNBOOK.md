@@ -2,7 +2,7 @@
 
 ## What this is
 
-This is the as-built runbook for the new Azure infrastructure provisioned for Clique Pix video v1. It documents the exact `az` CLI commands run, what they produced, and how to roll back if needed. Created as part of Phase 2 of the implementation plan; finalized after all resources were verified working.
+This is the as-built runbook for the new Azure infrastructure provisioned for CLIQUE Pix video v1. It documents the exact `az` CLI commands run, what they produced, and how to roll back if needed. Created as part of Phase 2 of the implementation plan; finalized after all resources were verified working.
 
 **Until Bicep IaC exists for these resources (post-v1.5), this runbook is the source of truth.** If you make changes via Portal or CLI, update this file.
 
@@ -19,7 +19,7 @@ This is the as-built runbook for the new Azure infrastructure provisioned for Cl
 | Container Apps Job | `caj-cliquepix-transcoder` | Consumption | `/subscriptions/.../resourceGroups/rg-cliquepix-prod/providers/Microsoft.App/jobs/caj-cliquepix-transcoder` |
 | Budget Alert | `budget-cliquepix-video` | Cost / Monthly $50 | (resource group scoped) |
 
-**Subscription:** `25410e67-b3c8-49a2-8cf0-ab9f77ce613f` (Clique Pix)
+**Subscription:** `25410e67-b3c8-49a2-8cf0-ab9f77ce613f` (CLIQUE Pix)
 **Tenant:** `f7d64f40-c033-418d-a050-d2ef4a9845fe`
 **Region:** East US
 

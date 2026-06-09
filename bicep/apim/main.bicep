@@ -73,7 +73,7 @@ resource service_apim_cliquepix_002_name_cliquepix_v1 'Microsoft.ApiManagement/s
 
 // Echo API + all its operations / policies / product apiLinks were removed
 // 2026-05-05 as part of the BasicV2 migration. Default APIM scaffolding,
-// never used by Clique Pix. The cliquepix-v1 API below is the only real API.
+// never used by CLIQUE Pix. The cliquepix-v1 API below is the only real API.
 
 resource service_apim_cliquepix_002_name_administrators 'Microsoft.ApiManagement/service/groups@2025-03-01-preview' = {
   parent: service_apim_cliquepix_002_name_resource
@@ -178,7 +178,7 @@ resource service_apim_cliquepix_002_name_default 'Microsoft.ApiManagement/servic
 }
 
 // portalsettings/{delegation,signin,signup} removed for BasicV2 — Microsoft
-// rejects them as 'MethodNotAllowedInPricingTier'. Clique Pix does not use
+// rejects them as 'MethodNotAllowedInPricingTier'. CLIQUE Pix does not use
 // the APIM developer portal anyway (clients hit api.clique-pix.com via
 // Front Door → APIM gateway directly).
 
@@ -213,7 +213,7 @@ resource service_apim_cliquepix_002_name_unlimited 'Microsoft.ApiManagement/serv
 // Built-in 'master' all-access subscription removed — its scope (the full
 // service ID with trailing slash) is rejected by APIM REST as
 // 'Subscription scope should be one of /apis, /apis/{apiId},
-// /products/{productId}'. Clique Pix's cliquepix-v1 API has
+// /products/{productId}'. CLIQUE Pix's cliquepix-v1 API has
 // subscriptionRequired:false, so APIM subscriptions aren't used at all.
 
 resource service_apim_cliquepix_002_name_AccountClosedDeveloper 'Microsoft.ApiManagement/service/templates@2025-03-01-preview' = {
@@ -974,6 +974,6 @@ resource service_apim_cliquepix_002_name_starter_policy 'Microsoft.ApiManagement
 // Two product subscriptions (...69070001, ...69070002) removed — their
 // scope (full product resource ID) is rejected by APIM with
 // 'Subscription scope should be one of /apis, /apis/{apiId},
-// /products/{productId}'. Clique Pix does not use APIM subscriptions
+// /products/{productId}'. CLIQUE Pix does not use APIM subscriptions
 // (cliquepix-v1 has subscriptionRequired:false), so removing them
 // has zero functional impact.

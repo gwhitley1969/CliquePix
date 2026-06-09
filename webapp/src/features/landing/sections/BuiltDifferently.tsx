@@ -38,7 +38,7 @@ export function BuiltDifferently() {
           <div className="max-w-2xl mb-10 md:mb-14">
             <h2 className="text-3xl md:text-4xl font-bold text-white">Built differently</h2>
             <p className="mt-3 text-white/60">
-              Photo apps optimize for scrolling, likes, and reach. Clique Pix is built for the
+              Photo apps optimize for scrolling, likes, and reach. CLIQUE Pix is built for the
               opposite: real moments, real people, then out of your way.
             </p>
           </div>

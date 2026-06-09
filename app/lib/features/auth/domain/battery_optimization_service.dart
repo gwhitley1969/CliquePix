@@ -28,7 +28,7 @@ class BatteryOptimizationService {
       builder: (ctx) => AlertDialog(
         title: const Text('Stay Signed In'),
         content: const Text(
-          'To keep you signed in, Clique Pix needs permission to run in the background. '
+          'To keep you signed in, CLIQUE Pix needs permission to run in the background. '
           'Without this, you may need to sign in again after a few hours.',
         ),
         actions: [

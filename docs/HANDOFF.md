@@ -1,7 +1,7 @@
-# HANDOFF.md — Clique Pix
+# HANDOFF.md — CLIQUE Pix
 
 **Last updated:** 2026-06-07
-**Purpose:** Single entry-point for anyone taking over (or returning to) Clique Pix. Read this top-to-bottom; it points into the deep docs for detail. If you read only one file, read this one.
+**Purpose:** Single entry-point for anyone taking over (or returning to) CLIQUE Pix. Read this top-to-bottom; it points into the deep docs for detail. If you read only one file, read this one.
 
 > **What's authoritative:** `.claude/CLAUDE.md` is the development guardrails (it wins on scope/architecture/patterns). This file is the *operational* handoff — how to build, deploy, where things live, current state, and the rules you must not break. Where they overlap, CLAUDE.md is the source of truth and this file links to it.
 
@@ -19,7 +19,7 @@
 
 ## 1. Project overview & current status
 
-**Clique Pix** is a **private, event-based photo and video sharing** mobile + web app. Users create **Cliques** (persistent groups), start **Events** (temporary media sessions, 24h/3d/7d), and share photos/videos that **auto-expire from the cloud** when the event ends. It is *not* a social network, feed, or messaging app.
+**CLIQUE Pix** is a **private, event-based photo and video sharing** mobile + web app. Users create **Cliques** (persistent groups), start **Events** (temporary media sessions, 24h/3d/7d), and share photos/videos that **auto-expire from the cloud** when the event ends. It is *not* a social network, feed, or messaging app.
 
 **The two core loops** (every line of code serves one):
 - **Photo:** sign in → create Event → capture/pick photo → edit (crop/draw/stickers/filters) → compress on-device → upload to Blob via SAS → feed + push → react/save/share → auto-delete.
@@ -90,7 +90,7 @@ flutter test
 **Signing & the MSAL redirect-URI nuance (important):**
 - The MSAL Android redirect URI is chosen **at build time** by `MsalConstants.androidRedirectUri = String.fromEnvironment('MSAL_ANDROID_REDIRECT_URI', defaultValue: <release hash>)`. `dart_defines/release.json` = the **Play App Signing** hash (also the default); `dart_defines/debug.json` = the **debug keystore** hash. See `app/dart_defines/README.md`.
 - Local release builds are signed with the **upload key** (`app/android/key.properties`). **Google re-signs with the Play App Signing key only when you distribute via Play.** So a locally-built release APK's cert (hash `YtL16/JyfHiAzjIBnw2zbiY9QzY=`) is *not* the Play hash — but that doesn't matter for sign-in (next bullet).
-- **Sideloaded release APKs DO sign in** (verified 2026-06-06). Clique Pix uses the CIAM **system-browser/Custom-Tabs** redirect flow (not the Authenticator broker), which does **not** validate the redirect-URI hash against the running app's signing cert. Only two things matter: the redirect hash is registered in Entra **and** declared as a `<data>` path in `AndroidManifest.xml` — both true for `4Fsai…`. Don't assume a cert mismatch blocks testing.
+- **Sideloaded release APKs DO sign in** (verified 2026-06-06). CLIQUE Pix uses the CIAM **system-browser/Custom-Tabs** redirect flow (not the Authenticator broker), which does **not** validate the redirect-URI hash against the running app's signing cert. Only two things matter: the redirect hash is registered in Entra **and** declared as a `<data>` path in `AndroidManifest.xml` — both true for `4Fsai…`. Don't assume a cert mismatch blocks testing.
 - The Android manifest registers **both** the release (`4Fsai…`) and debug (`W28+…`) redirect paths. Both hashes are also registered in the Entra app registration. If you regenerate a keystore, update: the matching `dart_defines/*.json`, the manifest `<data>` path, and the Entra redirect URI (see `app/dart_defines/README.md` + `docs/AUTHENTICATION.md` AUTH-1).
 
 ### Web — `webapp/`
@@ -177,7 +177,7 @@ Deploy history + per-item status: `docs/DEPLOYMENT_STATUS.md`.
 | APIM publisher / Azure admin notifications | `gwhitley@xtend-ai.com` |
 | Ops / Azure budget-alert recipient | `bluebuildapps@gmail.com` (old "BlueBuildApps" brand) |
 
-### Azure — subscription "Clique Pix" (`25410e67-b3c8-49a2-8cf0-ab9f77ce613f`), RG `rg-cliquepix-prod`
+### Azure — subscription "CLIQUE Pix" (`25410e67-b3c8-49a2-8cf0-ab9f77ce613f`), RG `rg-cliquepix-prod`
 | Resource | Name |
 |---|---|
 | Function App | `func-cliquepix-fresh` |

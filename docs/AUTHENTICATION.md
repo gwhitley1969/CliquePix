@@ -1,4 +1,4 @@
-# Authentication — Clique Pix
+# Authentication — CLIQUE Pix
 
 **Last Updated:** 2026-05-06
 **Status:** Email + password is the primary local sign-in method (migrated from email OTP on 2026-05-06 to satisfy Apple App Store reviewer credential requirements). Google + Apple federation unchanged. Existing pre-2026-05-06 OTP users preserved per Microsoft documented behavior.
@@ -7,7 +7,7 @@
 
 ## What this document covers
 
-This is the orientation document for Clique Pix authentication. It answers:
+This is the orientation document for CLIQUE Pix authentication. It answers:
 
 - What sign-in options does a user see?
 - Which Azure / Microsoft services power auth?
@@ -26,7 +26,7 @@ For depth on specific subsystems, this doc points to the specialized companion d
 | Aspect | Value |
 |---|---|
 | Identity provider (consumer) | Microsoft Entra External ID (CIAM tenant `cliquepix.onmicrosoft.com`, tenant ID `27748e01-d49f-4f0b-b78f-b97c16be69dc`) |
-| App registration | Clique Pix, client ID `7db01206-135b-4a34-a4d5-2622d1a888bf` |
+| App registration | CLIQUE Pix, client ID `7db01206-135b-4a34-a4d5-2622d1a888bf` |
 | Authority | `https://cliquepix.ciamlogin.com/cliquepix.onmicrosoft.com/` |
 | Custom API scope | `api://7db01206-135b-4a34-a4d5-2622d1a888bf/access_as_user` |
 | User flow | `SignUpSignIn` |
@@ -257,7 +257,7 @@ The `dateOfBirth` claim rides on every access token (configured in the app reg a
 
 Returning users are never re-prompted — the COALESCE preserves `age_verified_at` and Entra holds the DOB on the user principal.
 
-**Privacy posture:** Clique Pix's `users` table stores only `age_verified_at` (a timestamp), never DOB. Entra stores DOB on the user principal.
+**Privacy posture:** CLIQUE Pix's `users` table stores only `age_verified_at` (a timestamp), never DOB. Entra stores DOB on the user principal.
 
 Full details: **`docs/AGE_VERIFICATION_RUNBOOK.md`**.
 
@@ -320,7 +320,7 @@ Events expire after 7 days. **Re-seed within 48 hours of every App Store submiss
 
 - **Resource group:** `rg-cliquepix-prod` (eastus)
 - **CIAM tenant:** `cliquepix.onmicrosoft.com` (ID `27748e01-d49f-4f0b-b78f-b97c16be69dc`)
-- **App registration:** Clique Pix (client ID `7db01206-135b-4a34-a4d5-2622d1a888bf`)
+- **App registration:** CLIQUE Pix (client ID `7db01206-135b-4a34-a4d5-2622d1a888bf`)
 - **API Management:** `apim-cliquepix-003` (Basic v2, $150/month, 99.95% SLA — migrated from Developer-tier `apim-cliquepix-002` on 2026-05-05)
 - **Function App:** `func-cliquepix-fresh` (validates JWTs)
 - **Front Door:** `fd-cliquepix-prod`
@@ -460,7 +460,7 @@ ProfileScreen "Delete Account" → confirmDestructive() → AuthNotifier.deleteA
   → Redirect to /login
 ```
 
-The Entra account is NOT deleted — only the Clique Pix application data is purged. Users who want to fully delete the Entra account too must contact support OR use the Microsoft account recovery flow (this is a v1.5 enhancement to wire `deleteEntraUserByOid` from `entraGraphClient.ts` into the user-initiated path).
+The Entra account is NOT deleted — only the CLIQUE Pix application data is purged. Users who want to fully delete the Entra account too must contact support OR use the Microsoft account recovery flow (this is a v1.5 enhancement to wire `deleteEntraUserByOid` from `entraGraphClient.ts` into the user-initiated path).
 
 ---
 

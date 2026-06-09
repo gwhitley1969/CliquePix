@@ -20,7 +20,7 @@ export function EntitlementGuard({ children }: { children: ReactNode }) {
         <div className="max-w-sm w-full">
           <h1 className="text-lg font-semibold mb-2">Could not load your account</h1>
           <p className="text-white/60 text-sm mb-5">
-            We could not reach Clique Pix. Check your connection and try again.
+            We could not reach CLIQUE Pix. Check your connection and try again.
           </p>
           <button
             onClick={() => refetch()}

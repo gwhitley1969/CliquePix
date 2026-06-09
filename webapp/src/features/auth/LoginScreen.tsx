@@ -31,7 +31,7 @@ export function LoginScreen() {
           <Camera size={36} className="text-white" />
         </div>
         <h1 className="text-4xl font-bold mb-2 bg-gradient-primary bg-clip-text text-transparent">
-          Clique Pix
+          CLIQUE Pix
         </h1>
         <p className="text-white/60 mb-10">
           Private, instant photo and video sharing for your group.

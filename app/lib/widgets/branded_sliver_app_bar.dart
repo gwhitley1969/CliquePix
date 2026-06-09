@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../core/theme/app_colors.dart';
 import '../core/theme/app_gradients.dart';
 
-/// Pinned [SliverAppBar] with the persistent "Clique Pix" brand ribbon
+/// Pinned [SliverAppBar] with the persistent "CLIQUE Pix" brand ribbon
 /// (logo + gradient wordmark) in the toolbar and a larger screen-title
 /// hero in the flexible area below.
 ///
@@ -95,7 +95,7 @@ class BrandedSliverAppBar extends StatelessWidget {
 }
 
 /// Compact brand mark: rounded logo tile with a soft aqua glow,
-/// followed by the "Clique Pix" wordmark in the primary gradient.
+/// followed by the "CLIQUE Pix" wordmark in the primary gradient.
 /// Sized for the toolbar (28 px icon, 20 px text).
 class _CliquePixWordmark extends StatelessWidget {
   const _CliquePixWordmark();
@@ -133,7 +133,7 @@ class _CliquePixWordmark extends StatelessWidget {
             shaderCallback: (bounds) =>
                 AppGradients.primary.createShader(bounds),
             child: const Text(
-              'Clique Pix',
+              'CLIQUE Pix',
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontWeight: FontWeight.w700,

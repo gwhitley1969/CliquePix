@@ -294,7 +294,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                               ],
                             ).createShader(bounds),
                             child: const Text(
-                              'Clique Pix',
+                              'CLIQUE Pix',
                               style: TextStyle(
                                 fontSize: 40,
                                 fontWeight: FontWeight.w800,

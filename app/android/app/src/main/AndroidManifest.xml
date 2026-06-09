@@ -11,7 +11,7 @@
          permission. The flutter_local_notifications plugin declares these
          transitively in its own manifest; tools:node="remove" actively
          removes them during manifest merge. USE_EXACT_ALARM is restricted by
-         Google Play policy to alarm-clock / calendar apps only — Clique Pix
+         Google Play policy to alarm-clock / calendar apps only — CLIQUE Pix
          is neither. -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"
         tools:node="remove" />
@@ -36,7 +36,7 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
-        android:label="Clique Pix"
+        android:label="CLIQUE Pix"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
 

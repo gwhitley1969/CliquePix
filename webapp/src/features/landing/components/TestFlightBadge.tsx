@@ -2,7 +2,7 @@ import { Apple } from 'lucide-react';
 import clsx from 'clsx';
 
 /**
- * TestFlight-styled badge used for the iOS install path while Clique Pix is
+ * TestFlight-styled badge used for the iOS install path while CLIQUE Pix is
  * pre-public-App-Store. Same visual chassis as AppStoreBadge so the install
  * banner reads consistently across platforms; copy differentiates that this
  * is the beta channel. Replace with AppStoreBadge once the public App Store
@@ -29,7 +29,7 @@ export function TestFlightBadge({
         'focus:outline-none focus:ring-2 focus:ring-aqua/50',
         className,
       )}
-      aria-label="Join the Clique Pix iOS Beta on TestFlight"
+      aria-label="Join the CLIQUE Pix iOS Beta on TestFlight"
     >
       <Apple size={28} className="flex-shrink-0" strokeWidth={1.6} />
       <div className="text-left leading-tight">

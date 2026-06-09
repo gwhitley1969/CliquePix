@@ -1,4 +1,4 @@
-# Microsoft Entra External ID Refresh Token Workaround — Clique Pix
+# Microsoft Entra External ID Refresh Token Workaround — CLIQUE Pix
 
 **Last updated:** 2026-06-04
 **Status:** 5-layer defense + optimistic auth bootstrap + concurrency/state-machine hardening (PR #25).
@@ -8,7 +8,7 @@
 
 ## Optimistic authentication — the user-facing contract
 
-Clique Pix does not block its UI on a network round-trip at launch. Before `runApp`, `main.dart` reads the access token and a cached `UserModel` from `FlutterSecureStorage`. If both are present, `AuthNotifier` is seeded with `AuthAuthenticated(cachedUser)` so the router resolves straight to `/events` on the first frame — no splash, no spinner, no LoginScreen touch. If storage is empty, `AuthNotifier` is seeded with `AuthUnauthenticated`, so LoginScreen renders with an enabled "Get Started" button on the first frame.
+CLIQUE Pix does not block its UI on a network round-trip at launch. Before `runApp`, `main.dart` reads the access token and a cached `UserModel` from `FlutterSecureStorage`. If both are present, `AuthNotifier` is seeded with `AuthAuthenticated(cachedUser)` so the router resolves straight to `/events` on the first frame — no splash, no spinner, no LoginScreen touch. If storage is empty, `AuthNotifier` is seeded with `AuthUnauthenticated`, so LoginScreen renders with an enabled "Get Started" button on the first frame.
 
 Background verification fires after mount: `AuthNotifier._verifyInBackground` wraps `silentSignIn` with an 8-second `Future.timeout`. On success it replaces the provisional cached user with the authoritative server record. On session-expired signatures (`AADSTS700082`, `AADSTS500210`, `no_account_found`, or the synthetic `silent_signin_timeout`) it emits `AuthReloginRequired` — the GoRouter redirect bounces the user from `/events` back to `/login`, and LoginScreen pops the `WelcomeBackDialog` for one-tap re-auth.
 
@@ -42,7 +42,7 @@ One flag-ordering bug fixed in the same branch: `AppLifecycleService` now clears
 
 ## Problem summary
 
-Clique Pix uses Microsoft Entra External ID (CIAM) with Google / Apple / email + password sign-in. Entra External ID tenants enforce a **hardcoded 12-hour inactivity timeout** on refresh tokens. Standard Entra ID tenants get 90 days; External ID does not, and the setting is not exposed anywhere.
+CLIQUE Pix uses Microsoft Entra External ID (CIAM) with Google / Apple / email + password sign-in. Entra External ID tenants enforce a **hardcoded 12-hour inactivity timeout** on refresh tokens. Standard Entra ID tenants get 90 days; External ID does not, and the setting is not exposed anywhere.
 
 Symptom: after ~12 hours without opening the app, the next silent refresh fails with:
 
@@ -55,7 +55,7 @@ Microsoft Q&A (April 2026) confirms the timeout cannot be raised. Their document
 
 Two additional moving parts the design accounts for:
 
-- **MSAL iOS #2871** — federated users (Google / Apple — i.e., all Clique Pix users) hit `AADSTS500210` on `acquireTokenSilent` because MSAL targets the wrong authority URL. We detect this error code and route to Layer 5 rather than attempt an MSAL patch.
+- **MSAL iOS #2871** — federated users (Google / Apple — i.e., all CLIQUE Pix users) hit `AADSTS500210` on `acquireTokenSilent` because MSAL targets the wrong authority URL. We detect this error code and route to Layer 5 rather than attempt an MSAL patch.
 - **iOS silent push is opportunistic.** Apple throttles background pushes and will not wake a user-force-killed app or an app with Background App Refresh disabled. For those users, Layer 5 Welcome Back is the only recourse — documented, not hidden.
 
 ---
