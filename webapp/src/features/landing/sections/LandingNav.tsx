@@ -16,7 +16,7 @@ export function LandingNav() {
             className="w-8 h-8 rounded-lg shadow-md"
           />
           <span className="text-lg font-bold bg-gradient-primary bg-clip-text text-transparent">
-            Clique Pix
+            CLIQUE Pix
           </span>
           <BetaChip className="hidden sm:inline-flex" />
         </Link>

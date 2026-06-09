@@ -36,7 +36,7 @@ final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
 const _fcmNotificationDetails = NotificationDetails(
   android: AndroidNotificationDetails(
     'cliquepix_default',
-    'Clique Pix',
+    'CLIQUE Pix',
     channelDescription: 'Photo sharing notifications',
     importance: Importance.high,
     priority: Priority.high,
@@ -286,7 +286,7 @@ Future<void> performDeferredInit() async {
       await androidPlugin.createNotificationChannel(
         const AndroidNotificationChannel(
           'cliquepix_default',
-          'Clique Pix',
+          'CLIQUE Pix',
           description: 'Photo sharing notifications',
           importance: Importance.high,
         ),

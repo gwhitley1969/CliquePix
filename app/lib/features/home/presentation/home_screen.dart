@@ -386,7 +386,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ShaderMask(
               shaderCallback: (bounds) => AppGradients.primary.createShader(bounds),
               child: const Text(
-                'Welcome to\nClique Pix',
+                'Welcome to\nCLIQUE Pix',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 28,

@@ -128,7 +128,7 @@ async function authVerify(req: HttpRequest, context: InvocationContext): Promise
       if (!deleted) trackEvent('age_gate_entra_delete_failed', { oid });
       return errorResponse(
         'AGE_VERIFICATION_FAILED',
-        `You must be at least ${MIN_AGE} years old to use Clique Pix.`,
+        `You must be at least ${MIN_AGE} years old to use CLIQUE Pix.`,
         403,
       );
     }

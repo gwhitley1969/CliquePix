@@ -160,7 +160,7 @@ class InviteScreen extends ConsumerWidget {
                     child: InkWell(
                       onTap: () {
                         Share.share(
-                          'Join my clique "${clique.name}" on Clique Pix!\n$inviteUrl',
+                          'Join my clique "${clique.name}" on CLIQUE Pix!\n$inviteUrl',
                         );
                       },
                       borderRadius: BorderRadius.circular(14),

@@ -1,14 +1,14 @@
-# Clique Pix – Product Requirements Document (PRD)
+# CLIQUE Pix – Product Requirements Document (PRD)
 
 ## 1. Overview
 
-Clique Pix is a private, event-based photo sharing mobile application designed to allow small groups of people to instantly share photos during real-world moments.
+CLIQUE Pix is a private, event-based photo sharing mobile application designed to allow small groups of people to instantly share photos during real-world moments.
 
 The core value proposition:
 
 > Take a photo → Share it instantly with your group → Everyone gets it immediately → Save what you want → Everything else disappears.
 
-Clique Pix is NOT a social network. It is a **private, real-time group photo sharing experience**.
+CLIQUE Pix is NOT a social network. It is a **private, real-time group photo sharing experience**.
 
 ---
 
@@ -35,14 +35,14 @@ Primary:
 Secondary:
 - Mixed groups (friends, couples, events)
 
-**Minimum age: 13.** Verified at sign-up via a self-declared date of birth on the Entra External ID signup form. The DOB is stored on the Entra user principal (never in Clique Pix's product database) and emitted as a `dateOfBirth` claim on every access token. Clique Pix's backend reads the claim on first login (`POST /api/auth/verify`), computes age server-side, and either stamps `users.age_verified_at` on ≥13 or returns HTTP 403 + best-effort Microsoft Graph account deletion on <13. See `docs/ARCHITECTURE.md` §5, `docs/AGE_VERIFICATION_RUNBOOK.md`, and `website/privacy.html` §2.2 + §11.
+**Minimum age: 13.** Verified at sign-up via a self-declared date of birth on the Entra External ID signup form. The DOB is stored on the Entra user principal (never in CLIQUE Pix's product database) and emitted as a `dateOfBirth` claim on every access token. CLIQUE Pix's backend reads the claim on first login (`POST /api/auth/verify`), computes age server-side, and either stamps `users.age_verified_at` on ≥13 or returns HTTP 403 + best-effort Microsoft Graph account deletion on <13. See `docs/ARCHITECTURE.md` §5, `docs/AGE_VERIFICATION_RUNBOOK.md`, and `website/privacy.html` §2.2 + §11.
 
 ---
 
 ## 4. Core Concepts
 
 ### 4.1 Event
-A temporary shared photo session — the primary action in Clique Pix
+A temporary shared photo session — the primary action in CLIQUE Pix
 - Example: “Friday Night – Downtown”
 - Duration: 24 hours, 3 days, or 7 days (default)
 - Created first, then assigned to a Clique
@@ -231,9 +231,9 @@ Users can upload a headshot that replaces their initials everywhere in the app. 
 
 ### 5.16 Subscription & Free Trial
 
-Clique Pix is a subscription product. Every new user gets a **7-day free trial of the entire app** — no credit card, no commitment — starting at sign-up. When the trial ends, a paywall appears and a subscription is required to keep using the app.
+CLIQUE Pix is a subscription product. Every new user gets a **7-day free trial of the entire app** — no credit card, no commitment — starting at sign-up. When the trial ends, a paywall appears and a subscription is required to keep using the app.
 
-- **Clique Pix** — single subscription, two billing options:
+- **CLIQUE Pix** — single subscription, two billing options:
   - **Monthly:** $3.99 / month
   - **Annual:** $39.99 / year (2 months free vs. monthly), with a 7-day free trial for new subscribers
 - During the trial the full app works exactly as a paid subscription — create cliques and events, upload photos and videos, DMs, everything. The invite loop is preserved: someone invited to an event can sign in and immediately see it during their trial.
@@ -242,7 +242,7 @@ Clique Pix is a subscription product. Every new user gets a **7-day free trial o
 
 ### 5.17 Rate the App
 
-A gentle, well-timed prompt asks happy users to rate Clique Pix on the App Store / Google Play after they've shared a few times. A "Rate Clique Pix" option is always available in Profile. (No private in-app feedback channel in v1.)
+A gentle, well-timed prompt asks happy users to rate CLIQUE Pix on the App Store / Google Play after they've shared a few times. A "Rate CLIQUE Pix" option is always available in Profile. (No private in-app feedback channel in v1.)
 
 ---
 
@@ -322,10 +322,10 @@ Used for:
 
 ### 8.4 In-App Branded Header
 
-Every tab root (Home, Cliques, Notifications, Profile) shows a persistent "Clique Pix" brand ribbon above its section title:
+Every tab root (Home, Cliques, Notifications, Profile) shows a persistent "CLIQUE Pix" brand ribbon above its section title:
 
 - Rounded app-icon logo (56 × 56, 16 px corner radius) with a soft electric-aqua glow — smaller echo of the LoginScreen treatment.
-- "Clique Pix" wordmark (40 px, w700) in the primary brand gradient (`#00C2D1 → #2563EB → #7C3AED`) via `ShaderMask`.
+- "CLIQUE Pix" wordmark (40 px, w700) in the primary brand gradient (`#00C2D1 → #2563EB → #7C3AED`) via `ShaderMask`.
 - The per-screen section title ("Home" / "My Cliques" / "Notifications" / "Profile") sits below the wordmark in its own gradient (primary on Home/Cliques, blue→violet on Notifications, violet→pink on Profile), anchored to the bottom of the expanded header.
 - Each tab keeps its own accent wash behind the hero (aqua / deep blue / violet / pink) so tabs feel distinct while the wordmark unifies them.
 - Implemented as a single reusable widget (`app/lib/widgets/branded_sliver_app_bar.dart`) so the brand bar is changed in one place.
@@ -355,7 +355,7 @@ Design Rules:
 
 **Flutter** — single codebase for iOS and Android.
 
-Why Flutter for Clique Pix:
+Why Flutter for CLIQUE Pix:
 - Strong UI consistency across iOS & Android
 - Excellent for custom design systems
 - Better control over animations and gradients
@@ -451,7 +451,7 @@ Full technical detail: `docs/WEB_CLIENT_ARCHITECTURE.md`.
 
 ## 14. Summary
 
-Clique Pix v1.0 focuses on one core experience:
+CLIQUE Pix v1.0 focuses on one core experience:
 
 > Instant, private group photo sharing for real-life moments.
 

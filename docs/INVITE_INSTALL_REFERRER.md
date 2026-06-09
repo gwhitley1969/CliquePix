@@ -1,14 +1,14 @@
-# Clique Pix — Install-Aware QR Invites (Deferred Deep Linking)
+# CLIQUE Pix — Install-Aware QR Invites (Deferred Deep Linking)
 
 **Last Updated:** May 13, 2026
 
-This doc explains how Clique Pix QR-code invites bridge the "scanner doesn't have the app installed" gap. It complements `docs/ARCHITECTURE.md` (top-level system) and `docs/WEB_CLIENT_ARCHITECTURE.md` (web client design).
+This doc explains how CLIQUE Pix QR-code invites bridge the "scanner doesn't have the app installed" gap. It complements `docs/ARCHITECTURE.md` (top-level system) and `docs/WEB_CLIENT_ARCHITECTURE.md` (web client design).
 
 ---
 
 ## The Problem
 
-A Clique Pix user generates an invite QR encoding `https://clique-pix.com/invite/{inviteCode}`. The recipient scans it on a phone that doesn't have Clique Pix installed. Without deferred-deep-link plumbing, the recipient gets dropped on a web page with no install path, OR they install the app and then have to manually type/scan the invite code a second time.
+A CLIQUE Pix user generates an invite QR encoding `https://clique-pix.com/invite/{inviteCode}`. The recipient scans it on a phone that doesn't have CLIQUE Pix installed. Without deferred-deep-link plumbing, the recipient gets dropped on a web page with no install path, OR they install the app and then have to manually type/scan the invite code a second time.
 
 ## The Solution
 
@@ -39,7 +39,7 @@ When an unauthenticated user lands on `/invite/{code}`:
 
 1. `detectPlatform()` returns `'android' | 'ios' | 'desktop'` from `navigator.userAgent` (see `webapp/src/lib/platform.ts`).
 2. `<InstallBanner inviteCode={code} platform={platform} />` renders above the existing "Sign in to accept" CTA:
-   - **Android + Desktop:** shows "Get the full Clique Pix experience" + benefit bullets + a `<PlayStoreBadge>` whose `href` is `https://play.google.com/store/apps/details?id=com.cliquepix.clique_pix&referrer={URL-encoded invite_code=CODE}`.
+   - **Android + Desktop:** shows "Get the full CLIQUE Pix experience" + benefit bullets + a `<PlayStoreBadge>` whose `href` is `https://play.google.com/store/apps/details?id=com.cliquepix.clique_pix&referrer={URL-encoded invite_code=CODE}`.
    - **iOS:** same headline + bullets, but the badge is a `<TestFlightBadge>` pointing at `https://testflight.apple.com/join/hWznNvJ6`. A small caption underneath reads *"iOS is in public beta on TestFlight. After installing, tap your invite link again to join the Clique."* — sets the right expectation since iOS has no deferred-deep-link path post-install.
 3. The existing "Sign in to accept" CTA stays exactly where it was. It's the explicit no-install alternative — anyone can join entirely on the web without ever touching a mobile app.
 
@@ -121,8 +121,8 @@ The pending invite code must survive process death between the referrer-read (fi
 3. InstallBanner renders with TestFlightBadge + retap caption
 4. User taps badge → opens https://testflight.apple.com/join/hWznNvJ6 in Safari
 5. If TestFlight app NOT installed: prompt to install TestFlight from App Store
-6. TestFlight app opens → "Accept" Clique Pix beta → install
-7. User opens Clique Pix → signs in → lands on Home (no invite code preserved)
+6. TestFlight app opens → "Accept" CLIQUE Pix beta → install
+7. User opens CLIQUE Pix → signs in → lands on Home (no invite code preserved)
 8. User retaps original invite link from Messages / wherever Person A shared it
 9. Safari sees `clique-pix.com/invite/{code}` cross-domain navigation from Messages
    ↓ Universal Link via .well-known/apple-app-site-association fires
@@ -134,7 +134,7 @@ The pending invite code must survive process death between the referrer-read (fi
 
 - **No deferred-deep-link.** No Apple equivalent of Play Install Referrer; the invite code is NOT carried through the TestFlight install.
 - **Retap requirement.** User MUST retap the invite link AFTER install to trigger Universal Link routing. The in-banner caption tells them this explicitly.
-- **TestFlight requires the TestFlight app.** First-time iOS testers install the TestFlight app from the App Store before they can install Clique Pix. ~2 taps of additional friction.
+- **TestFlight requires the TestFlight app.** First-time iOS testers install the TestFlight app from the App Store before they can install CLIQUE Pix. ~2 taps of additional friction.
 
 ### TestFlight URL constant
 
@@ -199,7 +199,7 @@ adb shell am broadcast \
 # 3. Open the app, sign in. Expect: lands on /invite/TESTCODE123 → JoinCliqueScreen.
 ```
 
-If you need a real invite code instead of a fake one, generate it from another device's Clique Pix install (Cliques → invite → copy code) and use it in the broadcast.
+If you need a real invite code instead of a fake one, generate it from another device's CLIQUE Pix install (Cliques → invite → copy code) and use it in the broadcast.
 
 ### Real Play Store install
 

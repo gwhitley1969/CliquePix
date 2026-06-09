@@ -6,7 +6,7 @@ export function Footer() {
         <div className="flex items-center gap-3">
           <img src="/assets/icon.png" alt="" className="w-8 h-8 rounded-lg" />
           <div>
-            <div className="text-sm font-semibold text-white">Clique Pix</div>
+            <div className="text-sm font-semibold text-white">CLIQUE Pix</div>
             <div className="text-xs text-white/50">Private event photo and video sharing</div>
           </div>
         </div>
@@ -23,7 +23,7 @@ export function Footer() {
           </a>
         </nav>
 
-        <div className="text-xs text-white/40">© {year} Clique Pix</div>
+        <div className="text-xs text-white/40">© {year} CLIQUE Pix</div>
       </div>
     </footer>
   );

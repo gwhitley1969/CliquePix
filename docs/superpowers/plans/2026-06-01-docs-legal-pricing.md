@@ -57,7 +57,7 @@ Under **Build These** (at the end of that section, after the Avatars block), add
 
 Add a one-liner near the Notifications/feedback area:
 ```markdown
-- **Store review prompts:** native `in_app_review` `requestReview()` fires after the user's 3rd successful media upload (cross-session), frequency-capped at 120 days, availability-gated, never on an error or paywall path. Manual "Rate Clique Pix" tile in Profile uses `openStoreListing(appStoreId: 6766294274)`.
+- **Store review prompts:** native `in_app_review` `requestReview()` fires after the user's 3rd successful media upload (cross-session), frequency-capped at 120 days, availability-gated, never on an error or paywall path. Manual "Rate CLIQUE Pix" tile in Profile uses `openStoreListing(appStoreId: 6766294274)`.
 ```
 
 - [ ] **Step 4: Commit**
@@ -80,9 +80,9 @@ After §5.15 (Privacy & Controls), add:
 ```markdown
 ### 5.16 Subscription & Free Trial
 
-Clique Pix is a subscription product. Every new user gets a **7-day free trial of the entire app** — no credit card, no commitment — starting at sign-up. When the trial ends, a paywall appears and a subscription is required to keep using the app.
+CLIQUE Pix is a subscription product. Every new user gets a **7-day free trial of the entire app** — no credit card, no commitment — starting at sign-up. When the trial ends, a paywall appears and a subscription is required to keep using the app.
 
-- **Clique Pix Plus** — single plan, two billing options:
+- **CLIQUE Pix Plus** — single plan, two billing options:
   - **Monthly:** $3.99 / month
   - **Annual:** $39.99 / year (2 months free vs. monthly), with a 7-day free trial for new subscribers
 - During the trial the full app works exactly as a paid subscription — create cliques and events, upload photos and videos, DMs, everything. The invite loop is preserved: someone invited to an event can sign in and immediately see it during their trial.
@@ -91,7 +91,7 @@ Clique Pix is a subscription product. Every new user gets a **7-day free trial o
 
 ### 5.17 Rate the App
 
-A gentle, well-timed prompt asks happy users to rate Clique Pix on the App Store / Google Play after they've shared a few times. A "Rate Clique Pix" option is always available in Profile. (No private in-app feedback channel in v1.)
+A gentle, well-timed prompt asks happy users to rate CLIQUE Pix on the App Store / Google Play after they've shared a few times. A "Rate CLIQUE Pix" option is always available in Profile. (No private in-app feedback channel in v1.)
 ```
 
 - [ ] **Step 2: Update §13 Future Roadmap**
@@ -177,7 +177,7 @@ Add a new numbered section (match the page's existing `<section>`/heading markup
 ```html
 <h2>Subscriptions &amp; Billing Data</h2>
 <p>
-  Clique Pix offers an auto-renewable subscription, Clique Pix Plus
+  CLIQUE Pix offers an auto-renewable subscription, CLIQUE Pix Plus
   ($3.99/month or $39.99/year), after a 7-day free trial. We use
   <a href="https://www.revenuecat.com/privacy/" target="_blank" rel="noreferrer">RevenueCat</a>
   as a subprocessor to manage subscription state. Payment is processed by Apple
@@ -208,7 +208,7 @@ Add a new numbered section with the Apple/Google-required disclosures verbatim:
 ```html
 <h2>Subscriptions</h2>
 <p>
-  Clique Pix requires a subscription after a 7-day free trial. Clique Pix Plus
+  CLIQUE Pix requires a subscription after a 7-day free trial. CLIQUE Pix Plus
   is offered as a monthly subscription at $3.99 per month, or an annual
   subscription at $39.99 per year. New annual subscribers receive a 7-day free
   trial; the monthly plan is billed immediately.
@@ -242,7 +242,7 @@ Expected: hits in personal tracking docs and the base plan.
 
 - [ ] **Step 2: Update each canonical reference to $39.99**
 
-For every hit that refers to the **annual** Clique Pix Plus price (NOT unrelated numbers), change `$29.99` → `$39.99`. Notable known locations: `docs/GENE.md` (Phase 1a/1c lines), `~/.claude/plans/okay-this-is-what-inherited-deer.md` (Decisions table + Phase 1 + Phase 5). Leave the **monthly** $3.99 untouched. Do not touch `webapp/dist/` build output.
+For every hit that refers to the **annual** CLIQUE Pix Plus price (NOT unrelated numbers), change `$29.99` → `$39.99`. Notable known locations: `docs/GENE.md` (Phase 1a/1c lines), `~/.claude/plans/okay-this-is-what-inherited-deer.md` (Decisions table + Phase 1 + Phase 5). Leave the **monthly** $3.99 untouched. Do not touch `webapp/dist/` build output.
 
 > The base plan + GENE.md live partly outside the repo (`~/.claude/plans/`); update the in-repo `docs/GENE.md` copy. The RevenueCat/App Store Connect product price is changed in the **dashboard** (ops step below), not in code.
 
@@ -255,7 +255,7 @@ git commit -m "docs: annual price $29.99 -> $39.99 across references"
 
 - [ ] **Step 4 (ops, Gene): change the store-side price**
 
-In App Store Connect → Clique Pix → Subscriptions → `plus_annual`, change the price from $29.99 to $39.99 BEFORE submitting (it's "Ready to Submit," not live). When the Play subscription is created, set it to $39.99 from the start. Verify RevenueCat re-imports the new price.
+In App Store Connect → CLIQUE Pix → Subscriptions → `plus_annual`, change the price from $29.99 to $39.99 BEFORE submitting (it's "Ready to Submit," not live). When the Play subscription is created, set it to $39.99 from the start. Verify RevenueCat re-imports the new price.
 
 ---
 

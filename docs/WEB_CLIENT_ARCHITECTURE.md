@@ -1,11 +1,11 @@
-# Clique Pix Web Client — Architecture
+# CLIQUE Pix Web Client — Architecture
 
 Source of truth for the web client's technical architecture. When code and this doc disagree, fix whichever is wrong — don't let the gap persist.
 
 ## 1. At a glance
 
 - **Framework**: React 18 + Vite 5 + TypeScript 5
-- **Styling**: Tailwind CSS mapped to the Clique Pix design tokens in `styles/tokens.css`
+- **Styling**: Tailwind CSS mapped to the CLIQUE Pix design tokens in `styles/tokens.css`
 - **Primitives**: Radix UI (Dialog, Dropdown, Toast, Tabs)
 - **Routing**: React Router v6 (`createBrowserRouter`)
 - **State**: TanStack Query for server state, Zustand for UI state, MSAL.js for auth state

@@ -126,12 +126,12 @@ class ProfileScreen extends ConsumerWidget {
                       _SettingsTile(
                         icon: Icons.info_outline_rounded,
                         iconColors: [AppColors.electricAqua, AppColors.deepBlue],
-                        title: 'About Clique Pix',
+                        title: 'About CLIQUE Pix',
                         onTap: () {
                           showDialog<void>(
                             context: context,
                             builder: (ctx) => AlertDialog(
-                              title: const Text('Clique Pix'),
+                              title: const Text('CLIQUE Pix'),
                               content: const Column(
                                 mainAxisSize: MainAxisSize.min,
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -228,7 +228,7 @@ class ProfileScreen extends ConsumerWidget {
                                     await launchUrl(
                                       Uri.parse(
                                         'mailto:$_supportEmail'
-                                        '?subject=${Uri.encodeComponent('Clique Pix Support')}',
+                                        '?subject=${Uri.encodeComponent('CLIQUE Pix Support')}',
                                       ),
                                       mode: LaunchMode.externalApplication,
                                     );
@@ -246,7 +246,7 @@ class ProfileScreen extends ConsumerWidget {
                       _SettingsTile(
                         icon: Icons.star_outline_rounded,
                         iconColors: const [Color(0xFFFBBF24), AppColors.electricAqua],
-                        title: 'Rate Clique Pix',
+                        title: 'Rate CLIQUE Pix',
                         showDivider: false,
                         onTap: () => ReviewPromptService.openStoreListing(
                           appStoreId: '6766294274',

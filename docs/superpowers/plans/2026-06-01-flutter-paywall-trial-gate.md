@@ -68,7 +68,7 @@ class RevenueCatConstants {
   /// The offering identifier configured in the RevenueCat dashboard.
   static const String offeringId = 'default';
 
-  /// The entitlement identifier gating Clique Pix Plus.
+  /// The entitlement identifier gating CLIQUE Pix Plus.
   static const String entitlementId = 'plus';
 }
 ```

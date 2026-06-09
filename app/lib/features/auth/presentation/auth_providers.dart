@@ -243,7 +243,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
           await _repository.resetSession();
           final serverMessage = err?['message'] as String?;
           state = AuthError(
-            serverMessage ?? 'You must be at least 13 years old to use Clique Pix.',
+            serverMessage ?? 'You must be at least 13 years old to use CLIQUE Pix.',
           );
           return;
         }

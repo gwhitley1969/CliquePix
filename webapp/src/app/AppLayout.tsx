@@ -36,7 +36,7 @@ export function AppLayout() {
     <div className="min-h-full flex flex-col md:flex-row">
       <header className="md:hidden flex items-center justify-between px-4 py-3 bg-dark-surface border-b border-white/10">
         <span className="text-lg font-bold bg-gradient-primary bg-clip-text text-transparent">
-          Clique Pix
+          CLIQUE Pix
         </span>
         <button
           onClick={() => navigate('/notifications')}
@@ -55,7 +55,7 @@ export function AppLayout() {
       <aside className="hidden md:flex md:w-56 flex-col bg-dark-surface border-r border-white/10 py-6 px-3">
         <div className="px-3 pb-6">
           <span className="text-xl font-bold bg-gradient-primary bg-clip-text text-transparent">
-            Clique Pix
+            CLIQUE Pix
           </span>
         </div>
         <nav className="flex-1 space-y-1">

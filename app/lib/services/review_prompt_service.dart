@@ -65,7 +65,7 @@ class ReviewPromptService {
     }
   }
 
-  /// Manual path from the Profile "Rate Clique Pix" tile. Always opens the
+  /// Manual path from the Profile "Rate CLIQUE Pix" tile. Always opens the
   /// store listing (not throttled). [appStoreId] is the numeric App Store ID.
   static Future<void> openStoreListing(
       {required String appStoreId,

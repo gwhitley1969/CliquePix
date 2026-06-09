@@ -43,7 +43,7 @@ export function UseCases() {
               Perfect for the moments that matter
             </h2>
             <p className="mt-3 text-white/60">
-              Anywhere you'd make a small group chat just to share photos — Clique Pix is
+              Anywhere you'd make a small group chat just to share photos — CLIQUE Pix is
               already better.
             </p>
           </div>

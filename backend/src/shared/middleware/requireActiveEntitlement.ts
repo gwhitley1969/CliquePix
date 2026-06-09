@@ -5,7 +5,7 @@ import { SubscriptionRequiredError } from '../utils/errors';
 // Entitlement gate
 // ============================================================================
 // Throws SubscriptionRequiredError (HTTP 402) if the authenticated user has
-// no active Clique Pix subscription. Call immediately after
+// no active CLIQUE Pix subscription. Call immediately after
 // authenticateRequest(req) on any handler that should be paywalled.
 //
 // Ungated endpoints (per docs/PAYWALL_ARCHITECTURE.md):

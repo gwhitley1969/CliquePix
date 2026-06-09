@@ -10,7 +10,7 @@ import { Footer } from './sections/Footer';
 
 export function LandingPage() {
   useEffect(() => {
-    document.title = 'Clique Pix — Private photo sharing for real-life moments';
+    document.title = 'CLIQUE Pix — Private photo sharing for real-life moments';
   }, []);
 
   return (

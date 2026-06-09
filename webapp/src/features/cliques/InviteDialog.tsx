@@ -39,8 +39,8 @@ export function InviteDialog({
     if (navigator.share) {
       try {
         await navigator.share({
-          title: `Join ${cliqueName} on Clique Pix`,
-          text: `Join ${cliqueName} on Clique Pix`,
+          title: `Join ${cliqueName} on CLIQUE Pix`,
+          text: `Join ${cliqueName} on CLIQUE Pix`,
           url,
         });
       } catch {

@@ -142,7 +142,7 @@ class _CliquePixState extends ConsumerState<CliquePix> {
     }
 
     return MaterialApp.router(
-      title: 'Clique Pix',
+      title: 'CLIQUE Pix',
       theme: AppTheme.dark,
       routerConfig: router,
       debugShowCheckedModeBanner: false,

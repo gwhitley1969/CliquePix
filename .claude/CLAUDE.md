@@ -1,8 +1,8 @@
-# CLAUDE.md – Clique Pix Development Guardrails
+# CLAUDE.md – CLIQUE Pix Development Guardrails
 
 ## What This File Is
 
-This is the authoritative reference for Claude Code while developing Clique Pix. When any question arises about scope, architecture, patterns, or priorities — this file wins. Read it before generating code, making architectural decisions, or suggesting features.
+This is the authoritative reference for Claude Code while developing CLIQUE Pix. When any question arises about scope, architecture, patterns, or priorities — this file wins. Read it before generating code, making architectural decisions, or suggesting features.
 
 If anything in this file conflicts with PRD.md or ARCHITECTURE.md, this file takes precedence for development decisions. Raise the conflict so the other docs can be updated.
 
@@ -10,7 +10,7 @@ If anything in this file conflicts with PRD.md or ARCHITECTURE.md, this file tak
 
 ## Product Identity
 
-Clique Pix is a **private, event-based photo and video sharing** mobile app. Users create Cliques (persistent groups), start Events (temporary media sessions), and share photos and videos that auto-expire from the cloud.
+CLIQUE Pix is a **private, event-based photo and video sharing** mobile app. Users create Cliques (persistent groups), start Events (temporary media sessions), and share photos and videos that auto-expire from the cloud.
 
 **It is not** a social network, messaging app, content discovery platform, or photo editing suite.
 
@@ -111,7 +111,7 @@ If a feature does not directly support one of these loops, it does not belong in
 - Mobile: `purchases_flutter` + `purchases_ui_flutter` (Paywalls v2). Router gates on `effective_active`; only `/paywall` + `/profile` reachable without access. Web: gated routes show "subscribe in the mobile app" (no Stripe in v1).
 - Reviewer + beta testers: RevenueCat **Promotional** entitlement grants (no DB override).
 - **Guardrail: do NOT regress to a free tier or remove the paywall without explicit product approval.** Monetization is now a v1 product requirement, not a future consideration.
-- **Store review prompts:** native `in_app_review` `requestReview()` fires after the user's 3rd successful media upload (cross-session), frequency-capped at 120 days, availability-gated, never on an error or paywall path. Manual "Rate Clique Pix" tile in Profile uses `openStoreListing(appStoreId: 6766294274)`.
+- **Store review prompts:** native `in_app_review` `requestReview()` fires after the user's 3rd successful media upload (cross-session), frequency-capped at 120 days, availability-gated, never on an error or paywall path. Manual "Rate CLIQUE Pix" tile in Profile uses `openStoreListing(appStoreId: 6766294274)`.
 
 ### Do Not Build
 
@@ -168,7 +168,7 @@ Do not introduce dependencies not listed here without discussing the tradeoff fi
 ### Web Client
 
 - **Framework:** React 18 + Vite 5 + TypeScript 5
-- **Styling:** Tailwind CSS with CSS variables mapped to the Clique Pix design tokens (Electric Aqua / Deep Blue / Violet Accent palette matches mobile)
+- **Styling:** Tailwind CSS with CSS variables mapped to the CLIQUE Pix design tokens (Electric Aqua / Deep Blue / Violet Accent palette matches mobile)
 - **Primitives:** Radix UI (Dialog, Dropdown, Toast, Tabs)
 - **Routing:** React Router v6 (`createBrowserRouter`)
 - **State:** `@tanstack/react-query` for server state, Zustand for UI state
@@ -571,7 +571,7 @@ Key code: `decideAgeGate` / `extractDobFromClaims` (GUID-prefixed `extension_<b2
 
 ### Optimistic authentication on cold start (user-facing contract)
 
-Clique Pix does not block its UI on a network call at launch. Ever. `main.dart` reads the access token + cached `UserModel` from secure storage before `runApp` and seeds `AuthNotifier`'s state. Returning users with a valid cached session see Events as the first frame. First-time users see LoginScreen with a fully enabled "Get Started" button as the first frame. Background verification runs concurrently via `_verifyInBackground` (8s timeout) — on session-expired failures it emits `AuthReloginRequired`, which the router surfaces as the `WelcomeBackDialog`.
+CLIQUE Pix does not block its UI on a network call at launch. Ever. `main.dart` reads the access token + cached `UserModel` from secure storage before `runApp` and seeds `AuthNotifier`'s state. Returning users with a valid cached session see Events as the first frame. First-time users see LoginScreen with a fully enabled "Get Started" button as the first frame. Background verification runs concurrently via `_verifyInBackground` (8s timeout) — on session-expired failures it emits `AuthReloginRequired`, which the router surfaces as the `WelcomeBackDialog`.
 
 **Hard rule:** no splash screen, no "checking auth" state blocking the UI, no path through the auth code that can leave the user staring at a loading indicator for more than 15 seconds. The escape-hatch UI on LoginScreen ("Having trouble? Sign in with a different account") appears after 15 seconds of sign-in spinner and calls `AuthNotifier.resetAndSignIn()` which clears the MSAL cache and restarts interactive auth.
 
@@ -729,7 +729,7 @@ Serve from Azure Front Door or a simple static web app. Static JSON files that r
 
 1. **App installed:** App Link / Universal Link routes directly into the app, lands on invite acceptance screen, calls `POST /api/cliques/_/join` with the invite code in the body.
 2. **App not installed (Android):** Chrome opens `clique-pix.com/invite/{code}` → `InstallBanner` renders with a "Get on Google Play" badge whose URL carries `?referrer=invite_code%3D{code}` → user installs from Play → on first launch the Flutter app reads the Play Install Referrer via `play_install_referrer` (in `app/lib/services/install_referrer_service.dart`), persists the code to SharedPreferences key `install_referrer_pending_invite_code`, and `_CliquePixState._consumePendingInstallReferrerInvite` (in `app/lib/app/app.dart`) routes to `/invite/{code}` after the first `AuthAuthenticated` transition. JoinCliqueScreen completes the join. See `docs/INVITE_INSTALL_REFERRER.md`.
-3. **App not installed (iOS):** Safari opens `clique-pix.com/invite/{code}` → in-page install banner renders with a TestFlight badge pointing at `https://testflight.apple.com/join/hWznNvJ6` (Clique Pix is TestFlight-only until App Store review approves the public listing; Apple ID `6766294274`, bundle `com.cliquepix.app`) → user installs via TestFlight → on first launch, no invite code is preserved (iOS has no Play Install Referrer equivalent), so the in-banner caption directs the user to re-tap the original invite link from Messages / wherever it was shared. Universal Link then routes into the freshly-installed app. When the public App Store listing goes live, activate Phase C-final per `docs/INVITE_INSTALL_REFERRER.md` (Smart App Banner meta tag in `webapp/index.html` + `app-argument` rewrite) so the invite code rides into the app via `NSUserActivity.webpageURL` on the post-install "OPEN" tap.
+3. **App not installed (iOS):** Safari opens `clique-pix.com/invite/{code}` → in-page install banner renders with a TestFlight badge pointing at `https://testflight.apple.com/join/hWznNvJ6` (CLIQUE Pix is TestFlight-only until App Store review approves the public listing; Apple ID `6766294274`, bundle `com.cliquepix.app`) → user installs via TestFlight → on first launch, no invite code is preserved (iOS has no Play Install Referrer equivalent), so the in-banner caption directs the user to re-tap the original invite link from Messages / wherever it was shared. Universal Link then routes into the freshly-installed app. When the public App Store listing goes live, activate Phase C-final per `docs/INVITE_INSTALL_REFERRER.md` (Smart App Banner meta tag in `webapp/index.html` + `app-argument` rewrite) so the invite code rides into the app via `NSUserActivity.webpageURL` on the post-install "OPEN" tap.
 4. **Web-only path:** anyone can join entirely on the web by signing in via the existing "Sign in to accept" CTA — no install ever required.
 
 ---

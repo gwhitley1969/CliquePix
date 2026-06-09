@@ -25,7 +25,7 @@ String friendlyApiErrorMessage(Object err, {required String resourceLabel}) {
     if (err.type == DioExceptionType.connectionTimeout ||
         err.type == DioExceptionType.receiveTimeout ||
         err.type == DioExceptionType.connectionError) {
-      return "Couldn't reach Clique Pix. Check your connection and try again.";
+      return "Couldn't reach CLIQUE Pix. Check your connection and try again.";
     }
     if (code != null && code >= 500) {
       return 'Something went wrong on our end. Please try again in a moment.';

@@ -1,6 +1,6 @@
 # GENE.md — Paywall Rollout Punch List
 
-Personal tracking file for Gene. Pick up here when resuming the Clique Pix paywall implementation.
+Personal tracking file for Gene. Pick up here when resuming the CLIQUE Pix paywall implementation.
 
 Full plan lives at `C:\Users\genew\.claude\plans\okay-this-is-what-inherited-deer.md`.
 
@@ -16,7 +16,7 @@ Last updated **2026-06-02** — backend deployed live + most RevenueCat/Azure co
 
 ## Where we are RIGHT NOW — next clicks for Gene (all dashboard/store, no code)
 
-1. ~~Publish + attach the paywall~~ **✅ DONE 2026-06-03** — `pw9ac01d9e31184633` published + attached to `default`. Subscription also renamed "Clique Pix Plus" → "Clique Pix" across legal pages, web, paywall, and App Store Connect (no free tier, so "Plus" was misleading).
+1. ~~Publish + attach the paywall~~ **✅ DONE 2026-06-03** — `pw9ac01d9e31184633` published + attached to `default`. Subscription also renamed "CLIQUE Pix Plus" → "CLIQUE Pix" across legal pages, web, paywall, and App Store Connect (no free tier, so "Plus" was misleading).
 2. **Verify Transfer Behavior = "Keep with previous App User ID"** (Project Settings → General). The API can't read it.
 3. ~~Fix test-store prices~~ **WON'T FIX (2026-06-03)** — RevenueCat Test Store prices are **immutable once set** (greyed in dashboard, create-only API, no update/delete endpoint). Sandbox-only; real App Store prices already correct at $3.99/$39.99, so zero user impact.
 4. **Submit** both IAPs (still `READY_TO_SUBMIT`) on the app version page.
@@ -29,7 +29,7 @@ Last updated **2026-06-02** — backend deployed live + most RevenueCat/Azure co
 ## Phase 1a — App Store Connect ✅ DONE
 
 - ✅ Paid Apps Agreement Active
-- ✅ Subscription Group: `Clique Pix` (renamed from "Clique Pix Plus" 2026-06-03 — no free tier, so "Plus" was misleading)
+- ✅ Subscription Group: `CLIQUE Pix` (renamed from "CLIQUE Pix Plus" 2026-06-03 — no free tier, so "Plus" was misleading)
 - ✅ `plus_monthly` Ready to Submit ($3.99 / mo, Family Sharing OFF, 5 English-speaking countries)
 - ✅ `plus_annual` Ready to Submit ($39.99 / yr, 7-day free trial intro offer, Family Sharing OFF)
 - ✅ App Store Connect API key (`AuthKey_TP9C6PA769.p8` in `secrets/`)
@@ -48,7 +48,7 @@ Last updated **2026-06-02** — backend deployed live + most RevenueCat/Azure co
 
 ### Apple paste-back still owed (after RC webhook URL is generated)
 
-- [ ] App Store Connect → My Apps → Clique Pix → App Information → **App Store Server Notifications V2**
+- [ ] App Store Connect → My Apps → CLIQUE Pix → App Information → **App Store Server Notifications V2**
   - Production Server URL: paste RC's URL
   - Sandbox Server URL: paste the SAME RC URL
   - Version: V2 (not V1 / legacy)
@@ -90,10 +90,10 @@ Tax is verified, so these are moot: the IRS-147c call (`800-829-4933`, EIN name-
 
 ### Done
 
-- ✅ RevenueCat account + project `Clique Pix` (project ID `04f5314d`)
+- ✅ RevenueCat account + project `CLIQUE Pix` (project ID `04f5314d`)
 - ✅ Entitlement `plus` created (verified)
 - ✅ Offering `default` created (Monthly + Yearly packages; Lifetime removed)
-- ✅ iOS app `Clique Pix (App Store)` connected
+- ✅ iOS app `CLIQUE Pix (App Store)` connected
   - Subscription Key uploaded (Key ID `7K28U2Z2B2`)
   - App Store Connect API Key uploaded (Key ID `TP9C6PA769`)
   - Issuer ID populated
@@ -110,7 +110,7 @@ Tax is verified, so these are moot: the IRS-147c call (`800-829-4933`, EIN name-
 - [x] **Webhook configured** → `https://api.clique-pix.com/api/internal/revenuecat-webhook`, `Bearer <secret>` (secret in Key Vault). Verified **200**. *(`whintgr721b9e5264`)*
 - [x] **Secret API Key** generated → Key Vault `revenuecat-secret-api-key`.
 - [x] **iOS public SDK key** captured → `appl_OvhNypnojnQSEebpQtBikJYTHBa`. *(still must land in `app/lib/core/constants/revenuecat_constants.dart`, Phase 3)*
-- [x] **Paywalls v2 paywall** `pw9ac01d9e31184633` — **published + attached to `default` offering 2026-06-03.** Headline "Subscribe to Clique Pix"; Terms/Privacy buttons → `clique-pix.com/docs/*`.
+- [x] **Paywalls v2 paywall** `pw9ac01d9e31184633` — **published + attached to `default` offering 2026-06-03.** Headline "Subscribe to CLIQUE Pix"; Terms/Privacy buttons → `clique-pix.com/docs/*`.
 
 ### Android side (do after Google Play Payments is Active and service account ready)
 
@@ -209,7 +209,7 @@ Original checklist (all implemented unless noted above):
 Required by Apple Guideline 3.1.2 + Google Play Subscriptions policy. Must ship to `clique-pix.com` BEFORE App Store / Play Store review. **Files are `webapp/public/docs/*` (not `website/docs/*`).**
 
 - [x] `webapp/public/docs/privacy.html`: subscription/billing data section + RevenueCat subprocessor link (commit `432e4f5`).
-- [x] `webapp/public/docs/terms.html`: subscription terms — Clique Pix Plus, $3.99/$39.99, 7-day trial, auto-renew/charge/cancel disclosures (commit `83aaafd`). Effective dates bumped to 2026-06-02.
+- [x] `webapp/public/docs/terms.html`: subscription terms — CLIQUE Pix Plus, $3.99/$39.99, 7-day trial, auto-renew/charge/cancel disclosures (commit `83aaafd`). Effective dates bumped to 2026-06-02.
 - [x] **Deploy webapp via GH Actions** (= PLAN.md Task 7) — **✅ DONE 2026-06-03; live + verified at `clique-pix.com/docs/*` (App Store URL-check requirement met).**
 
 ---

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document defines the **approved architecture and implementation direction** for adding **event-centric, ephemeral direct messaging (DM)** to Clique Pix.
+This document defines the **approved architecture and implementation direction** for adding **event-centric, ephemeral direct messaging (DM)** to CLIQUE Pix.
 
 This file is intended to be handed directly to Claude Code.
 
@@ -13,7 +13,7 @@ Claude Code should **implement against this document**, not invent a different m
 
 ## Why This Document Exists
 
-Clique Pix was originally scoped as a private, event-based photo sharing app. Direct messaging was explicitly out of scope for v1 in the current docs.
+CLIQUE Pix was originally scoped as a private, event-based photo sharing app. Direct messaging was explicitly out of scope for v1 in the current docs.
 
 That has changed.
 
@@ -27,7 +27,7 @@ This feature materially changes the app architecture, data model, notification m
 
 ### DM model
 
-Direct messaging in Clique Pix is now defined as:
+Direct messaging in CLIQUE Pix is now defined as:
 
 - **1:1 only** in this phase
 - **event-centric**
@@ -60,13 +60,13 @@ Approved behavior:
 - After a **24-hour grace period**, the thread and all its messages are **hard deleted**
 - No indefinite message retention
 
-This keeps DMs aligned with Clique Pix's event-first and ephemeral product identity.
+This keeps DMs aligned with CLIQUE Pix's event-first and ephemeral product identity.
 
 ---
 
 ## Important Product Boundary
 
-This feature must **not** turn Clique Pix into a general messaging app.
+This feature must **not** turn CLIQUE Pix into a general messaging app.
 
 Do **not** implement any of the following in this phase:
 
@@ -818,7 +818,7 @@ After implementation direction is accepted, update these existing docs to remove
 - `.claude/CLAUDE.md`
 - `docs/DEPLOYMENT_STATUS.md`
 
-The current docs explicitly position Clique Pix as non-messaging and defer Web PubSub/Service Bus. Those statements will become stale once this DM feature is accepted.
+The current docs explicitly position CLIQUE Pix as non-messaging and defer Web PubSub/Service Bus. Those statements will become stale once this DM feature is accepted.
 
 ---
 

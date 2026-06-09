@@ -1,8 +1,8 @@
-# ARCHITECTURE.md – Clique Pix v1
+# ARCHITECTURE.md – CLIQUE Pix v1
 
 ## Purpose
 
-This document defines the technical architecture for **Clique Pix v1**, a private, event-based group photo sharing mobile application.
+This document defines the technical architecture for **CLIQUE Pix v1**, a private, event-based group photo sharing mobile application.
 
 The architecture is designed to support the v1 product goals:
 - fast private photo sharing
@@ -47,7 +47,7 @@ Everything in the architecture must support this loop:
 
 **Flutter** — single codebase for iOS and Android.
 
-Why Flutter for Clique Pix:
+Why Flutter for CLIQUE Pix:
 - strong visual consistency across platforms
 - better control over branded UI, gradients, and animations
 - excellent fit for a consumer app where look and feel are the product
@@ -162,7 +162,7 @@ Supports:
 
 ## Age gate (13+)
 
-Sign-up enforces a 13+ age gate via claim-based backend validation. The Entra External ID `SignUpSignIn` user flow collects `dateOfBirth` as a required custom attribute once on first sign-up; Entra emits it on every subsequent access token as a Directory schema extension claim (`extension_<b2cAppId>_dateOfBirth`). Our backend (`authVerify` in `backend/src/functions/auth.ts`) reads the claim on first login, computes age via `ageUtils.calculateAge`, and branches: **≥13** upserts the user with `age_verified_at = NOW()` and fires `age_gate_passed`; **<13** returns HTTP 403 `AGE_VERIFICATION_FAILED`, fires `age_gate_denied_under_13`, and best-effort deletes the Entra account via `deleteEntraUserByOid` (`backend/src/shared/auth/entraGraphClient.ts`) using the Function App's managed identity against Microsoft Graph. Returning users are never re-prompted — Entra holds DOB, the claim rides the token, and `authVerify`'s user upsert uses `COALESCE` to preserve the original `age_verified_at`. Clique Pix's Postgres stores only the verification timestamp, never DOB. See `docs/AGE_VERIFICATION_RUNBOOK.md` for the full runbook + the Deprecated appendix documenting why the Custom Authentication Extension approach (MAB's pattern) was abandoned: Microsoft's own migration docs state *"Age gating isn't currently supported in Microsoft Entra External ID"*, and we hit days of opaque "Something went wrong" failures before pivoting.
+Sign-up enforces a 13+ age gate via claim-based backend validation. The Entra External ID `SignUpSignIn` user flow collects `dateOfBirth` as a required custom attribute once on first sign-up; Entra emits it on every subsequent access token as a Directory schema extension claim (`extension_<b2cAppId>_dateOfBirth`). Our backend (`authVerify` in `backend/src/functions/auth.ts`) reads the claim on first login, computes age via `ageUtils.calculateAge`, and branches: **≥13** upserts the user with `age_verified_at = NOW()` and fires `age_gate_passed`; **<13** returns HTTP 403 `AGE_VERIFICATION_FAILED`, fires `age_gate_denied_under_13`, and best-effort deletes the Entra account via `deleteEntraUserByOid` (`backend/src/shared/auth/entraGraphClient.ts`) using the Function App's managed identity against Microsoft Graph. Returning users are never re-prompted — Entra holds DOB, the claim rides the token, and `authVerify`'s user upsert uses `COALESCE` to preserve the original `age_verified_at`. CLIQUE Pix's Postgres stores only the verification timestamp, never DOB. See `docs/AGE_VERIFICATION_RUNBOOK.md` for the full runbook + the Deprecated appendix documenting why the Custom Authentication Extension approach (MAB's pattern) was abandoned: Microsoft's own migration docs state *"Age gating isn't currently supported in Microsoft Entra External ID"*, and we hit days of opaque "Something went wrong" failures before pivoting.
 
 ## Token Acquisition (MSAL)
 
@@ -746,7 +746,7 @@ Android 8.0+ requires notification channels. Created programmatically in `main.d
 
 ```
 Channel ID: cliquepix_default
-Name: Clique Pix
+Name: CLIQUE Pix
 Description: Photo sharing notifications
 Importance: HIGH (heads-up banners)
 ```
@@ -915,7 +915,7 @@ Unauthenticated users hitting `/invite/{code}` are redirected to `/login?redirec
 ## Flow
 
 1. **App installed + verified:** OS intercepts URL → app opens → `DeepLinkService` routes to `JoinCliqueScreen` → auto-joins clique
-2. **App installed, not verified:** Browser loads `invite.html` → "Open in Clique Pix" button uses `intent://` (Android) → app opens
+2. **App installed, not verified:** Browser loads `invite.html` → "Open in CLIQUE Pix" button uses `intent://` (Android) → app opens
 3. **App not installed:** Browser loads `invite.html` → shows branded page with app store download buttons and invite code for manual entry
 
 ---
@@ -1043,7 +1043,7 @@ Feature-based organization with clean separation of data, domain, and presentati
 
 **Post-creation invite prompt:** When creating an event with a NEW clique, `GoRouter.extra` passes `{cliqueId, cliqueName}` to Event Detail. On `initState`, a modal bottom sheet prompts the user to invite friends. `extra` is ephemeral (not in URL, not restorable from deep links) — the prompt fires once per creation.
 
-**Branded app bar on tab roots:** All four tab roots (Home, Cliques, Notifications, Profile) share `BrandedSliverAppBar` (`app/lib/widgets/branded_sliver_app_bar.dart`) — a pinned `SliverAppBar` with `expandedHeight: 260`, a rounded 56 px logo + "Clique Pix" gradient wordmark positioned in the `flexibleSpace` hero area, and the per-screen title anchored to the bottom. The widget takes `screenTitle`, `screenTitleGradient`, `accentColor`, `accentOpacity`, and `actions` so the four tabs keep their distinct accent washes (aqua / deep blue / violet / pink) while sharing a single source of truth for the brand mark. The wordmark scrolls away with the header hero on content scroll; the collapsed state is a thin 56 px toolbar carrying only the per-screen actions (refresh on Cliques, clear-all on Notifications). No other screens use this widget — full-screen children like Event Detail, camera capture, photo detail, video player, and DM threads keep their context-specific AppBars.
+**Branded app bar on tab roots:** All four tab roots (Home, Cliques, Notifications, Profile) share `BrandedSliverAppBar` (`app/lib/widgets/branded_sliver_app_bar.dart`) — a pinned `SliverAppBar` with `expandedHeight: 260`, a rounded 56 px logo + "CLIQUE Pix" gradient wordmark positioned in the `flexibleSpace` hero area, and the per-screen title anchored to the bottom. The widget takes `screenTitle`, `screenTitleGradient`, `accentColor`, `accentOpacity`, and `actions` so the four tabs keep their distinct accent washes (aqua / deep blue / violet / pink) while sharing a single source of truth for the brand mark. The wordmark scrolls away with the header hero on content scroll; the collapsed state is a thin 56 px toolbar carrying only the per-screen actions (refresh on Cliques, clear-all on Notifications). No other screens use this widget — full-screen children like Event Detail, camera capture, photo detail, video player, and DM threads keep their context-specific AppBars.
 
 ## Networking
 
@@ -1192,7 +1192,7 @@ None of these require rewriting the core architecture. They are additive.
 
 # 22. Final Architecture Position
 
-Clique Pix v1 is a **production-grade, Azure-first, mobile-first application**. It uses managed identity and RBAC throughout, routes all traffic through Front Door and APIM, and handles the known Entra External ID token bug with a proven multi-layer defense.
+CLIQUE Pix v1 is a **production-grade, Azure-first, mobile-first application**. It uses managed identity and RBAC throughout, routes all traffic through Front Door and APIM, and handles the known Entra External ID token bug with a proven multi-layer defense.
 
 The architecture is:
 - **Secure** — no storage keys, no long-lived credentials, RBAC everywhere

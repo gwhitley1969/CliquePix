@@ -1,8 +1,8 @@
 # Age Verification Runbook — Claim-Based Backend Enforcement
 
-**Requirement:** Clique Pix users must be 13+ at sign-up.
+**Requirement:** CLIQUE Pix users must be 13+ at sign-up.
 
-**Strategy:** Entra External ID's `SignUpSignIn` user flow collects `dateOfBirth` as a required custom attribute during first-time sign-up. The attribute is emitted on every access token as a directory-schema-extension claim. Clique Pix's backend (`POST /api/auth/verify`) reads that claim on first login, computes age server-side, blocks under-13 users with HTTP 403, and best-effort deletes their orphaned Entra account via Microsoft Graph.
+**Strategy:** Entra External ID's `SignUpSignIn` user flow collects `dateOfBirth` as a required custom attribute during first-time sign-up. The attribute is emitted on every access token as a directory-schema-extension claim. CLIQUE Pix's backend (`POST /api/auth/verify`) reads that claim on first login, computes age server-side, blocks under-13 users with HTTP 403, and best-effort deletes their orphaned Entra account via Microsoft Graph.
 
 **Why not Custom Authentication Extensions?** Microsoft's own migration docs state: *"Age gating isn't currently supported in Microsoft Entra External ID."* The CAE `OnAttributeCollectionSubmit` pattern is a community workaround, not a supported path — it proved brittle for us (weeks of generic "Something went wrong" errors, opaque EasyAuth rejections, tokens with `iss` values that disagreed with Microsoft's own documented format). Claim-based validation uses officially-supported Entra features and runs inside code we own, so failures are debuggable.
 
@@ -77,9 +77,9 @@ Click **Create**.
 - Row **"When a user submits their information"**: click the edit pencil → choose **None** → **Select** → **Save**.
 - The claim-based approach doesn't need any extension; this must be detached or signups will fail calling the (now-deleted) `validate-age` endpoint.
 
-## Step 3 — Emit `dateOfBirth` as a token claim on the Clique Pix app
+## Step 3 — Emit `dateOfBirth` as a token claim on the CLIQUE Pix app
 
-**Path:** `entra.microsoft.com` → **Entra ID** → **App registrations** → **Clique Pix** (client ID `7db01206-135b-4a34-a4d5-2622d1a888bf`)
+**Path:** `entra.microsoft.com` → **Entra ID** → **App registrations** → **CLIQUE Pix** (client ID `7db01206-135b-4a34-a4d5-2622d1a888bf`)
 
 1. **Overview** → click **Managed application in local directory** (link in Essentials). Lands on the Enterprise Application.
 2. Left menu → **Single sign-on**.
@@ -93,7 +93,7 @@ Click **Create**.
 
 ### 3a. Verify the app manifest
 
-Still on `entra.microsoft.com` → **Entra ID** → **App registrations** → **Clique Pix** → **Manifest**. Confirm both flags are set (the Microsoft Graph manifest format):
+Still on `entra.microsoft.com` → **Entra ID** → **App registrations** → **CLIQUE Pix** → **Manifest**. Confirm both flags are set (the Microsoft Graph manifest format):
 
 - `acceptMappedClaims: true`
 - `accessTokenAcceptedVersion: 2`
@@ -114,7 +114,7 @@ az rest --method POST \
   --body "{\"principalId\":\"$FUNC_MI\",\"resourceId\":\"$GRAPH_SP\",\"appRoleId\":\"$ROLE_ID\"}"
 ```
 
-If the delete call fails at runtime, the user still can't use Clique Pix (403 stays 403) — they just leave an orphan Entra account. Telemetry event `age_gate_entra_delete_failed` flags these for manual cleanup.
+If the delete call fails at runtime, the user still can't use CLIQUE Pix (403 stays 403) — they just leave an orphan Entra account. Telemetry event `age_gate_entra_delete_failed` flags these for manual cleanup.
 
 ---
 
@@ -123,7 +123,7 @@ If the delete call fails at runtime, the user still can't use Clique Pix (403 st
 ### 5a. Over-13 happy path
 
 1. Fresh private browser / clear MSAL cache / fresh email
-2. Trigger Clique Pix signup
+2. Trigger CLIQUE Pix signup
 3. Entra-hosted form asks for Date of Birth (and any other configured attributes)
 4. Enter `1990-05-15` → submit
 5. Expect: signup completes, app lands on home screen
@@ -144,7 +144,7 @@ If the delete call fails at runtime, the user still can't use Clique Pix (403 st
 
 1. Fresh private browser + fresh email
 2. Trigger signup → enter DOB `2020-01-01` → submit
-3. Expect: signup completes *in Entra* (new account created), but the app returns to the login screen with a red error banner reading *"You must be at least 13 years old to use Clique Pix."* (surfaced from backend `AGE_VERIFICATION_FAILED` response via `app/lib/features/auth/presentation/auth_providers.dart:AuthNotifier.signIn`; `resetSession()` is called to clear the MSAL cache so retries start clean)
+3. Expect: signup completes *in Entra* (new account created), but the app returns to the login screen with a red error banner reading *"You must be at least 13 years old to use CLIQUE Pix."* (surfaced from backend `AGE_VERIFICATION_FAILED` response via `app/lib/features/auth/presentation/auth_providers.dart:AuthNotifier.signIn`; `resetSession()` is called to clear the MSAL cache so retries start clean)
 4. App Insights:
    ```kql
    customEvents
@@ -191,7 +191,7 @@ If the delete call fails at runtime, the user still can't use Clique Pix (403 st
 This architecture has no runtime dependencies on the CAE infrastructure. To roll back:
 
 1. Drop the `age_verified_at` column: `ALTER TABLE users DROP COLUMN age_verified_at;`
-2. Remove the `dateOfBirth` claim from the Clique Pix Enterprise App's Attributes & Claims
+2. Remove the `dateOfBirth` claim from the CLIQUE Pix Enterprise App's Attributes & Claims
 3. Revert the code commit that added `decideAgeGate` + `deleteEntraUserByOid`
 
 The Entra-side DOB attribute + user flow remain — they're harmless without the backend check.
@@ -200,7 +200,7 @@ The Entra-side DOB attribute + user flow remain — they're harmless without the
 
 ## Policy alignment
 
-- `website/privacy.html` §2.2 + §11 — DOB stored in Entra (Microsoft's identity store), not Clique Pix's product database. Accurate under this architecture.
+- `website/privacy.html` §2.2 + §11 — DOB stored in Entra (Microsoft's identity store), not CLIQUE Pix's product database. Accurate under this architecture.
 - `website/terms.html` §2 — 13+ requirement. Unchanged.
 - `MIN_AGE = 13` constant lives in `backend/src/shared/utils/ageUtils.ts`. Mirror in `app/lib/core/utils/age_utils.dart` if the policy ever changes.
 

@@ -1,6 +1,6 @@
 -- RevenueCat subscription entitlements.
 --
--- Backs the Clique Pix Plus hard paywall introduced post-v1. Every install
+-- Backs the CLIQUE Pix Plus hard paywall introduced post-v1. Every install
 -- must subscribe immediately after sign-in to use the app; the backend is
 -- the authoritative source for entitlement state, fed by RevenueCat
 -- webhooks at POST /api/internal/revenuecat-webhook and reconciled every
