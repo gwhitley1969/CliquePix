@@ -48,7 +48,7 @@ The wordmark was capitalized **"Clique Pix" → "CLIQUE Pix"** (whole word CLIQU
 - [ ] **Google OAuth consent screen** app name → "CLIQUE Pix" (Google Cloud Console → APIs & Services → OAuth consent screen) — used by Google federation.
 
 *RevenueCat*
-- [ ] **Paywall copy** — confirm the published paywall `pw9ac01d9e31184633` headline/body reads "CLIQUE Pix" not "Clique Pix" (RC dashboard → Paywalls). *The assistant CAN do this one via the RevenueCat MCP — just ask.*
+- [x] **Paywall copy — DRAFT FIXED + VERIFIED 2026-06-09 (assistant, via MCP). ⏳ PENDING PUBLISH (your click).** The 3 stale strings in paywall `pw9ac01d9e31184633` — headline "Subscribe to Clique Pix" + the monthly/annual plan labels — were updated to "CLIQUE Pix" via the RevenueCat Paywall AI Editor and saved as an **unpublished draft**. Verified: only those 3 strings changed (same component keys, no layout/price/other-copy change; the paywall has no hardcoded prices — $39.99/$3.99 come from the store products at runtime). **The live paywall still shows "Clique Pix" until you publish the draft** → RC dashboard → Paywalls → `pw9ac01d9e31184633` → confirm "Subscribe to CLIQUE Pix" → **Publish** (`https://app.revenuecat.com/projects/04f5314d/paywalls/pw9ac01d9e31184633/builder`).
 
 *Design (wordmark rendered as pixels — needs redraw, not a text edit)*
 - [ ] Logo / icon / splash: `app/assets/logo.png`, `app/assets/icon.png`, `webapp/public/assets/*`, iOS `LaunchImage`/`AppIcon`.
