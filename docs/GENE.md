@@ -4,7 +4,7 @@ Personal tracking file for Gene. Pick up here when resuming the CLIQUE Pix paywa
 
 Full plan lives at `C:\Users\genew\.claude\plans\okay-this-is-what-inherited-deer.md`.
 
-Last updated **2026-06-02** — backend deployed live + most RevenueCat/Azure config done this session (via MCP). See session summary below.
+Last updated **2026-06-09** — brand wordmark capitalized to **"CLIQUE Pix"** across the whole codebase (PR #47); code-side is live (web + backend + app display name), manual store/console/design follow-ups tracked in the new section below. (Prior: 2026-06-02 — backend deployed live + most RevenueCat/Azure config done via MCP; see session summary below.)
 
 ---
 
@@ -23,6 +23,36 @@ Last updated **2026-06-02** — backend deployed live + most RevenueCat/Azure co
 5. **Phase 6 promo grants** (reviewer + 4 testers) — urgent, 7-day clock.
 6. ~~Deploy legal pages~~ **✅ DONE 2026-06-03** — web client auto-deployed on merge; `clique-pix.com/docs/privacy` + `/docs/terms` verified live with the subscription disclosures.
 7. **Android** (Phase 1b) — **tax verified 2026-06-03 ✅**; confirm **identity verification** is also green in Play Console (I can't check it), then the Android subscription setup + RevenueCat Play app proceed.
+
+---
+
+## 🔤 Brand rename → "CLIQUE Pix" — manual follow-ups (2026-06-09)
+
+The wordmark was capitalized **"Clique Pix" → "CLIQUE Pix"** (whole word CLIQUE) across the codebase in PR #47 — 264 occurrences, 67 files. **Only the two-word brand phrase changed**; the feature noun "Clique"/"Cliques" and all identifiers (`cliquepix`, `clique_pix`, `clique-pix.com`, `com.cliquepix.*`, FCM channel ID, `CFBundleName=clique_pix`) are untouched.
+
+**✅ Done + live (code-side — assistant completed):**
+- **Web** — clique-pix.com landing + `/docs/privacy` + `/docs/terms` verified live as "CLIQUE Pix" (auto-deployed on merge).
+- **Backend** — 2 user-facing error strings (age-gate + subscription-required) deployed via `func publish`; `/api/health` 200.
+- **App display name** — `android:label` + iOS `CFBundleDisplayName` updated on `main`. Baked into the **Android AAB** (versionCode 6, rebuilt 2026-06-09, at `app/build/app/outputs/bundle/release/app-release.aab`) — **pending your Play upload**. iOS picks it up on the next `flutter build ipa` from the Mac.
+- **Docs + memory** updated.
+
+**⏳ Manual — dashboard / store / design only (assistant CANNOT do — no Apple/Google/Entra console access):**
+
+*Stores*
+- [ ] **App Store Connect** → App Information → **Name** → "CLIQUE Pix" (≤30 chars; rides the next version submission).
+- [ ] **Play Console** → Main store listing → **App name** → "CLIQUE Pix".
+- [ ] Verify the **subscription group + product display names** read "CLIQUE Pix" — the group was renamed to title-case "Clique Pix" on 2026-06-03 (before the all-caps decision), so update it to **CLIQUE Pix** (ASC Subscriptions + Play subscriptions).
+
+*Sign-in screens (app name shown during auth — sourced from the identity provider, NOT our code)*
+- [ ] **Entra app-registration display name** → "CLIQUE Pix" (Entra portal → App registrations → the app → Branding & properties) — shown on the CIAM sign-in/consent page.
+- [ ] **Google OAuth consent screen** app name → "CLIQUE Pix" (Google Cloud Console → APIs & Services → OAuth consent screen) — used by Google federation.
+
+*RevenueCat*
+- [ ] **Paywall copy** — confirm the published paywall `pw9ac01d9e31184633` headline/body reads "CLIQUE Pix" not "Clique Pix" (RC dashboard → Paywalls). *The assistant CAN do this one via the RevenueCat MCP — just ask.*
+
+*Design (wordmark rendered as pixels — needs redraw, not a text edit)*
+- [ ] Logo / icon / splash: `app/assets/logo.png`, `app/assets/icon.png`, `webapp/public/assets/*`, iOS `LaunchImage`/`AppIcon`.
+- [ ] App Store + Play **store screenshots** that show the old "Clique Pix" wordmark.
 
 ---
 
