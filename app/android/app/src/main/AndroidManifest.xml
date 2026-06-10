@@ -24,8 +24,17 @@
     <!-- Camera, Audio & Media -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
-    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <!-- Google Play Photo and Video Permissions policy (rejection 2026-06-10,
+         versionCode 6): READ_MEDIA_IMAGES / READ_MEDIA_VIDEO are reserved for
+         apps whose CORE purpose is broad gallery access. CLIQUE Pix picks media
+         via the Android Photo Picker (image_picker, permission-free) and saves
+         via MediaStore (gal, permission-free on API 29+). tools:node="remove"
+         guards against any plugin re-introducing them in the manifest merge.
+         DO NOT re-add. -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"
+        tools:node="remove" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO"
+        tools:node="remove" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="29" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
