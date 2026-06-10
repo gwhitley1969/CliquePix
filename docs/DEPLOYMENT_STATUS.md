@@ -32,7 +32,7 @@ Last updated: 2026-06-10 (Play rejection of versionCode 6 fixed: READ_MEDIA_IMAG
 | **Web** | landing/nav/footer, `index.html` title/OG/twitter, legal `privacy.html` + `terms.html` | SWA auto-deploy on merge | ✅ **live** — verified "CLIQUE Pix" at `clique-pix.com` + `/docs/privacy` + `/docs/terms` |
 | **Backend** | 2 user-facing error strings (age-gate + subscription-required) | `func azure functionapp publish func-cliquepix-fresh` (2026-06-09) | ✅ **live** — `/api/health` 200 |
 | **Android** | in-app copy + `android:label="CLIQUE Pix"` | versionCode 6 AAB **rejected by Play 2026-06-10** (media-permissions policy — see entry above); superseded by versionCode 7 AAB rebuilt 2026-06-10 at `app/build/app/outputs/bundle/release/app-release.aab` | ⏳ **+7 uploaded 2026-06-10 — in Google review** |
-| **iOS** | in-app copy + `CFBundleDisplayName="CLIQUE Pix"` | next `flutter build ipa` from the Mac (Windows can't build iOS — see HANDOFF §3) | ⏳ pending Mac build |
+| **iOS** | in-app copy + `CFBundleDisplayName="CLIQUE Pix"` | `flutter build ipa` from the Mac | ✅ **done** — Gene confirmed 2026-06-10 the latest IPA shows "CLIQUE Pix" (built from post-#47 `main`, so it also carries the #24/#25 fixes) |
 | **RevenueCat paywall** | headline "Subscribe to CLIQUE Pix" + monthly/annual plan labels | RC Paywall AI Editor draft (assistant, verified) → **Gene published** | ✅ **live 2026-06-09** — Gene confirmed "Subscribe to CLIQUE Pix" + hit Publish |
 
 **Docs/memory:** `.claude/CLAUDE.md` + ~24 `/docs` files swept in #47; `HANDOFF.md` gained the iOS `.ipa` build path + GitHub Actions secrets table (#45/#48); `GENE.md` gained the rename follow-up checklist + paywall status (#49/#50); `feedback_app_name.md` memory updated to the new convention.
