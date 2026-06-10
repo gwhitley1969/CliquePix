@@ -624,6 +624,8 @@ The rules that bite if violated — step-by-step layer implementation lives in `
 
 **`SCHEDULE_EXACT_ALARM` / `USE_EXACT_ALARM` are NOT declared.** Google Play restricts `USE_EXACT_ALARM` to alarm-clock/calendar apps and rejects builds that include it, so we suppress `flutter_local_notifications`' transitive contribution via `<uses-permission ... tools:node="remove" />`. The Friday reminder uses `AndroidScheduleMode.inexactAllowWhileIdle` (needs neither).
 
+**`READ_MEDIA_IMAGES` / `READ_MEDIA_VIDEO` are NOT declared — do NOT re-add.** Google Play rejected versionCode 6 (2026-06-10) under the Photo and Video Permissions policy: these permissions are reserved for apps whose *core purpose* is broad gallery access. CLIQUE Pix never needs them — `image_picker` picks via the permission-free Android Photo Picker, and `gal` saves via MediaStore (permission-free on API 29+; legacy saves covered by `WRITE_EXTERNAL_STORAGE maxSdkVersion=29`). Both are pinned with `tools:node="remove"` in the manifest so no plugin update can re-introduce them in the merge. Any future feature that appears to need them should use the Photo Picker instead.
+
 ### iOS Info.plist
 
 `UIBackgroundModes` must contain `remote-notification` (already set) for silent pushes to wake the app.

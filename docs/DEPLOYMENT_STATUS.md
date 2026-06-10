@@ -1,6 +1,27 @@
 # DEPLOYMENT_STATUS.md — CLIQUE Pix v1
 
-Last updated: 2026-06-09 (Brand rename "Clique Pix" → "CLIQUE Pix" [PR #47] rolled out: web + backend + RevenueCat paywall live, Android AAB rebuilt pending Play upload; photo/avatar quality 3024-q88/q90 [#38–#40] live on web; version bumped to +6 [#46]; Flutter CI now builds a smoke APK [#43/#44]. Prior: 2026-06-05 post-audit cluster #24–#28 + SWA staging-env auto-cleanup; 2026-06-04 re-audit ship-blockers + #21/#22/#23 hardening.)
+Last updated: 2026-06-10 (Play rejection of versionCode 6 fixed: READ_MEDIA_IMAGES/READ_MEDIA_VIDEO removed from the Android manifest per Google's Photo and Video Permissions policy, version bumped to +7, AAB rebuilt pending Gene's re-upload. Prior: Brand rename "Clique Pix" → "CLIQUE Pix" [PR #47] rolled out: web + backend + RevenueCat paywall live, Android AAB rebuilt pending Play upload; photo/avatar quality 3024-q88/q90 [#38–#40] live on web; version bumped to +6 [#46]; Flutter CI now builds a smoke APK [#43/#44]. Prior: 2026-06-05 post-audit cluster #24–#28 + SWA staging-env auto-cleanup; 2026-06-04 re-audit ship-blockers + #21/#22/#23 hardening.)
+
+## Play rejection fix — READ_MEDIA_IMAGES / READ_MEDIA_VIDEO removed (2026-06-10)
+
+**Status:** ✅ code fixed + AAB rebuilt (versionCode **7**); ⏳ pending Gene's Play Console re-upload + declaration update.
+
+**What happened.** Google Play **rejected** the versionCode 6 AAB (the 2026-06-09 brand-rename build) under the **Photo and Video Permissions policy** ("Permission use is not directly related to your app's core purpose", flagged area "Policy Declaration for Photo Picker"). `READ_MEDIA_IMAGES`/`READ_MEDIA_VIDEO` are reserved for apps whose core purpose requires persistent broad gallery access; apps with one-time/infrequent access must use the Android Photo Picker.
+
+**Root cause.** Both permissions were declared directly in `app/android/app/src/main/AndroidManifest.xml` (no plugin contributes them — confirmed via the manifest-merger blame report) and were **entirely unused**: `image_picker` 1.2.1 picks media via the permission-free backported Photo Picker, `gal` 2.3.2 saves via MediaStore (permission-free on API 29+; legacy `WRITE_EXTERNAL_STORAGE maxSdkVersion=29` already declared), and no code path requests them via `permission_handler`. Removing them changes zero runtime behavior.
+
+**Fix.**
+- Manifest: both permissions replaced with `tools:node="remove"` pins (same guard pattern as the exact-alarm suppression) so no future plugin can re-introduce them in the merge. `READ_EXTERNAL_STORAGE maxSdkVersion=32` / `WRITE_EXTERNAL_STORAGE maxSdkVersion=29` kept (not policy-flagged; auto-ignored on Android 13+).
+- `app/pubspec.yaml`: `1.0.0+6` → `1.0.0+7` (rejected version codes can't be resubmitted).
+- New don't-regress invariant recorded in `HANDOFF.md §6` + `.claude/CLAUDE.md`.
+- `flutter clean` → `flutter build appbundle --release`; merged manifest verified clean of both permissions, `versionCode="7"`.
+
+**Gene's manual Play Console steps:**
+1. Upload the new versionCode 7 AAB to the same track ("Send for review").
+2. Google requires removal "from all version codes within the submission, **including testing tracks**" — supersede/pause any active testing-track releases still carrying versionCode ≤ 6.
+3. **App content → Photos and videos permissions** declaration: update/confirm the app does not use these permissions.
+
+---
 
 ## Brand rename "Clique Pix" → "CLIQUE Pix" (2026-06-09)
 
@@ -10,7 +31,7 @@ Last updated: 2026-06-09 (Brand rename "Clique Pix" → "CLIQUE Pix" [PR #47] ro
 |---|---|---|---|
 | **Web** | landing/nav/footer, `index.html` title/OG/twitter, legal `privacy.html` + `terms.html` | SWA auto-deploy on merge | ✅ **live** — verified "CLIQUE Pix" at `clique-pix.com` + `/docs/privacy` + `/docs/terms` |
 | **Backend** | 2 user-facing error strings (age-gate + subscription-required) | `func azure functionapp publish func-cliquepix-fresh` (2026-06-09) | ✅ **live** — `/api/health` 200 |
-| **Android** | in-app copy + `android:label="CLIQUE Pix"` | new AAB (versionCode 6) rebuilt 2026-06-09 at `app/build/app/outputs/bundle/release/app-release.aab` | ⏳ **built — pending Gene's Play upload** |
+| **Android** | in-app copy + `android:label="CLIQUE Pix"` | versionCode 6 AAB **rejected by Play 2026-06-10** (media-permissions policy — see entry above); superseded by versionCode 7 AAB rebuilt 2026-06-10 at `app/build/app/outputs/bundle/release/app-release.aab` | ⏳ **rebuilt as +7 — pending Gene's Play re-upload** |
 | **iOS** | in-app copy + `CFBundleDisplayName="CLIQUE Pix"` | next `flutter build ipa` from the Mac (Windows can't build iOS — see HANDOFF §3) | ⏳ pending Mac build |
 | **RevenueCat paywall** | headline "Subscribe to CLIQUE Pix" + monthly/annual plan labels | RC Paywall AI Editor draft (assistant, verified) → **Gene published** | ✅ **live 2026-06-09** — Gene confirmed "Subscribe to CLIQUE Pix" + hit Publish |
 
