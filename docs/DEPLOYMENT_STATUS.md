@@ -13,7 +13,7 @@ Last updated: 2026-06-11 (INCIDENT: app-wide lockout — all 14 users' backfille
 
 **Immediate resolution (no build, live within seconds):**
 - `UPDATE users SET trial_ends_at = NOW() + INTERVAL '30 days' WHERE entitlement_active = FALSE AND (trial_ends_at IS NULL OR trial_ends_at < NOW() + INTERVAL '30 days')` on `pg-cliquepixdb` → **14 rows**, all now `2026-07-11 20:02 UTC`; verified 0 locked-out users remain. (`effective_active` is computed live per request — no caching, no deploy needed.) Note: the `AllowDevMachine` DB firewall rule was updated to the dev box's new IP (38.125.100.43 → 38.125.100.58).
-- Reviewer `vwhitley1967@gmail.com` (`325e4455-…`) granted RevenueCat **promotional lifetime** `plus` (expires 2101-01-01) — the GENE.md Phase 6 mechanism — and verified all the way into Postgres.
+- Reviewer `vwhitley1967@gmail.com` (`325e4455-…`) granted RevenueCat **promotional lifetime** `plus` (expires 2101-01-01) — the GENE.md Phase 6 mechanism — and verified all the way into Postgres. **Superseded later the same day:** the reviewer account turned out to be an OTP-era Entra account (created hours before the 2026-05-06 password-flow switch, so it emailed sign-in codes — unusable for App Review). It was deleted (in-app + Entra) and re-created under the password flow → new `users.id a16a8a7c-74ca-4efc-9460-27c08db4061e`, lifetime grant **re-issued + verified** (`entitlement_active=t`, `PROMOTIONAL`, expires 2100 — webhook flowed instantly through the fixed resolution).
 
 **Production backend bugs found during the grant verification (both fixed + deployed 2026-06-11):**
 
