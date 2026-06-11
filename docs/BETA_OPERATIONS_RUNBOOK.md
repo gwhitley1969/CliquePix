@@ -485,22 +485,52 @@ If `create = true` is missing, the regression is back — re-add it, run `npm ru
 
 **Symptoms:** A reviewer or beta tester who was granted access via a RevenueCat **Promotional/Lifetime** entitlement (the mandated no-DB-override mechanism) taps **Refresh Subscription** in Profile and is immediately bounced to the hard paywall — locked out of the whole app. Backend returns HTTP 402 `SUBSCRIPTION_REQUIRED` on every gated call (events, cliques, photos, videos, DMs).
 
-**Root cause (fixed):** Promotional/lifetime grants return `expires_date: null` from RevenueCat. `forceSyncFromRcApi` formerly required a non-null FUTURE expiry to be "active", so a null-expiry grant computed `isActive=false`, fell into `markExpired()`, and the #17 H1 lag-guard didn't save it (it required a non-null DB expiry). #21 makes a present `plus` with `expires_date === null` active-forever (`isLifetime`); #22 also guards `markExpired` on `entitlement_expires_at IS NOT NULL AND < NOW()` so a promo is never expired by the reconciliation timer. See `backend/src/shared/services/entitlementService.ts:289-311`.
+**Root cause (fixed):** Promotional/lifetime grants have no end date. `forceSyncFromRcApi` formerly required a non-null FUTURE expiry to be "active", so a no-expiry grant computed `isActive=false`, fell into `markExpired()`, and the #17 H1 lag-guard didn't save it (it required a non-null DB expiry). #21 makes an active `plus` with no end date active-forever (`isLifetime`); #22 also guards `markExpired` on `entitlement_expires_at IS NOT NULL AND < NOW()` so a promo is never expired by the reconciliation timer. (2026-06-11: the client moved to RC API v2 — the no-end-date signal is now `expiresAtMs === null` from `fetchPlusStateFromRc`, same semantics.)
 
 **Verify the fix is deployed:**
 ```bash
 grep -n "isLifetime" backend/src/shared/services/entitlementService.ts
-# Expect: isLifetime = plus != null && plus.expires_date === null; and isActive uses (isLifetime || future expiry)
+# Expect: isLifetime = rcState.active && expiresAtMs === null; and isActive uses (isLifetime || future expiry)
 ```
 
 **Recover a stuck reviewer/tester WITHOUT a redeploy:**
 1. Confirm the grant exists in the RevenueCat dashboard for that customer (matched by display_name, not email) and that the customer object exists (RevenueCat won't accept a promo grant until the SDK has done `Purchases.logIn`, i.e. the user has signed in once on the built app).
-2. Have them tap **Refresh Subscription** again on the FIXED build — `POST /api/users/me/entitlement/refresh` (an UNGATED endpoint, the deliberate recovery path) calls `forceSyncFromRcApi`, which now honors the null-expiry grant. Look for `entitlement_refresh_invoked` in App Insights.
-3. Confirm the DB row reflects active with null expiry:
+2. Have them tap **Refresh Subscription** again on the FIXED build — `POST /api/users/me/entitlement/refresh` (an UNGATED endpoint, the deliberate recovery path) calls `forceSyncFromRcApi`, which now honors the no-end-date grant. Look for `entitlement_refresh_invoked` in App Insights.
+3. Confirm the DB row reflects active:
    ```sql
-   SELECT user_id, entitlement_active, entitlement_expires_at FROM entitlements WHERE user_id = '<user-id>';
+   SELECT id, entitlement_active, entitlement_expires_at FROM users WHERE id = '<user-id>';
    ```
-   Expected after refresh: `entitlement_active = true`, `entitlement_expires_at IS NULL` (lifetime/promo). If `entitlement_active` flipped back to false with a null expiry, the #21 fix is NOT deployed — redeploy the backend.
+   Expected after refresh: `entitlement_active = true` (expiry NULL for a true-lifetime grant, or far-future like 2101 for a dashboard/MCP grant that set an explicit date). If `entitlement_active` flipped back to false, the #21 fix is NOT deployed — redeploy the backend.
+
+### App-wide lockout: blank dark screen after sign-in (paywall lockout — incident 2026-06-11)
+
+**Symptoms:** Users sign in successfully, then see a blank dark-navy screen with only a top-right account icon. Every gated endpoint returns 402 `SUBSCRIPTION_REQUIRED`. On builds WITHOUT the never-blank paywall fallback (≤ versionCode 7), the Android paywall renders empty because the RC `goog_` SDK key is a placeholder and `PaywallView` has no load-failure callback.
+
+**Diagnose (2 minutes):**
+```sql
+-- Who is locked out right now? (effective access = entitlement_active OR trial_ends_at > NOW(), computed live)
+SELECT id, display_name, trial_ends_at, entitlement_active FROM users
+WHERE entitlement_active = FALSE AND (trial_ends_at IS NULL OR trial_ends_at < NOW());
+```
+App Insights confirmations: `paywall_fallback_shown` (post-fix builds), 402s on gated endpoints, and — if grants were attempted — `entitlement_webhook_skipped` events.
+
+**Resolve (server-side, effective on the user's next API call, NO build needed):**
+```sql
+UPDATE users SET trial_ends_at = NOW() + INTERVAL '30 days'
+WHERE entitlement_active = FALSE
+  AND (trial_ends_at IS NULL OR trial_ends_at < NOW() + INTERVAL '30 days');
+```
+This is the sanctioned emergency unblock — it extends the app-managed trial, NOT a DB override of `entitlement_active` (which stays RevenueCat-driven). DB access: psql with an Entra token (`az account get-access-token --resource https://ossrdbms-aad.database.windows.net`) as the `bluebuildapps` admin principal; if the connection fails with "Exception while reading from stream", update the `AllowDevMachine` firewall rule to the dev box's current public IP first.
+
+**Prevent recurrence:** the trial is a hard fuse — track the soonest `MAX(trial_ends_at)` cliff and make sure store billing (or promo grants) lands before it. The 2026-06-11 incident was the 7-day backfill from migration 013 expiring with Phase 6 grants unissued and Play billing incomplete.
+
+### RevenueCat promo grant doesn't reach Postgres (`entitlement_webhook_skipped reason=invalid_user_id`) — fixed 2026-06-11
+
+**Symptoms:** A promotional grant shows active in the RC dashboard, but `users.entitlement_active` stays FALSE. App Insights shows `entitlement_webhook_received` (with the correct UUID in `userId`) immediately followed by `entitlement_webhook_skipped { reason: invalid_user_id }`.
+
+**Root cause (fixed):** `upsertEntitlement` preferred `original_app_user_id`, which RC pins to the customer's FIRST id — `$RCAnonymousID:...` forever for SDK-created customers — so the UUID guard rejected every webhook for anonymous-origin customers. Fixed to resolve the first valid UUID among `app_user_id` → `original_app_user_id` → `aliases[]`.
+
+**Recover a grant that was dropped pre-fix:** re-fire the webhook by re-granting the promotional entitlement with a DIFFERENT `expires_at` (RC treats it as an extension and emits a fresh `NON_RENEWING_PURCHASE`), or use the RC dashboard's event "Resend" button on the customer's event history. Verify `entitlement_active = TRUE` in `users` afterward.
 
 ### Photo / video upload returns "Too many requests" (HTTP 429)
 

@@ -1,6 +1,6 @@
 # HANDOFF.md — CLIQUE Pix
 
-**Last updated:** 2026-06-07
+**Last updated:** 2026-06-11
 **Purpose:** Single entry-point for anyone taking over (or returning to) CLIQUE Pix. Read this top-to-bottom; it points into the deep docs for detail. If you read only one file, read this one.
 
 > **What's authoritative:** `.claude/CLAUDE.md` is the development guardrails (it wins on scope/architecture/patterns). This file is the *operational* handoff — how to build, deploy, where things live, current state, and the rules you must not break. Where they overlap, CLAUDE.md is the source of truth and this file links to it.
@@ -169,12 +169,13 @@ All actions are pinned to `@v6` (Node 24). **Path-filter gotcha:** Backend/Flutt
 
 **SWA staging-env auto-cleanup:** the SWA Free tier caps staging (preview) envs at **3 concurrent**; every PR creates one. Cleanup is handled by `.github/workflows/swa-cleanup.yml` (`pull_request: types: [closed]`, **no paths filter**). It's a *separate* workflow on purpose — `webapp-deploy.yml`'s trigger omits `types:` so it never receives `closed` (the old in-workflow close job ran 0 times across ~30 PRs and orphaned envs until the cap blocked deploys). Break-glass if it ever fails: `az staticwebapp environment delete --name swa-cliquepix-prod --resource-group rg-cliquepix-prod --environment-name <PR#> --yes`.
 
-**Current live state (2026-06-07):**
-- ✅ **Backend** `#22/#23` hardening **deployed + verified** (RevenueCat webhook returns 200 on a valid signature, 401 on a bad one; `/api/health` 200).
+**Current live state (2026-06-11):**
+- ✅ **Backend** lockout-incident fixes **deployed + verified 2026-06-11** (webhook `app_user_id` resolution order + RC REST client rewritten on API v2; `/api/health` 200 direct + Front Door; reviewer promo grant verified RC → webhook → `entitlement_active=t`). Prior `#22/#23` hardening also live.
+- ⏰ **All non-entitled users are on a trial that ends 2026-07-11** (extended +30d via SQL during the 2026-06-11 lockout incident). Before that date: Play billing + `goog_` key, tester promo grants, or another extension. Reviewer is permanently covered (lifetime promo grant, verified).
 - ✅ **Transcoder** running `v0.1.8` (TQ-1 poison-message guard).
 - ✅ **Web** live with all recent fixes (DM ownership, EntitlementGuard error state, Lightbox MP4 download, web DM mark-read, **photo 3024/q88**, **avatar quality**).
-- ⏳ **Mobile photo-quality bump (3024 px / q88) + avatar q90 are LIVE on web but PENDING the next mobile build** — the Dart code is on `main`; it ships to users only in a new Play/TestFlight build.
-- ✅ All 4 CI workflows green on `main`; **0 open PRs**.
+- ⏳ **PENDING the next mobile build:** the 2026-06-11 Flutter fixes (never-blank paywall fallback, stable router, paywall allowlist, 402 handling — PR #55) + photo-quality 3024/q88 + avatar q90 + #24/#25. All on `main`; ships only in a new Play/TestFlight build. versionCode 7 (in Google review 2026-06-10) predates these.
+- ✅ All 4 CI workflows green.
 
 Deploy history + per-item status: `docs/DEPLOYMENT_STATUS.md`.
 
@@ -261,8 +262,14 @@ These are load-bearing rules — each was added after an incident, an audit find
 
 ### Paywall — a v1 requirement, not optional
 - **Do NOT regress to a free tier / remove the paywall** without product approval. Backend authoritative: `requireActiveEntitlement` 402s `SUBSCRIPTION_REQUIRED`; effective access = `entitlement_active OR trial_ends_at > NOW()`.
-- **Reviewer + beta access = RevenueCat Promotional grants, never a DB override.**
-- **`forceSyncFromRcApi` must keep null-expiry lifetime/promo grants active and never down-grade via a synthetic event** (synthetic = RENEWAL-only). A null-`expires_date` `plus` IS the reviewer/beta mechanism; treating it as inactive hard-paywalled reviewers on "Refresh Subscription" (the PAY fix).
+- **Reviewer + beta access = RevenueCat Promotional grants, never a DB override of `entitlement_active`.** (Extending `users.trial_ends_at` via SQL is the sanctioned emergency unblock — it IS the trial mechanism; used 2026-06-11.)
+- **`forceSyncFromRcApi` must keep no-end-date lifetime/promo grants active and never down-grade via a synthetic event** (synthetic = RENEWAL-only). A `plus` with no end date (`expiresAtMs === null`) IS the reviewer/beta mechanism; treating it as inactive hard-paywalled reviewers on "Refresh Subscription" (the PAY fix).
+- **`PaywallView` is ONLY mounted behind the `paywallOfferingProvider` pre-flight** — it's a bare platform view with no load-failure callback; unconfigured SDK (placeholder key) or unloadable offerings = BLANK SCREEN (the 2026-06-11 lockout). Failures must render the branded `_PaywallFallback`.
+- **RC webhook resolves the user as the FIRST valid UUID among `app_user_id` → `original_app_user_id` → `aliases[]`** — RC pins `original_app_user_id` to `$RCAnonymousID:…` forever for SDK-created customers; preferring it dropped every webhook for anonymous-origin customers (incl. promo grants).
+- **`revenuecatRestClient.ts` stays on RC API v2** — the Key Vault secret is a v2-only key; v1 endpoints reject it (error 7723) and the failures are invisible (best-effort paths).
+
+### Router — stable instance, refreshListenable for redirects
+- **`routerProvider` must NOT `ref.watch` auth/access state** — GoRouter recreation resets navigation to `initialLocation` (proven in `app/test/router_recreation_behavior_test.dart`). Router is created once per signed-in identity (watches `currentUserIdProvider` only — keeps the cross-user tab-stack reset); redirect re-eval via `refreshListenable` + `ref.read`. Paywall-exempt prefixes include `/invite/` + `/diagnostics`. `DeepLinkService` takes a router *getter*, never a captured instance.
 
 ### FCM — de-register on sign-out + permanent-vs-transient purge
 - **Sign-out/delete de-register the FCM token before clearing the JWT** (`DELETE /api/push-tokens`).
@@ -280,7 +287,19 @@ These are load-bearing rules — each was added after an incident, an audit find
 
 ---
 
-## 7. Recent work log (2026-06-04 → 2026-06-07 session)
+## 7. Recent work log
+
+### 2026-06-11 — lockout incident (blank screen after login) — resolved same-day
+
+All 14 users locked out: the migration-013 trial backfill expired 2026-06-09 (Phase 6 grants unissued) and Android's paywall rendered BLANK (placeholder `goog_` key + `PaywallView` has no load-failure callback). Resolution, in order:
+- **Trials extended +30d via SQL** (effective immediately, no build) → all users in until **2026-07-11**.
+- **Reviewer lifetime promo grant** issued + verified end-to-end into Postgres.
+- **Two production backend bugs found + fixed + deployed** during grant verification: webhook `app_user_id` resolution order (dropped all anonymous-origin-customer webhooks) and the RC REST client calling API v1 with the v2-only key (forceSync + GDPR delete broken since launch).
+- **Flutter hardening on `main` (PR #55, next build):** never-blank paywall pre-flight + branded fallback, stable-router refactor (auth churn was resetting navigation to Home — empirically proven), `/invite/`+`/diagnostics` paywall exemptions (audit L5/L6), 402 handling.
+
+Full record: `DEPLOYMENT_STATUS.md` top entry; playbooks added to `BETA_OPERATIONS_RUNBOOK.md`.
+
+### 2026-06-04 → 2026-06-07 session
 
 This session opened by pulling the security-audit branch from a Mac workstation (PR #17) and ran a full pre-submission hardening + cleanup pass. PRs **#17–#41**, all merged to `main`.
 
