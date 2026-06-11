@@ -1,6 +1,10 @@
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:purchases_flutter/purchases_flutter.dart' show Offering;
 import 'package:clique_pix/features/auth/presentation/auth_providers.dart';
 import 'package:clique_pix/features/auth/domain/auth_state.dart';
+import 'package:clique_pix/services/revenuecat_service.dart';
+import 'package:clique_pix/services/telemetry_service.dart';
 
 /// Owns the optimistic post-purchase flag AND the detached backend-reconcile
 /// loop. Lives in the ProviderScope (not in the paywall widget) so it survives
@@ -57,3 +61,55 @@ final hasAppAccessProvider = Provider<bool>((ref) {
       auth is AuthAuthenticated && auth.user.entitlement.effectiveActive;
   return backend || optimistic;
 }, name: 'hasAppAccessProvider');
+
+/// Thrown by [paywallOfferingProvider] with a machine-readable reason — used
+/// as the telemetry errorCode and the fallback UI's `reason` dimension.
+class PaywallUnavailableException implements Exception {
+  const PaywallUnavailableException(this.reason);
+
+  /// placeholder_key | not_configured | configure-exception runtimeType |
+  /// no_current_offering | timeout | offerings_error
+  final String reason;
+
+  @override
+  String toString() => 'PaywallUnavailableException($reason)';
+}
+
+/// Pre-flight gate for the hosted PaywallView. PaywallView is a bare platform
+/// view with NO load-failure callback — if the SDK is unconfigured (e.g. a
+/// placeholder Android key) or offerings can't load, it renders NOTHING and
+/// the user sees a blank screen (the 2026-06-11 Android lockout incident).
+/// So: configure (idempotent) → verify configured → fetch offerings (10s cap)
+/// → require a current offering with at least one package. autoDispose so
+/// re-entering /paywall (or "Try Again") retries fresh.
+final paywallOfferingProvider =
+    FutureProvider.autoDispose<Offering>((ref) async {
+  final rc = ref.watch(revenueCatServiceProvider);
+  final telemetry = ref.read(telemetryServiceProvider);
+  try {
+    return await () async {
+      await rc.configure();
+      if (!rc.isConfigured) {
+        throw PaywallUnavailableException(
+            rc.configureError ?? 'not_configured');
+      }
+      final offerings = await rc.getOfferings();
+      final current = offerings.current;
+      if (current == null || current.availablePackages.isEmpty) {
+        throw const PaywallUnavailableException('no_current_offering');
+      }
+      return current;
+    }()
+        .timeout(const Duration(seconds: 10));
+  } on PaywallUnavailableException catch (e) {
+    telemetry.record('paywall_offerings_load_failed', errorCode: e.reason);
+    rethrow;
+  } on TimeoutException {
+    telemetry.record('paywall_offerings_load_failed', errorCode: 'timeout');
+    throw const PaywallUnavailableException('timeout');
+  } catch (e) {
+    telemetry.record('paywall_offerings_load_failed',
+        errorCode: 'offerings_error');
+    throw const PaywallUnavailableException('offerings_error');
+  }
+}, name: 'paywallOfferingProvider');

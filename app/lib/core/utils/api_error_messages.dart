@@ -22,6 +22,13 @@ String friendlyApiErrorMessage(Object err, {required String resourceLabel}) {
     if (code == 401 || code == 403) {
       return "You don't have access to this $resourceLabel.";
     }
+    if (code == 402) {
+      // SUBSCRIPTION_REQUIRED — trial ended and no active subscription. The
+      // AuthInterceptor fires a throttled entitlement refresh on 402 so the
+      // router paywall gate engages promptly; this copy covers the brief
+      // window before it does.
+      return 'Your free trial has ended — a subscription is required to keep using CLIQUE Pix.';
+    }
     if (err.type == DioExceptionType.connectionTimeout ||
         err.type == DioExceptionType.receiveTimeout ||
         err.type == DioExceptionType.connectionError) {

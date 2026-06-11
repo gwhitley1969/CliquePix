@@ -21,8 +21,30 @@ class AuthInterceptor extends Interceptor {
     handler.next(options);
   }
 
+  /// Last time a 402 triggered an entitlement refresh. Static cooldown so a
+  /// burst of gated calls (feed + cliques + notifications all 402ing at once
+  /// when a stale-cached "entitled" user's trial expired overnight) produces
+  /// exactly one refresh instead of a storm.
+  static DateTime? _last402Refresh;
+
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) async {
+    if (err.response?.statusCode == 402) {
+      // SUBSCRIPTION_REQUIRED. The optimistic bootstrap can seed a cached user
+      // whose entitlement was still active when last verified; the backend is
+      // authoritative and 402s once the trial lapses. Refresh the entitlement
+      // (ungated endpoint — cannot itself 402, so no loop) so the fresh user
+      // state flips hasAppAccessProvider and the router engages the paywall,
+      // instead of every screen showing opaque errors until the next verify.
+      final now = DateTime.now();
+      if (_last402Refresh == null ||
+          now.difference(_last402Refresh!) > const Duration(seconds: 60)) {
+        _last402Refresh = now;
+        unawaited(ref.read(authStateProvider.notifier).refreshEntitlement());
+      }
+      handler.next(err);
+      return;
+    }
     if (err.response?.statusCode == 401) {
       // Per-request loop guard: refresh+replay happens AT MOST once per original
       // request. dio.fetch below re-enters this interceptor; without this bail a

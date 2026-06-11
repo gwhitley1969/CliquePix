@@ -4,7 +4,7 @@ Personal tracking file for Gene. Pick up here when resuming the CLIQUE Pix paywa
 
 Full plan lives at `C:\Users\genew\.claude\plans\okay-this-is-what-inherited-deer.md`.
 
-Last updated **2026-06-09** — brand wordmark capitalized to **"CLIQUE Pix"** across the whole codebase (PR #47); code-side is live (web + backend + app display name), manual store/console/design follow-ups tracked in the new section below. (Prior: 2026-06-02 — backend deployed live + most RevenueCat/Azure config done via MCP; see session summary below.)
+Last updated **2026-06-11** — **LOCKOUT INCIDENT RESOLVED**: all 14 users' backfilled trials expired 2026-06-09 → everyone hit the paywall, and Android's paywall rendered BLANK (placeholder `goog_` key + no PaywallView fallback). Same-day fixes: trials extended **+30 days (now 2026-07-11)** via SQL; **reviewer `vwhitley1967@gmail.com` lifetime promo grant DONE + verified end-to-end** (Phase 6 partially complete); two production backend bugs fixed + deployed (webhook `app_user_id` resolution dropped ALL anonymous-origin-customer webhooks; RC REST client used API v1 with our v2-only key → forceSync + GDPR delete were broken since launch); paywall never-blank fallback + router fixes on `main` for the next build. Full record: `DEPLOYMENT_STATUS.md` top entry. (Prior: 2026-06-09 brand rename PR #47.)
 
 ---
 
@@ -16,6 +16,7 @@ Last updated **2026-06-09** — brand wordmark capitalized to **"CLIQUE Pix"** a
 
 ## Where we are RIGHT NOW — next clicks for Gene (all dashboard/store, no code)
 
+0. **⏰ TRIAL CLOCK (2026-06-11):** every non-entitled user's trial now ends **2026-07-11**. Before that date either (a) finish Play billing + ship the Android `goog_` key so users can actually subscribe, (b) grant tester promos, or (c) extend trials again (same SQL — see DEPLOYMENT_STATUS 2026-06-11 entry). **Reviewer is permanently covered** (lifetime promo grant verified live). Tester grants: pick the 4 testers and grant 1-year promos in RC → Customers → Grant Promotional Entitlement — iOS testers' RC customers exist; Android-only testers won't until the `goog_` key ships (grant returns 404 — skip, trial covers them).
 1. ~~Publish + attach the paywall~~ **✅ DONE 2026-06-03** — `pw9ac01d9e31184633` published + attached to `default`. Subscription also renamed "CLIQUE Pix Plus" → "CLIQUE Pix" across legal pages, web, paywall, and App Store Connect (no free tier, so "Plus" was misleading).
 2. **Verify Transfer Behavior = "Keep with previous App User ID"** (Project Settings → General). The API can't read it.
 3. ~~Fix test-store prices~~ **WON'T FIX (2026-06-03)** — RevenueCat Test Store prices are **immutable once set** (greyed in dashboard, create-only API, no update/delete endpoint). Sandbox-only; real App Store prices already correct at $3.99/$39.99, so zero user impact.
@@ -257,8 +258,8 @@ Required by Apple Guideline 3.1.2 + Google Play Subscriptions policy. Must ship 
   SELECT id, email_or_phone, created_at FROM users WHERE created_at < '<cutoff>';
   ```
 - [ ] In RC dashboard → Customers → each ID → Grant Promotional Entitlement `plus`:
-  - `vwhitley1967@gmail.com` → **lifetime**
-  - Each of the 4 current beta testers → **1 year**
+  - [x] `vwhitley1967@gmail.com` → **lifetime** — **✅ DONE 2026-06-11** (granted via RC MCP, expires 2101-01-01; **verified end-to-end**: webhook → fixed `app_user_id` resolution → `users.entitlement_active=TRUE`, store `PROMOTIONAL`. Note: the FIRST grant attempt was silently dropped by the pre-fix webhook bug — re-granting with a new expiry re-fired the event after the backend fix deployed.)
+  - [ ] Each of the 4 current beta testers → **1 year** (their 30-day trial covers them until 2026-07-11; Android-only testers have no RC customer yet — grant after the `goog_` key ships)
 - [ ] Update App Store Connect review notes with the reviewer + sandbox tester instructions
 - [ ] Document grants in `docs/BETA_OPERATIONS_RUNBOOK.md` under new "Subscription comp grants" section
 

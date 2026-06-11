@@ -1,6 +1,46 @@
 # DEPLOYMENT_STATUS.md — CLIQUE Pix v1
 
-Last updated: 2026-06-10 (Play rejection of versionCode 6 fixed: READ_MEDIA_IMAGES/READ_MEDIA_VIDEO removed from the Android manifest per Google's Photo and Video Permissions policy [PR #52], version bumped to +7, AAB rebuilt and uploaded to Play 2026-06-10 — in Google review. Prior: Brand rename "Clique Pix" → "CLIQUE Pix" [PR #47] rolled out: web + backend + RevenueCat paywall live, Android AAB rebuilt pending Play upload; photo/avatar quality 3024-q88/q90 [#38–#40] live on web; version bumped to +6 [#46]; Flutter CI now builds a smoke APK [#43/#44]. Prior: 2026-06-05 post-audit cluster #24–#28 + SWA staging-env auto-cleanup; 2026-06-04 re-audit ship-blockers + #21/#22/#23 hardening.)
+Last updated: 2026-06-11 (INCIDENT: app-wide lockout — all 14 users' backfilled trials expired 2026-06-09 and the Android paywall rendered a blank screen [placeholder RC key + no PaywallView fallback]. Resolved same-day: trials extended +30d via SQL; reviewer lifetime promo grant live end-to-end; TWO production backend bugs fixed + deployed [webhook app_user_id resolution order, RC REST client on v1 API with a v2-only key]; paywall never-blank hardening + stable-router fix on `main` pending next mobile build. See top entry. Prior: Play rejection of versionCode 6 fixed [PR #52], versionCode 7 uploaded 2026-06-10 — in Google review.)
+
+## INCIDENT: blank screen after login (paywall lockout) — root-caused + resolved (2026-06-11)
+
+**Status:** ✅ users unblocked (server-side, same day) · ✅ two backend bugs fixed + **deployed** (`func publish`, health 200 direct + Front Door) · ✅ reviewer promotional grant **verified end-to-end** (`entitlement_active=t`, store `PROMOTIONAL`, expires 2101) · ⏳ Flutter fixes on `main`, ship with the **next planned mobile build** (deliberately not interrupting versionCode 7 in Google review).
+
+**The incident.** Every existing user — all 14, including the App Store reviewer account — saw a blank dark-navy screen with only a top-right account icon after sign-in (`problem01.png`). Two compounding causes:
+
+1. **Trial cliff.** Migration 013 (2026-06-02) backfilled `trial_ends_at = NOW() + 7 days` for all existing users → every trial expired 2026-06-09 20:50 UTC. Phase 6 promo grants had not been issued. `effective_active=false` → router hard-redirected everyone to `/paywall`.
+2. **Blank Android paywall.** `revenuecat_constants.dart` still has the placeholder `goog_REPLACE_WITH_ANDROID_PUBLIC_KEY`; `Purchases.configure()` failed silently; `PaywallView` (a bare platform view with NO load-failure callback) rendered nothing — leaving just the Scaffold background + AppBar account icon. New users were unaffected (fresh 7-day trial at first sign-in).
+
+**Immediate resolution (no build, live within seconds):**
+- `UPDATE users SET trial_ends_at = NOW() + INTERVAL '30 days' WHERE entitlement_active = FALSE AND (trial_ends_at IS NULL OR trial_ends_at < NOW() + INTERVAL '30 days')` on `pg-cliquepixdb` → **14 rows**, all now `2026-07-11 20:02 UTC`; verified 0 locked-out users remain. (`effective_active` is computed live per request — no caching, no deploy needed.) Note: the `AllowDevMachine` DB firewall rule was updated to the dev box's new IP (38.125.100.43 → 38.125.100.58).
+- Reviewer `vwhitley1967@gmail.com` (`325e4455-…`) granted RevenueCat **promotional lifetime** `plus` (expires 2101-01-01) — the GENE.md Phase 6 mechanism — and verified all the way into Postgres.
+
+**Production backend bugs found during the grant verification (both fixed + deployed 2026-06-11):**
+
+| Bug | Symptom | Fix |
+|---|---|---|
+| **Webhook `app_user_id` resolution order** (`entitlementService.ts`) | `upsertEntitlement` preferred `original_app_user_id` — which RC pins to the customer's FIRST id, i.e. `$RCAnonymousID:…` **forever** for SDK-created customers — so EVERY webhook for an anonymous-origin customer failed the UUID guard and was dropped as `invalid_user_id`. Confirmed in App Insights: the reviewer's grant arrived (`entitlement_webhook_received`, valid UUID in `app_user_id`) and was skipped. Store purchases self-healed only via the client's 30s REST force-sync; dashboard promo grants and server-driven renewals/expirations were silently lost. | Resolve the FIRST valid-UUID among `app_user_id` → `original_app_user_id` → `aliases[]`. Regression tests added (`entitlementHardening.test.ts`). |
+| **RC REST client on API v1 with a v2-only key** (`revenuecatRestClient.ts`) | The Key Vault secret `revenuecat-secret-api-key` is a **v2 project key**; RC v1 endpoints reject it with error 7723 (verified live). So `forceSyncFromRcApi` (Profile "Refresh Subscription" + 30s post-purchase recovery) and `deleteSubscriberFromRc` (GDPR delete) **failed on every production call since paywall launch** — invisibly, because both are best-effort and swallow errors. | Client rewritten against **API v2** (`/v2/projects/{p}/customers/{id}/subscriptions` filtered on `gives_access` + entitlement `lookup_key='plus'`; customer DELETE for GDPR). Response shapes verified live before the rewrite. `forceSyncFromRcApi` adapted; lag-guard tests updated. |
+
+Backend verification: `tsc` clean, **223/223 jest**, deployed via `func publish`, `/api/health` 200 (direct + `api.clique-pix.com`), and the re-granted reviewer entitlement flowed RC → webhook → fixed resolution → `entitlement_active=TRUE` in Postgres.
+
+**Flutter fixes on `main` (ship with next build):**
+- **Paywall never-blank hardening:** new `paywallOfferingProvider` pre-flight (configure → `isConfigured` → `getOfferings()` with 10s timeout → require a current offering with packages) gates `PaywallView`; failures render a branded fallback (Try Again / **Refresh subscription status** — the escape path for server-side promo grants / Manage account). `RevenueCatService.configure()` is now observable (`isConfigured`, `configureError`, telemetry `revenuecat_configure_failed`) and short-circuits placeholder keys. New telemetry: `paywall_offerings_load_failed`, `paywall_fallback_shown`.
+- **Stable-router fix:** `routerProvider` previously `ref.watch`ed auth state, so **every** benign AuthAuthenticated re-assignment (background verify, avatar update, each post-purchase `refreshEntitlement`) recreated the GoRouter and **reset navigation to `/events`** — verified empirically in `test/router_recreation_behavior_test.dart` (go_router 14.8.1). Now: router created once per signed-in identity (`currentUserIdProvider` watch keeps the cross-user tab-stack reset), redirect re-evaluation via `refreshListenable`. `DeepLinkService` takes a router *getter* (a captured instance went stale on recreation — warm deep links after auth churn routed on a detached router).
+- **Paywall allowlist gaps:** `/invite/*` and `/diagnostics` now exempt from the paywall redirect (a lapsed user tapping an invite link silently lost the invite code; Token Diagnostics was unreachable exactly when locked out). Closes the security-audit "Remaining" item.
+- **402 handling (was: none):** `AuthInterceptor` fires a throttled (60s) `refreshEntitlement()` on `SUBSCRIPTION_REQUIRED` so the paywall gate engages promptly for stale-cached users; `friendlyApiErrorMessage` maps 402.
+- Dead code removed: `RevenueCatService.presentPaywall()` (PaywallView is the mechanism).
+
+Flutter verification: `flutter analyze` 54-issue baseline preserved · **116/116 tests** (96 baseline + new paywall pre-flight, fallback-widget, router-behavior, and constants tests).
+
+**Remaining / follow-ups:**
+- Ship the next mobile build (carries all pending Flutter fixes: this incident's hardening + #24/#25 + photo-quality 3024/q88).
+- Beta-tester promo grants (GENE.md Phase 6): reviewer DONE; the 4 testers still need grants once Gene picks them — the 30-day trial covers everyone until 2026-07-11. Android-only testers have no RC customer yet (placeholder key blocks `Purchases.logIn`); grant after the Android RC key ships, or rely on the trial.
+- The real Android fix remains Play billing + the `goog_` SDK key (GENE.md Phase 1b/1c).
+
+**Rollback:** SQL is data-only (re-shrink `trial_ends_at` to revert). Backend: `git revert` + `func publish` (no migration). Flutter: not yet shipped.
+
+---
 
 ## Play rejection fix — READ_MEDIA_IMAGES / READ_MEDIA_VIDEO removed (2026-06-10)
 
