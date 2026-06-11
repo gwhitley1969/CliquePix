@@ -191,7 +191,7 @@ Deploy history + per-item status: `docs/DEPLOYMENT_STATUS.md`.
 | Web app | `clique-pix.com` · API `api.clique-pix.com` (the only owned domain; **no email mailboxes** on it) |
 | ⚠️ `cliquepix.com` (no hyphen) | **NOT owned** — never reference it |
 | Public contact (footer, legal, "Contact Us") | `support@xtend-ai.com` (company: **Xtend-AI, LLC**) |
-| App Store reviewer login | `vwhitley1967@gmail.com` — **email+password** (NOT Google/Apple SSO); password held by Gene, **not** in Key Vault. `users.id 325e4455-b1b8-461e-a844-6f158cffaf84` |
+| App Store reviewer login | `vwhitley1967@gmail.com` — **email+password** (NOT Google/Apple SSO); password held by Gene, **not** in Key Vault. `users.id a16a8a7c-74ca-4efc-9460-27c08db4061e` (account **recreated 2026-06-11** — the original was an OTP-era Entra account that emailed codes instead of accepting a password; deleted in-app + in Entra and re-signed-up under the password flow; lifetime promo grant re-issued + verified) |
 | App Store Connect contact / account owner | `genewhitley2017@gmail.com` |
 | APIM publisher / Azure admin notifications | `gwhitley@xtend-ai.com` |
 | Ops / Azure budget-alert recipient | `bluebuildapps@gmail.com` (old "BlueBuildApps" brand) |
