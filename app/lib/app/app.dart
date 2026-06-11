@@ -35,8 +35,10 @@ class _CliquePixState extends ConsumerState<CliquePix> {
   @override
   void initState() {
     super.initState();
-    final router = ref.read(routerProvider);
-    ref.read(deepLinkServiceProvider).initialize(router);
+    // Pass a getter — the router instance is recreated on identity change,
+    // and a captured instance would leave deep links routing on a detached
+    // router after sign-out → sign-in.
+    ref.read(deepLinkServiceProvider).initialize(() => ref.read(routerProvider));
 
     // Defer Workmanager + flutter_local_notifications + tz seeding to a
     // post-frame callback. None of these gate Home rendering, and pulling

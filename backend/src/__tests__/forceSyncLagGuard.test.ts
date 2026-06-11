@@ -21,7 +21,7 @@ jest.mock('../shared/services/telemetryService', () => ({
 }));
 
 jest.mock('../shared/services/revenuecatRestClient', () => ({
-  fetchSubscriberFromRc: (...args: unknown[]) => fetchSubscriberMock(...args),
+  fetchPlusStateFromRc: (...args: unknown[]) => fetchSubscriberMock(...args),
 }));
 
 import { forceSyncFromRcApi } from '../shared/services/entitlementService';
@@ -47,35 +47,25 @@ function dbRow(overrides: Record<string, unknown> = {}) {
   };
 }
 
-// RC subscriber object with NO active plus entitlement (the lagging read).
+// RcPlusState shapes (the v2 client's distilled return value — see
+// revenuecatRestClient.fetchPlusStateFromRc).
+
+// NO active plus entitlement (the lagging read).
 function inactiveSubscriber() {
-  return {
-    subscriber: {
-      entitlements: {}, // no 'plus' → isActive=false
-      subscriptions: {},
-    },
-  };
+  return { active: false, expiresAtMs: null, productId: null, store: null };
 }
 
-// RC subscriber WITH a lifetime/promotional plus entitlement: expires_date null
-// = never expires (the reviewer + beta-tester grant mechanism).
+// Lifetime/promotional plus: no end date = never expires (the reviewer +
+// beta-tester grant mechanism).
 function lifetimePlusSubscriber() {
-  return {
-    subscriber: {
-      entitlements: { plus: { expires_date: null, product_identifier: 'promo_lifetime' } },
-      subscriptions: {},
-    },
-  };
+  return { active: true, expiresAtMs: null, productId: null, store: 'promotional' };
 }
 
-// RC subscriber WITH a plus entitlement whose expiry is in the PAST (lapsed).
+// Plus whose expiry is in the PAST (lapsed). The v2 client filters on
+// gives_access so RC would normally report this as inactive already, but the
+// service must also defend against a stale `active` + past end date.
 function expiredPlusSubscriber() {
-  return {
-    subscriber: {
-      entitlements: { plus: { expires_date: PAST.toISOString(), product_identifier: 'plus_annual' } },
-      subscriptions: {},
-    },
-  };
+  return { active: true, expiresAtMs: PAST.getTime(), productId: 'plus_annual', store: 'app_store' };
 }
 
 beforeEach(() => {

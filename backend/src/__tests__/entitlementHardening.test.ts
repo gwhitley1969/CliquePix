@@ -60,11 +60,12 @@ describe('upsertEntitlement — non-UUID app_user_id guard', () => {
     expect(execMock).not.toHaveBeenCalled(); // never reaches the UPDATE
   });
 
-  it('rejects when the RESOLVED id (original_app_user_id) is a non-UUID', async () => {
+  it('rejects only when NO candidate id is a UUID', async () => {
     const result = await upsertEntitlement(
       event({
-        app_user_id: '550e8400-e29b-41d4-a716-446655440000',
+        app_user_id: '$RCAnonymousID:abc123',
         original_app_user_id: 'not-a-uuid',
+        aliases: ['$RCAnonymousID:abc123', 'not-a-uuid'],
       }),
     );
 
@@ -79,5 +80,39 @@ describe('upsertEntitlement — non-UUID app_user_id guard', () => {
 
     expect(execMock).toHaveBeenCalled();
     expect(result).toEqual({ applied: true, active: true });
+  });
+
+  // 2026-06-11 regression: RC pins original_app_user_id to the customer's
+  // FIRST id — `$RCAnonymousID:...` forever for SDK-created customers, even
+  // after Purchases.logIn aliases in our users.id. The old
+  // `original_app_user_id ?? app_user_id` preference dropped EVERY webhook
+  // for anonymous-origin customers (incl. the reviewer's promotional grant)
+  // as invalid_user_id.
+  it('prefers a UUID app_user_id over an anonymous original_app_user_id (promo-grant fix)', async () => {
+    const result = await upsertEntitlement(
+      event({
+        type: 'NON_RENEWING_PURCHASE', // what a dashboard promo grant emits
+        app_user_id: '325e4455-b1b8-461e-a844-6f158cffaf84',
+        original_app_user_id: '$RCAnonymousID:wxYz9876',
+        aliases: ['$RCAnonymousID:wxYz9876', '325e4455-b1b8-461e-a844-6f158cffaf84'],
+      }),
+    );
+
+    expect(result).toEqual({ applied: true, active: true });
+    // The UPDATE must target the identified users.id UUID ($1).
+    expect(execMock.mock.calls[0][1][0]).toBe('325e4455-b1b8-461e-a844-6f158cffaf84');
+  });
+
+  it('falls back to a UUID alias when both primary ids are anonymous', async () => {
+    const result = await upsertEntitlement(
+      event({
+        app_user_id: '$RCAnonymousID:abc123',
+        original_app_user_id: '$RCAnonymousID:abc123',
+        aliases: ['$RCAnonymousID:abc123', '550e8400-e29b-41d4-a716-446655440000'],
+      }),
+    );
+
+    expect(result).toEqual({ applied: true, active: true });
+    expect(execMock.mock.calls[0][1][0]).toBe('550e8400-e29b-41d4-a716-446655440000');
   });
 });

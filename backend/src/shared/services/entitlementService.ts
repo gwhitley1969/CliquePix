@@ -1,6 +1,6 @@
 import { execute, query, queryOne } from './dbService';
 import { trackEvent } from './telemetryService';
-import { fetchSubscriberFromRc } from './revenuecatRestClient';
+import { fetchPlusStateFromRc } from './revenuecatRestClient';
 import { isValidUUID } from '../utils/validators';
 
 // ============================================================================
@@ -27,6 +27,7 @@ export interface RcWebhookEvent {
   expiration_at_ms?: number;
   purchased_at_ms?: number;
   store?: string; // 'APP_STORE' | 'PLAY_STORE' | 'PROMOTIONAL' | 'AMAZON' | ...
+  aliases?: string[]; // every app user id RC knows for this customer
   cancel_reason?: string;
   expiration_reason?: string;
   // TRANSFER events carry these — the OLD owner of the entitlement
@@ -86,16 +87,33 @@ export async function upsertEntitlement(
     return { applied: false, reason: 'not_plus_entitlement' };
   }
 
-  // Resolve the user row. Prefer original_app_user_id (RC's canonical post-
-  // alias identifier) but fall back to app_user_id.
-  const appUserId = event.original_app_user_id ?? event.app_user_id;
+  // Resolve the user row: the FIRST candidate that parses as our users.id
+  // UUID, checking app_user_id → original_app_user_id → aliases.
+  //
+  // ORDER MATTERS (2026-06-11 fix). RC pins original_app_user_id to the FIRST
+  // id the customer ever had — for SDK-created customers that is
+  // `$RCAnonymousID:...` FOREVER, even after Purchases.logIn aliases in our
+  // UUID; the identified id arrives in app_user_id (last-seen). The previous
+  // `original_app_user_id ?? app_user_id` preference made EVERY webhook for an
+  // anonymous-origin customer fail the UUID guard below and get dropped as
+  // `invalid_user_id` — purchases self-healed via the client's 30s REST-API
+  // force-sync, but dashboard promotional grants (the mandated reviewer/beta
+  // mechanism) and server-driven renewals/expirations were silently lost.
+  // Confirmed in App Insights: `entitlement_webhook_received` with a valid
+  // UUID userId immediately followed by `entitlement_webhook_skipped
+  // reason=invalid_user_id` for the reviewer's lifetime grant.
+  //
+  // A non-UUID-everywhere event (customer never aliased to a users.id) is
+  // still a clean, logged no-op — feeding a non-UUID into the `WHERE id = $1`
+  // UPDATE would raise a Postgres `invalid input syntax for type uuid` error
+  // that (pre-fix) bubbled to a 500 and an RC retry-storm.
+  const appUserId = [
+    event.app_user_id,
+    event.original_app_user_id,
+    ...(event.aliases ?? []),
+  ].find((id): id is string => id != null && isValidUUID(id));
 
-  // app_user_id must be our users.id UUID. RC can emit a non-UUID id (e.g.
-  // `$RCAnonymousID:...` before Purchases.logIn aliasing completes); feeding a
-  // non-UUID into the `WHERE id = $1` UPDATE raises a Postgres
-  // `invalid input syntax for type uuid` error that (pre-fix) bubbled to a 500
-  // and a RC retry-storm. Treat it as a clean, logged no-op instead.
-  if (!isValidUUID(appUserId)) {
+  if (!appUserId) {
     trackEvent('entitlement_webhook_invalid_user_id', { eventType: event.type });
     return { applied: false, reason: 'invalid_user_id' };
   }
@@ -280,23 +298,19 @@ export async function markExpired(userId: string): Promise<void> {
  * error rather than a hard 500.
  */
 export async function forceSyncFromRcApi(userId: string): Promise<EntitlementRow | null> {
-  const subscriber = await fetchSubscriberFromRc(userId);
-  if (!subscriber) return getEntitlement(userId);
-
-  const plus = subscriber.subscriber.entitlements?.plus;
-  const subscriptionsByProduct = subscriber.subscriber.subscriptions ?? {};
+  const rcState = await fetchPlusStateFromRc(userId);
+  if (!rcState) return getEntitlement(userId); // RC API error — keep stored state
 
   // A promotional / lifetime entitlement (the mechanism CLAUDE.md mandates for
-  // the App Store reviewer + beta testers) has expires_date === null and never
-  // expires — treat it as active-forever. A non-null expiry is active only when
-  // it's still in the future; RC keeps a LAPSED entitlement in `entitlements`
-  // with a PAST expires_date. Without the null-expiry case, a reviewer/tester
-  // tapping "Refresh Subscription" would be force-deactivated and hard-paywalled
-  // out of the entire app (App Store reviewer-rejection risk).
-  const expiresAtMs = plus?.expires_date ? Date.parse(plus.expires_date) : null;
-  const isLifetime = plus != null && plus.expires_date === null;
+  // the App Store reviewer + beta testers) has no end date (expiresAtMs null)
+  // and never expires — treat it as active-forever. A non-null expiry is active
+  // only when it's still in the future. Without the null-expiry case, a
+  // reviewer/tester tapping "Refresh Subscription" would be force-deactivated
+  // and hard-paywalled out of the entire app (App Store reviewer-rejection risk).
+  const expiresAtMs = rcState.expiresAtMs;
+  const isLifetime = rcState.active && expiresAtMs === null;
   const isActive =
-    plus != null && (isLifetime || (expiresAtMs !== null && expiresAtMs > Date.now()));
+    rcState.active && (isLifetime || (expiresAtMs !== null && expiresAtMs > Date.now()));
 
   if (!isActive) {
     // RC API says inactive. BUT RC's REST API is eventually-consistent and can
@@ -322,16 +336,17 @@ export async function forceSyncFromRcApi(userId: string): Promise<EntitlementRow
   }
 
   // Active per RC API — synthesize a RENEWAL below to reflect the real payment.
-  const productId = plus!.product_identifier ?? null;
-  const productSub = productId ? subscriptionsByProduct[productId] : undefined;
-  // RC stores values lowercased (`app_store` / `play_store`); webhook events
-  // use uppercased ones. Normalize to uppercase to match webhook-driven rows.
-  const store = productSub?.store ? productSub.store.toUpperCase() : null;
-  const periodType = productSub?.period_type ?? null;
+  const productId = rcState.productId; // null for dashboard promotional grants
+  // RC v2 stores values lowercased (`app_store` / `play_store` /
+  // `promotional`); webhook events use uppercased ones. Normalize to uppercase
+  // to match webhook-driven rows.
+  const store = rcState.store ? rcState.store.toUpperCase() : null;
+  // v2 subscriptions don't expose period_type directly; a promotional store
+  // IS the promotional period (matches the webhook's period_type semantics).
+  const periodType = rcState.store === 'promotional' ? 'PROMOTIONAL' : null;
   // NOTE: RcWebhookEvent carries no will_renew field — upsertEntitlement
-  // derives it from the event type (RENEWAL ⇒ true). RC's unsubscribe state
-  // (productSub.unsubscribe_detected_at) is therefore not threaded through the
-  // synthetic event here; a webhook is the source of truth for will_renew.
+  // derives it from the event type (RENEWAL ⇒ true); a webhook is the source
+  // of truth for will_renew.
 
   // Synthesize a force-sync RENEWAL so we can reuse the same upsert path.
   // event_id is unique per sync so it won't be idempotency-skipped. Only the

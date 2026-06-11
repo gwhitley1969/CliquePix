@@ -42,8 +42,8 @@ Severity legend: 🔴 Critical · 🟠 High · 🟡 Medium · ⚪ Low/latent.
 | L2 | ⚪ | HLS manifest rewriter signs any line, no `segment_\d+\.ts` allowlist (defense-in-depth) | ⬜ Open |
 | L3 | ⚪ | Transcoder doesn't re-validate queue-message UUIDs (defense-in-depth) | ⬜ Open |
 | L4 | ⚪ | Open-redirect: Flutter login `redirect` param + webapp `post_login_redirect` unvalidated | ⬜ Open |
-| L5 | ⚪ | `/diagnostics/tokens` not in paywall allowlist | ⬜ Open |
-| L6 | ⚪ | `/invite/:code` not in paywall allowlist — bounces lapsed users to paywall | ⬜ Open (product decision) |
+| L5 | ⚪ | `/diagnostics/tokens` not in paywall allowlist | ✅ Fixed 2026-06-11 (`/diagnostics` prefix exempt — lockout-incident PR) |
+| L6 | ⚪ | `/invite/:code` not in paywall allowlist — bounces lapsed users to paywall | ✅ Fixed 2026-06-11 (`/invite/` prefix exempt; join POST stays backend-gated by `requireActiveEntitlement`) |
 | L7 | ⚪ | webapp `.env.*` force-tracked (public values only); CI lacks `permissions:`; webapp has no tests | ⬜ Open |
 | — | — | **Trial farming** (delete → re-signup = fresh 7-day trial) | Accepted-by-design — see below |
 

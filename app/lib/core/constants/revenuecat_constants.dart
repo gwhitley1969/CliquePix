@@ -16,6 +16,12 @@ class RevenueCatConstants {
   /// Platform-correct public key for Purchases.configure.
   static String get publicSdkKey => Platform.isIOS ? _appleKey : _googleKey;
 
+  /// True when [key] is a scaffold placeholder (e.g. the Android key before
+  /// the Play app exists in RevenueCat). configure() must skip the SDK
+  /// entirely for placeholder keys — passing one to Purchases.configure
+  /// leaves the SDK broken and PaywallView renders a blank screen.
+  static bool isPlaceholderKey(String key) => key.contains('_REPLACE_WITH');
+
   /// The offering identifier configured in the RevenueCat dashboard.
   static const String offeringId = 'default';
 

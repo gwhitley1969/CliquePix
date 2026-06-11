@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart' show ValueNotifier;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../features/auth/presentation/login_screen.dart';
@@ -30,13 +31,37 @@ import '../../features/paywall/presentation/paywall_screen.dart';
 import '../../features/paywall/presentation/paywall_providers.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
-  final authState = ref.watch(authStateProvider);
-  final hasAccess = ref.watch(hasAppAccessProvider);
+  // STABLE-ROUTER PATTERN (2026-06-11) — do not ref.watch auth state here.
+  //
+  // Recreating the GoRouter resets navigation to initialLocation (verified
+  // empirically in test/router_recreation_behavior_test.dart on go_router
+  // 14.8.1). The previous `ref.watch(authStateProvider)` meant every benign
+  // AuthAuthenticated re-assignment — background verify, avatar update, each
+  // refreshEntitlement of the post-purchase reconcile loop — yanked the user
+  // back to Home mid-flow.
+  //
+  // Instead: the router is created ONCE per signed-in identity, and redirect
+  // re-evaluation is driven by `refreshListenable` (notified on every auth /
+  // access change) with the redirect reading current values via ref.read.
+  //
+  // Watching currentUserIdProvider (a String? that only changes on actual
+  // identity change) deliberately keeps full router recreation on sign-out /
+  // user switch — that resets the StatefulShellRoute tab stacks so User B
+  // never inherits User A's navigation state (companion to the provider
+  // invalidation in app.dart `_invalidateUserScopedState`).
+  ref.watch(currentUserIdProvider);
+
+  final refresh = ValueNotifier(0);
+  ref.listen<AuthState>(authStateProvider, (_, __) => refresh.value++);
+  ref.listen<bool>(hasAppAccessProvider, (_, __) => refresh.value++);
+  ref.onDispose(refresh.dispose);
 
   return GoRouter(
     initialLocation: '/events',
+    refreshListenable: refresh,
     redirect: (context, state) {
-      final isAuthenticated = authState is AuthAuthenticated;
+      final isAuthenticated = ref.read(authStateProvider) is AuthAuthenticated;
+      final hasAccess = ref.read(hasAppAccessProvider);
       final loc = state.matchedLocation;
       final isLoginRoute = loc == '/login';
 
@@ -54,8 +79,20 @@ final routerProvider = Provider<GoRouter>((ref) {
       // Paywall gate: authenticated but no access (trial lapsed + unsubscribed)
       // → paywall, except the allowlist. Trial/subscribed users (effective
       // access) pass through, preserving the invite loop during the trial.
-      const allowlist = {'/paywall', '/profile', '/login'};
-      if (isAuthenticated && !hasAccess && !allowlist.contains(loc)) {
+      //
+      // /invite/* is allowlisted so a lapsed user tapping an invite link (or
+      // the Play install-referrer auto-join) reaches JoinCliqueScreen instead
+      // of silently losing the invite code to a paywall bounce — the join
+      // POST itself is still backend-gated by requireActiveEntitlement.
+      // /diagnostics is allowlisted because Token Diagnostics matters most
+      // exactly when a user is locked out. (Security audit 2026-06-04,
+      // "Remaining" items.)
+      final paywallExempt = loc == '/paywall' ||
+          loc == '/profile' ||
+          loc == '/login' ||
+          loc.startsWith('/invite/') ||
+          loc.startsWith('/diagnostics');
+      if (isAuthenticated && !hasAccess && !paywallExempt) {
         return '/paywall';
       }
       // Access regained while sitting on the paywall → into the app.
