@@ -172,7 +172,7 @@ All actions are pinned to `@v6` (Node 24). **Path-filter gotcha:** Backend/Flutt
 **Current live state (2026-06-11):**
 - ✅ **Backend** lockout-incident fixes **deployed + verified 2026-06-11** (webhook `app_user_id` resolution order + RC REST client rewritten on API v2; `/api/health` 200 direct + Front Door; reviewer promo grant verified RC → webhook → `entitlement_active=t`). Prior `#22/#23` hardening also live.
 - ⏰ **All non-entitled users are on a trial that ends 2026-07-11** (extended +30d via SQL during the 2026-06-11 lockout incident). Before that date: Play billing + `goog_` key, tester promo grants, or another extension. Reviewer is permanently covered (lifetime promo grant, verified).
-- ✅ **Transcoder** running `v0.1.8` (TQ-1 poison-message guard).
+- ✅ **Transcoder** running `v0.1.8` (TQ-1 poison-message guard). **Scale config changed 2026-06-11: `minExecutions` 1 → 0** (true scale-to-zero) after a cost incident — `minExecutions=1` was spawning an empty-poll execution every ~30s 24/7 (~$110-150/mo idle) and hosted a June 3-9 Azure metering anomaly (~$435, support-ticket candidate). Do not set it back to 1. See `DEPLOYMENT_STATUS.md` cost-incident entry + `VIDEO_ARCHITECTURE_DECISIONS.md` Decision 12 revision note.
 - ✅ **Web** live with all recent fixes (DM ownership, EntitlementGuard error state, Lightbox MP4 download, web DM mark-read, **photo 3024/q88**, **avatar quality**).
 - ⏳ **PENDING the next mobile build:** the 2026-06-11 Flutter fixes (never-blank paywall fallback, stable router, paywall allowlist, 402 handling — PR #55) + photo-quality 3024/q88 + avatar q90 + #24/#25. All on `main`; ships only in a new Play/TestFlight build. versionCode 7 (in Google review 2026-06-10) predates these.
 - ✅ All 4 CI workflows green.

@@ -811,16 +811,18 @@ The default Container Apps Job KEDA scaler polls the queue every 30 seconds. For
 
 ### Chosen: pollingInterval=5, min-executions=1, retain Consumption profile
 
+> ⚠️ **REVISED 2026-06-11: `min-executions` reverted to 0 (true scale-to-zero). `pollingInterval=5` retained.** What `min-executions=1` actually does on an Event-triggered job: KEDA spawns at least one execution per scaling evaluation **even when the queue is empty**, so the job ran an empty-poll execution every ~30 seconds, 24/7 (~2,600/day, each "Polling… / No messages, exiting cleanly"). Measured cost: **~$3.75/day (~$110-150/month) of pure idle burn** — which silently contradicted this document's own "$3-11/month" Jobs estimate below (that estimate is only true at min-executions=0). It also provided the substrate for a June 3-9 2026 Azure metering anomaly that billed ~14 replica-equivalents 24/7 (~$73/day, ~$435 total) while every customer-side signal — execution count, container durations (~1s), log volume, image pulls — was provably flat (full evidence in `docs/DEPLOYMENT_STATUS.md` 2026-06-11 cost-incident entry). The marginal benefit it bought (node-local image cache shaving a few seconds off cold start) is not worth $110+/month at current scale; the real cold-start fix remains the v1.5 Container Apps Service migration analyzed below. **Do not set min-executions back to 1.**
+
 ```bash
 az containerapp job update \
   --name caj-cliquepix-transcoder \
   --resource-group rg-cliquepix-prod \
   --polling-interval 5 \
-  --min-executions 1
+  --min-executions 0   # was 1 from 2026-04-08 to 2026-06-11; see revision note above
 ```
 
 - **`polling-interval=5`** cuts worst-case detection latency from 30s to 5s (average from 15s to 2.5s). The marginal cost of 6x more polls against the storage queue is negligible (Storage Queue bills per million transactions).
-- **`min-executions=1`** ensures KEDA always has at least one execution running per polling interval, which keeps the image cached on the compute node and reduces (but doesn't eliminate) container cold-start time. Caveat: this is misleadingly named — it doesn't keep a container "warm" in the traditional sense. Container Apps Jobs are one-shot by definition; each new message spawns a fresh container.
+- **`min-executions=1`** *(reverted — kept for history)* ensures KEDA always has at least one execution running per polling interval, which keeps the image cached on the compute node and reduces (but doesn't eliminate) container cold-start time. Caveat: this is misleadingly named — it doesn't keep a container "warm" in the traditional sense. Container Apps Jobs are one-shot by definition; each new message spawns a fresh container.
 
 ### What this still doesn't fix
 
@@ -853,7 +855,7 @@ The following cost analysis captures the pricing research for the v1.5 migration
 
 **Current architecture (Container Apps Job, Consumption plan):**
 
-The transcoder is a one-shot container (2 vCPU / 4 GiB) that spins up per queue message and terminates on completion. KEDA polling at 5s, min-executions=1. Each execution incurs ~15-25s of cold start (container scheduling + image pull + node.js init) that is irreducible on the Consumption workload profile.
+The transcoder is a one-shot container (2 vCPU / 4 GiB) that spins up per queue message and terminates on completion. KEDA polling at 5s, min-executions=0 (since 2026-06-11). Each execution incurs ~15-25s of cold start (container scheduling + image pull + node.js init) that is irreducible on the Consumption workload profile.
 
 **Proposed architecture (Container Apps Service):**
 
