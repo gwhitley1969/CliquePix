@@ -1,6 +1,26 @@
 # DEPLOYMENT_STATUS.md — CLIQUE Pix v1
 
-Last updated: 2026-06-11 (INCIDENT: app-wide lockout — all 14 users' backfilled trials expired 2026-06-09 and the Android paywall rendered a blank screen [placeholder RC key + no PaywallView fallback]. Resolved same-day: trials extended +30d via SQL; reviewer lifetime promo grant live end-to-end; TWO production backend bugs fixed + deployed [webhook app_user_id resolution order, RC REST client on v1 API with a v2-only key]; paywall never-blank hardening + stable-router fix on `main` pending next mobile build. See top entry. Prior: Play rejection of versionCode 6 fixed [PR #52], versionCode 7 uploaded 2026-06-10 — in Google review.)
+Last updated: 2026-06-11 (COST INCIDENT: transcoder Container Apps Job billed ~$447 MTD — root-caused + mitigated, see new top entry. Prior same-day: app-wide lockout — all 14 users' backfilled trials expired 2026-06-09 and the Android paywall rendered a blank screen [placeholder RC key + no PaywallView fallback]. Resolved same-day: trials extended +30d via SQL; reviewer lifetime promo grant live end-to-end; TWO production backend bugs fixed + deployed [webhook app_user_id resolution order, RC REST client on v1 API with a v2-only key]; paywall never-blank hardening + stable-router fix on `main` pending next mobile build. See top entry. Prior: Play rejection of versionCode 6 fixed [PR #52], versionCode 7 uploaded 2026-06-10 — in Google review.)
+
+## COST INCIDENT: transcoder job $447 month-to-date — root-caused + mitigated (2026-06-11)
+
+**Status:** ✅ mitigated live (`az containerapp job update --min-executions 0`, verified — execution churn stopped at 2026-06-12T01:31Z) · ✅ docs updated (CLAUDE.md, VIDEO_ARCHITECTURE_DECISIONS.md Decision 12 revision, VIDEO_INFRASTRUCTURE_RUNBOOK.md) · ⏳ **Azure support ticket for the June 3-9 metering anomaly (~$435) — recommended, not yet filed.**
+
+**Discovery.** Billing-account cost analysis showed June forecast $1,613 vs $850 budget. Cost Management breakdown: CLIQUE Pix subscription $543.58 MTD (June 1-11), of which **$447.64 was `caj-cliquepix-transcoder`** (next largest: APIM $53.42). My AI Bartender subscription $147.27; ~$100 more bills at account level outside both subscriptions.
+
+**Two distinct problems:**
+
+1. **Chronic idle burn (~$110-150/month): `minExecutions=1`.** On an Event-triggered Container Apps Job, `minExecutions=1` makes KEDA spawn at least one execution per scaling evaluation **even with an empty queue**. Live behavior (verified in execution history + console logs): a new execution every ~30s, 24/7, ~2,600/day, each logging `[runner] Polling video-transcode-queue... / No messages in queue, exiting cleanly` and exiting in ~1s. Baseline cost ~$3.75/day. This contradicted Decision 12's own "$3-11/month" Jobs estimate (only true at `minExecutions=0`). **Fixed:** `minExecutions=0`; `pollingInterval=5` retained (detection latency unchanged when real messages arrive). Trade-off: first transcode now eats the full ~15-25s cold start — acceptable per Decision 13 (uploader plays locally; cold start only delays other members' view).
+
+2. **June 3-9 metering anomaly (~$435): billed ~14 replica-equivalents 24/7 with provably flat workload.** Cost meters (`Standard vCPU/Memory Active Usage`) jumped $3.74/day → ~$73/day for June 4-8 (ramp started ~June 3 18:00 UTC, decayed June 9-10). Every customer-side signal was flat across the window: execution count (~2,600/day, all `Completed`), container run time (p50 = 1s), pod lifecycle (~180s), image pulls, console+system log volume (~30k rows/day), and exactly ONE real transcode all week (June 6, 41.6s, succeeded — the only video upload in June per `AppEvents`). No config/deploy change aligns with onset or recovery (the only change in the window, transcoder v0.1.8 on June 4 22:02 UTC, sits mid-window with no cost effect either way). Smoking gun: the job's platform metrics (`UsageNanoCores`) **stopped emitting at exactly the cost ramp onset** (June 3 ~18:00 UTC) and stayed dark through the window; the single bucket that emerged (June 6 12-18h) showed 1.03 cores sustained average — unexplainable by the 41s transcode (≈0.004 core-avg for that bucket). Conclusion: platform-side — either orphaned/zombie replicas held provisioned (invisible to customer logs) or a metering error. **The evidence above supports a billing-credit support ticket.**
+
+**Forecast impact:** with the anomaly over and `minExecutions=0`, the transcoder line drops to near-zero; June lands around ~$950-1,000 account-wide (the spike is already booked) and ~$600-650/month run-rate after. Largest remaining structural items: two APIM Basic v2 instances (~$150/mo each across the two subscriptions).
+
+**Also found while investigating:** the `az monitor app-insights query` API against `appi-cliquepix-prod` returned only ~1 hour of data, but ALL telemetry is intact in the underlying Log Analytics workspace `log-cliquepix-prod` (workspace id `c158e174-b84f-41f3-bc36-03fbaf279eb7`; `AppTraces` 2M rows back to May 13). For diagnostics, query the workspace tables (`AppEvents`/`AppTraces`/`AppRequests`, plus `ContainerAppConsoleLogs_CL`/`ContainerAppSystemLogs_CL`) directly via `az monitor log-analytics query`.
+
+**Rollback:** `az containerapp job update -n caj-cliquepix-transcoder -g rg-cliquepix-prod --min-executions 1` (don't — see Decision 12 revision note).
+
+---
 
 ## INCIDENT: blank screen after login (paywall lockout) — root-caused + resolved (2026-06-11)
 

@@ -255,16 +255,21 @@ az containerapp job update \
 
 The original 30s default meant queued messages waited up to 30s before KEDA detected them. Reducing to 5s cuts worst-case detection latency from 30s to 5s and average from 15s to 2.5s. Marginal cost of 6x more polls against the storage queue is negligible (Storage Queue bills per million transactions; we're nowhere near that). See `docs/VIDEO_ARCHITECTURE_DECISIONS.md` Decision 12.
 
-**Min-executions: 0 → 1**
+**Min-executions: 0 → 1** *(REVERTED to 0 on 2026-06-11 — do not re-apply)*
 
 ```bash
+# HISTORY ONLY. min-executions=1 was live 2026-04-08 → 2026-06-11 and was
+# reverted because it spawns an empty-poll execution every ~30s, 24/7
+# (~2,600/day), costing ~$110-150/month idle — and hosted the June 3-9
+# metering anomaly (~$435). See VIDEO_ARCHITECTURE_DECISIONS.md Decision 12
+# revision note and DEPLOYMENT_STATUS.md 2026-06-11 cost-incident entry.
 az containerapp job update \
   --name caj-cliquepix-transcoder \
   --resource-group rg-cliquepix-prod \
-  --min-executions 1
+  --min-executions 0
 ```
 
-Ensures KEDA always has at least one execution running per polling interval. Keeps the image cached on the compute node and reduces (but doesn't eliminate) container cold-start time. **Caveat:** misleadingly named — Container Apps Jobs are one-shot by definition, so this doesn't keep a container "warm" in the traditional sense. The ~15-25s of Container Apps Jobs cold start per execution remains. Eliminating it requires migrating to a Container Apps Service (long-running queue processor) which is deferred to v1.5.
+The original rationale (keep the image cached on the compute node to shave cold start) did not survive contact with the bill. **Caveat that was always true:** misleadingly named — Container Apps Jobs are one-shot by definition, so `min-executions=1` doesn't keep a container "warm"; it keeps *creating and destroying* one. The ~15-25s of Container Apps Jobs cold start per execution remains either way. Eliminating it requires migrating to a Container Apps Service (long-running queue processor) which is deferred to v1.5.
 
 **Verify both:**
 ```bash
@@ -274,7 +279,7 @@ az containerapp job show -n caj-cliquepix-transcoder -g rg-cliquepix-prod \
 
 Expected:
 ```json
-{ "pollingInterval": 5, "minExecutions": 1, "maxExecutions": 10 }
+{ "pollingInterval": 5, "minExecutions": 0, "maxExecutions": 10 }
 ```
 
 ### Transcode failure & expiry-race handling (TQ-1 / TQ-2)
