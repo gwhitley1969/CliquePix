@@ -59,6 +59,9 @@ class _FakeRepo implements CliquesRepository {
   @override
   Future<void> removeMember(String cliqueId, String userId) =>
       throw UnimplementedError();
+  @override
+  Future<void> transferOwnership(String cliqueId, String userId) =>
+      throw UnimplementedError();
 }
 
 void main() {

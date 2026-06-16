@@ -21,6 +21,7 @@ class ApiEndpoints {
   static String cliqueMembers(String id) => '/api/cliques/$id/members';
   static String cliqueLeave(String id) => '/api/cliques/$id/members/me';
   static String cliqueMember(String cliqueId, String userId) => '/api/cliques/$cliqueId/members/$userId';
+  static String cliqueTransferOwnership(String id) => '/api/cliques/$id/transfer-ownership';
 
   // Events
   static const events = '/api/events';

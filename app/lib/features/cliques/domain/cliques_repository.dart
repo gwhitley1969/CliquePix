@@ -45,4 +45,8 @@ class CliquesRepository {
   Future<void> removeMember(String cliqueId, String userId) async {
     await api.removeMember(cliqueId, userId);
   }
+
+  Future<void> transferOwnership(String cliqueId, String userId) async {
+    await api.transferOwnership(cliqueId, userId);
+  }
 }

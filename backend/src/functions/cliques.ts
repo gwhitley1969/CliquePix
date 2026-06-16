@@ -12,6 +12,7 @@ import { Clique, CliqueMember, CliqueWithMemberCount } from '../shared/models/cl
 import { sendToMultipleTokens } from '../shared/services/fcmService';
 import { enrichUserAvatar } from '../shared/services/avatarEnricher';
 import { deleteMediaAssets } from '../shared/services/blobService';
+import { selectSuccessorUserId, promoteToOwner } from '../shared/services/cliqueOwnershipService';
 import * as crypto from 'crypto';
 
 // Max accepted length when validating an inbound invite code on join. MUST stay
@@ -349,24 +350,22 @@ async function leaveClique(req: HttpRequest, context: InvocationContext): Promis
       throw new NotFoundError('clique');
     }
 
-    if (membership.role === 'owner') {
-      // Check if there are other members
-      const memberCount = await queryOne<{ count: number }>(
-        'SELECT COUNT(*)::int AS count FROM clique_members WHERE clique_id = $1',
-        [cliqueId],
-      );
+    // How many members are there right now (including the leaver)?
+    const memberCount = await queryOne<{ count: number }>(
+      'SELECT COUNT(*)::int AS count FROM clique_members WHERE clique_id = $1',
+      [cliqueId],
+    );
 
-      if (memberCount && memberCount.count > 1) {
-        throw new ForbiddenError('Transfer ownership before leaving.');
-      }
-
-      // Owner is the only member — the clique (and its events + media rows) is
-      // about to be CASCADE-deleted. Blobs are NOT auto-deleted, so enumerate
-      // every photo/video across all of the clique's events and delete their
-      // blobs FIRST. Without this, originals + thumbnails + (for videos) the
-      // whole HLS/fallback/poster dir are orphaned in storage forever, since
-      // once the rows are gone no cleanup path can ever find them. Mirrors the
-      // deleteEvent / deleteMe pattern (uses the shared deleteMediaAssets helper).
+    if (!memberCount || memberCount.count <= 1) {
+      // Last member leaving (ANY role) — the clique (and its events + media rows)
+      // is about to be CASCADE-deleted. Blobs are NOT auto-deleted, so enumerate
+      // every photo/video across the clique's events and delete their blobs
+      // FIRST. Without this, originals + thumbnails + (for videos) the whole
+      // HLS/fallback/poster dir orphan in storage forever, since once the rows
+      // are gone no cleanup path can ever find them. Mirrors deleteEvent /
+      // deleteMe (uses the shared deleteMediaAssets helper). Previously only the
+      // sole-OWNER path did this, so an ownerless clique's last member leaving
+      // leaked every blob.
       const media = await query<{ blob_path: string; thumbnail_blob_path: string | null; media_type: string }>(
         `SELECT p.blob_path, p.thumbnail_blob_path, p.media_type
          FROM photos p
@@ -397,7 +396,27 @@ async function leaveClique(req: HttpRequest, context: InvocationContext): Promis
       return successResponse({ message: 'Clique deleted.' });
     }
 
-    // Regular member — remove membership
+    // Other members remain. If the leaver is the owner, auto-promote the
+    // longest-tenured remaining member so the clique is never left ownerless.
+    // (An owner used to be hard-blocked with "Transfer ownership before
+    // leaving." — but no transfer endpoint existed, so they were stuck and
+    // deleting their account was the only exit, which orphaned the clique.)
+    // Explicit hand-off via POST /cliques/{id}/transfer-ownership remains
+    // available; this is the no-friction fallback.
+    if (membership.role === 'owner') {
+      const successor = await selectSuccessorUserId(cliqueId, authUser.id);
+      if (successor) {
+        await promoteToOwner(cliqueId, successor);
+        trackEvent('clique_ownership_transferred', {
+          cliqueId,
+          from: authUser.id,
+          to: successor,
+          reason: 'owner_left',
+        });
+      }
+    }
+
+    // Remove the leaver's membership.
     await execute(
       'DELETE FROM clique_members WHERE clique_id = $1 AND user_id = $2',
       [cliqueId, authUser.id],
@@ -483,6 +502,68 @@ async function removeMember(req: HttpRequest, context: InvocationContext): Promi
   }
 }
 
+// POST /api/cliques/{cliqueId}/transfer-ownership
+export async function transferOwnership(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
+  try {
+    const authUser = await authenticateRequest(req);
+    requireActiveEntitlement(authUser);
+
+    const cliqueId = req.params.cliqueId;
+    if (!cliqueId || !isValidUUID(cliqueId)) {
+      throw new ValidationError('A valid clique ID is required.');
+    }
+
+    const body = await req.json() as Record<string, unknown>;
+    const targetUserId = body.user_id;
+    if (typeof targetUserId !== 'string' || !isValidUUID(targetUserId)) {
+      throw new ValidationError('A valid user_id is required.');
+    }
+
+    // Caller must be the current owner.
+    const ownerMembership = await queryOne<CliqueMember>(
+      'SELECT * FROM clique_members WHERE clique_id = $1 AND user_id = $2',
+      [cliqueId, authUser.id],
+    );
+    if (!ownerMembership || ownerMembership.role !== 'owner') {
+      throw new ForbiddenError('Only the clique owner can transfer ownership.');
+    }
+    if (targetUserId === authUser.id) {
+      throw new ValidationError('You already own this clique.');
+    }
+
+    // Target must be a current member.
+    const targetMembership = await queryOne<CliqueMember>(
+      'SELECT * FROM clique_members WHERE clique_id = $1 AND user_id = $2',
+      [cliqueId, targetUserId],
+    );
+    if (!targetMembership) {
+      throw new NotFoundError('member');
+    }
+
+    // Atomic role swap in a single statement — no window where the clique has
+    // zero or two owners.
+    await execute(
+      `UPDATE clique_members
+       SET role = CASE WHEN user_id = $2 THEN 'member' WHEN user_id = $3 THEN 'owner' END
+       WHERE clique_id = $1 AND user_id IN ($2, $3)`,
+      [cliqueId, authUser.id, targetUserId],
+    );
+    // Keep created_by_user_id in lockstep so the client recognizes the new owner.
+    await execute('UPDATE cliques SET created_by_user_id = $2 WHERE id = $1', [cliqueId, targetUserId]);
+
+    trackEvent('clique_ownership_transferred', {
+      cliqueId,
+      from: authUser.id,
+      to: targetUserId,
+      reason: 'explicit',
+    });
+
+    return successResponse({ message: 'Ownership transferred.' });
+  } catch (error) {
+    return handleError(error, context.invocationId);
+  }
+}
+
 // Register all endpoints
 app.http('createClique', {
   methods: ['POST'],
@@ -538,4 +619,11 @@ app.http('removeMember', {
   authLevel: 'anonymous',
   route: 'cliques/{cliqueId}/members/{userId}',
   handler: removeMember,
+});
+
+app.http('transferOwnership', {
+  methods: ['POST'],
+  authLevel: 'anonymous',
+  route: 'cliques/{cliqueId}/transfer-ownership',
+  handler: transferOwnership,
 });

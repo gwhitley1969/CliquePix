@@ -2,6 +2,30 @@
 
 Last updated: 2026-06-11 (COST INCIDENT: transcoder Container Apps Job billed ~$447 MTD — root-caused + mitigated, see new top entry. Prior same-day: app-wide lockout — all 14 users' backfilled trials expired 2026-06-09 and the Android paywall rendered a blank screen [placeholder RC key + no PaywallView fallback]. Resolved same-day: trials extended +30d via SQL; reviewer lifetime promo grant live end-to-end; TWO production backend bugs fixed + deployed [webhook app_user_id resolution order, RC REST client on v1 API with a v2-only key]; paywall never-blank hardening + stable-router fix on `main` pending next mobile build. See top entry. Prior: Play rejection of versionCode 6 fixed [PR #52], versionCode 7 uploaded 2026-06-10 — in Google review.)
 
+## FEATURE: clique ownership lifecycle (reassignment + transfer) — code complete (2026-06-16)
+
+**Status:** ✅ code complete (backend + mobile + migration + tests) · ⏳ backend deploy (`func publish`) + migration `014` (psql) PENDING · ⏳ mobile UI ships in next app build. Follow-on to the grey-screen fix (PR #59), which was the first symptom of this gap.
+
+**Why.** Cliques had no ownership lifecycle: deleting the creator's account left the clique with members but ZERO owners (`cliques.created_by_user_id` SET NULL + the owner's `clique_members` row CASCADE-deleted), there was no transfer endpoint (`leaveClique` told owners to "Transfer ownership before leaving" but nothing implemented it), and an ownerless clique's last member leaving leaked all its media blobs. Orphan confirmed in prod: clique `9525a0ea` (Paula + Gene, both `role='member'`, no owner).
+
+**Invariant established:** every clique with ≥1 member has exactly one `role='owner'` member, and `cliques.created_by_user_id` is kept in LOCKSTEP with it (already-installed app builds read `created_by` for their `isOwner` check, so it must stay correct — this is why we didn't switch to a role-only model).
+
+**What shipped (code):**
+- `backend/src/shared/services/cliqueOwnershipService.ts`: `selectSuccessorUserId` (longest-tenured — `joined_at ASC, user_id ASC`) + `promoteToOwner` (role + created_by lockstep).
+- `deleteMe` (`auth.ts`): promote successor on owned multi-member cliques before the user-row cascade.
+- `leaveClique` (`cliques.ts`): owner-leave now AUTO-PROMOTES the longest-tenured member (was a hard block); last-member-leave (any role) deletes the clique + blobs via `deleteMediaAssets` (closes the leak).
+- `POST /api/cliques/{id}/transfer-ownership` — explicit hand-off (atomic single-statement `CASE` role swap + created_by). Mobile: clique-detail member overflow menu → "Make owner" / "Remove from clique".
+- Migration `014_clique_ownership_backfill.sql`: promote longest-tenured for ownerless cliques + lockstep-repair `created_by`. Idempotent. ⚠️ applying it is a **production write** (Azure MCP postgres is read-only) — run via psql per `reference_prod_db_access`.
+- Telemetry `clique_ownership_transferred` (`reason`: `account_deleted` | `owner_left` | `explicit`).
+
+**Verification:** backend 0 lint errors + tsc clean + **231 jest** (+8 new `cliqueOwnership.test.ts`); Flutter `analyze` 54 baseline + **120 tests**.
+
+**Deploy when ready:** `func azure functionapp publish func-cliquepix-fresh` (the endpoint is harmless until a client calls it) + apply `014` via psql → re-query `9525a0ea` (expect Paula `role='owner'`, `created_by`=Paula). Mobile UI rides the next app build.
+
+**Deferred:** notifying the auto-promoted new owner (needs a new `notifications.type` + client routing); role-as-single-source-of-truth refactor (breaks old builds' `isOwner`).
+
+---
+
 ## CRASH FIX: post-auth grey Home screen (null creator FK) — fixed + device-verified (2026-06-16)
 
 **Status:** ✅ root-caused + fixed on `main` working tree · ✅ **device-verified on a Samsung Galaxy Z Fold 7** (Gene, 2026-06-16 — Home renders correctly) · ⏳ ships in the next mobile build (rides versionCode 8 with the other pending Flutter fixes) · ⏳ commit/PR pending.
