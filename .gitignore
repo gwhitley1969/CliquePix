@@ -52,6 +52,10 @@ local.settings.json
 .env
 .env.*
 !.env.example
+# Ignore the entire secrets/ folder regardless of extension — it holds .p8 keys
+# AND service-account JSON (e.g. the Google Play key clique-pix-*.json), which
+# the specific patterns below would NOT catch (there is no blanket *.json rule).
+secrets/
 *.pem
 *.key
 *.p8

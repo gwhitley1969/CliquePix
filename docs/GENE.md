@@ -4,7 +4,7 @@ Personal tracking file for Gene. Pick up here when resuming the CLIQUE Pix paywa
 
 Full plan lives at `C:\Users\genew\.claude\plans\okay-this-is-what-inherited-deer.md`.
 
-Last updated **2026-06-11** — **LOCKOUT INCIDENT RESOLVED**: all 14 users' backfilled trials expired 2026-06-09 → everyone hit the paywall, and Android's paywall rendered BLANK (placeholder `goog_` key + no PaywallView fallback). Same-day fixes: trials extended **+30 days (now 2026-07-11)** via SQL; **reviewer `vwhitley1967@gmail.com` lifetime promo grant DONE + verified end-to-end** (Phase 6 partially complete); two production backend bugs fixed + deployed (webhook `app_user_id` resolution dropped ALL anonymous-origin-customer webhooks; RC REST client used API v1 with our v2-only key → forceSync + GDPR delete were broken since launch); paywall never-blank fallback + router fixes on `main` for the next build. Full record: `DEPLOYMENT_STATUS.md` top entry. (Prior: 2026-06-09 brand rename PR #47.)
+Last updated **2026-06-16** — **ANDROID BILLING UNBLOCKING**: the RevenueCat Play app is created and the **Android `goog_` SDK key is captured + wired into the client** (`goog_CxDvuOryuEQtBiylZjCbkabcdHF`, PR #62 merged to `main`, **versionCode bumped to 9**). RevenueCat is now fully wired for Android (Play products `plus_monthly:monthly` + `plus_annual:annual` active, both attached to the `plus` entitlement AND the `default` offering packages). **Two independent Google-side clocks remain before Android purchases work end-to-end:** (1) the service-account **"subscriptions API" permission** is still propagating (RC "Credentials need attention" shows ✅ inappproducts + ✅ monetization but ❌ subscriptions — the subscriptions API needs the **"Manage orders and subscriptions"** account permission; verified correct, now just Google propagation, ≤36h); (2) the **Payments-profile org-name verification** (BlueBuildApps→Xtend-AI docs submitted, in Google's review queue) — gates *activating/selling*. Full detail + the do-this-when-green steps: `DEPLOYMENT_STATUS.md` top entry. (Prior — 2026-06-11 **LOCKOUT INCIDENT RESOLVED**: all 14 users' backfilled trials expired 2026-06-09 → everyone hit the paywall, and Android's paywall rendered BLANK (placeholder `goog_` key + no PaywallView fallback); same-day fixes: trials extended **+30 days (now 2026-07-11)** via SQL; **reviewer `vwhitley1967@gmail.com` lifetime promo grant DONE + verified end-to-end**; two production backend bugs fixed + deployed; paywall never-blank fallback + router fixes on `main`. Prior: 2026-06-09 brand rename PR #47.)
 
 ---
 
@@ -16,7 +16,8 @@ Last updated **2026-06-11** — **LOCKOUT INCIDENT RESOLVED**: all 14 users' bac
 
 ## Where we are RIGHT NOW — next clicks for Gene (all dashboard/store, no code)
 
-0. **⏰ TRIAL CLOCK (2026-06-11):** every non-entitled user's trial now ends **2026-07-11**. Before that date either (a) finish Play billing + ship the Android `goog_` key so users can actually subscribe, (b) grant tester promos, or (c) extend trials again (same SQL — see DEPLOYMENT_STATUS 2026-06-11 entry). **Reviewer is permanently covered** (lifetime promo grant verified live). Tester grants: pick the 4 testers and grant 1-year promos in RC → Customers → Grant Promotional Entitlement — iOS testers' RC customers exist; Android-only testers won't until the `goog_` key ships (grant returns 404 — skip, trial covers them).
+0. **⏰ TRIAL CLOCK (2026-06-11):** every non-entitled user's trial now ends **2026-07-11**. Before that date either (a) finish Play billing so users can actually subscribe, (b) grant tester promos, or (c) extend trials again (same SQL — see DEPLOYMENT_STATUS 2026-06-11 entry). **Reviewer is permanently covered** (lifetime promo grant verified live). Tester grants: pick the 4 testers and grant 1-year promos in RC → Customers → Grant Promotional Entitlement — iOS testers' RC customers exist; Android-only testers won't until a versionCode-9 build with the real `goog_` key ships (grant returns 404 — skip, trial covers them).
+   - **Android `goog_` key: ✅ DONE (2026-06-16)** — captured + wired into the client (PR #62, merged to `main`, versionCode 9). What's left for Android purchases is NOT the key — it's the **two Google clocks** below (subscriptions-API permission propagation + Payments-profile org-name verification) + creating/activating the Play subscriptions. See `DEPLOYMENT_STATUS.md` top entry "ANDROID BILLING".
 1. ~~Publish + attach the paywall~~ **✅ DONE 2026-06-03** — `pw9ac01d9e31184633` published + attached to `default`. Subscription also renamed "CLIQUE Pix Plus" → "CLIQUE Pix" across legal pages, web, paywall, and App Store Connect (no free tier, so "Plus" was misleading).
 2. **Verify Transfer Behavior = "Keep with previous App User ID"** (Project Settings → General). The API can't read it.
 3. ~~Fix test-store prices~~ **WON'T FIX (2026-06-03)** — RevenueCat Test Store prices are **immutable once set** (greyed in dashboard, create-only API, no update/delete endpoint). Sandbox-only; real App Store prices already correct at $3.99/$39.99, so zero user impact.
@@ -143,13 +144,15 @@ Tax is verified, so these are moot: the IRS-147c call (`800-829-4933`, EIN name-
 - [x] **iOS public SDK key** captured → `appl_OvhNypnojnQSEebpQtBikJYTHBa`. *(still must land in `app/lib/core/constants/revenuecat_constants.dart`, Phase 3)*
 - [x] **Paywalls v2 paywall** `pw9ac01d9e31184633` — **published + attached to `default` offering 2026-06-03.** Headline "Subscribe to CLIQUE Pix"; Terms/Privacy buttons → `clique-pix.com/docs/*`.
 
-### Android side (do after Google Play Payments is Active and service account ready)
+### Android side (updated 2026-06-16 — mostly DONE)
 
-- [ ] Add Google Play app in Apps & providers (package `com.cliquepix.clique_pix`, upload service-account JSON)
-- [ ] Import `plus_monthly` + `plus_annual` from Play, attach `plus` entitlement
-- [ ] Attach to the same offering packages
-- [ ] Capture Android public SDK key (`goog_...`)
-- [ ] Configure RTDN — copy the Pub/Sub topic RC generates and paste into Play Console
+- [x] **Add Google Play app in Apps & providers** (package `com.cliquepix.clique_pix`, service-account JSON uploaded). App `appbdff3c693e`.
+- [x] **Import `plus_monthly` + `plus_annual` from Play, attach `plus` entitlement.** Play products `plus_monthly:monthly` (`prod346a7e0e37`) + `plus_annual:annual` (`prod8178fcaf60`) active in RC, both on entitlement `plus` (`entldcaccca2c3`).
+- [x] **Attach to the offering packages** — assistant attached both Play products to `default` offering packages `$rc_monthly` + `$rc_annual` (2026-06-16; they were on the entitlement but missing from the packages, which would have left Android packages with no purchasable product).
+- [x] **Capture Android public SDK key** → `goog_CxDvuOryuEQtBiylZjCbkabcdHF` (wired into the client, PR #62).
+- [ ] **Service-account "subscriptions API" permission** — ❌ still red in RC ("Credentials need attention"). Needs the **"Manage orders and subscriptions"** account-level permission for `revenuecat-play@clique-pix-d7fde.iam.gserviceaccount.com`; verified correct → waiting on Google propagation (≤36h). inappproducts + monetization already ✅.
+- [ ] **Configure RTDN** — copy the Pub/Sub topic RC generates and paste into Play Console. Not done yet.
+- [ ] *(cosmetic)* set the two Play products' RC `display_name` to `Plus Monthly`/`Plus Annual` (manual dashboard edit — no API tool for it; functionally irrelevant).
 
 ---
 
@@ -200,8 +203,9 @@ Tax is verified, so these are moot: the IRS-147c call (`800-829-4933`, EIN name-
 
 Implemented + committed (6 commits): SDK v10, `EntitlementState` on `UserModel`, `RevenueCatService`, hosted paywall at `/paywall`, router gate on `effective_active`, nav hidden off-access, RC logIn/logOut in the auth lifecycle, `refreshEntitlement` + optimistic-flag/30s reconcile, Profile Manage/Restore + diagnostics, `version: 1.0.0+5`. **analyze 54 baseline · 96/96 tests · release APK green.**
 - ✅ iOS public SDK key wired into `app/lib/core/constants/revenuecat_constants.dart` (`appl_OvhNypnojnQSEebpQtBikJYTHBa`).
-- [ ] **Android `goog_` SDK key** — still a placeholder in `revenuecat_constants.dart` (Play blocked). iOS-first until then.
+- [x] **Android `goog_` SDK key wired (2026-06-16)** — `goog_CxDvuOryuEQtBiylZjCbkabcdHF` in `revenuecat_constants.dart` (PR #62, merged to `main`, versionCode 9). Replaces the placeholder + disarms the `isPlaceholderKey` short-circuit so `Purchases.configure()` runs on Android.
 - [ ] **On-device smoke** + `flutter build ipa --release` — needs a device + the published paywall + an Apple sandbox tester.
+- [ ] **Android on-device purchase smoke** — gated on the two Google clocks + Play subscriptions activated (see DEPLOYMENT_STATUS "ANDROID BILLING").
 
 Original checklist (all implemented unless noted above):
 
