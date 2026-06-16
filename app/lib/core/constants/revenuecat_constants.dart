@@ -9,9 +9,9 @@ class RevenueCatConstants {
   // iOS public SDK key (production) — captured 2026-06-02 from the RC dashboard.
   static const String _appleKey = 'appl_OvhNypnojnQSEebpQtBikJYTHBa';
 
-  // Android public SDK key — not yet available (Google Play app blocked on
-  // payments/tax verification). Replace once the Play app is created in RC.
-  static const String _googleKey = 'goog_REPLACE_WITH_ANDROID_PUBLIC_KEY';
+  // Android public SDK key (production) — captured 2026-06-16 from the RC
+  // dashboard after the Play Store app (com.cliquepix.clique_pix) was created.
+  static const String _googleKey = 'goog_CxDvuOryuEQtBiylZjCbkabcdHF';
 
   /// Platform-correct public key for Purchases.configure.
   static String get publicSdkKey => Platform.isIOS ? _appleKey : _googleKey;
