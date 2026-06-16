@@ -4,7 +4,7 @@ Last updated: 2026-06-11 (COST INCIDENT: transcoder Container Apps Job billed ~$
 
 ## FEATURE: clique ownership lifecycle (reassignment + transfer) — code complete (2026-06-16)
 
-**Status:** ✅ code complete (backend + mobile + migration + tests) · ⏳ backend deploy (`func publish`) + migration `014` (psql) PENDING · ⏳ mobile UI ships in next app build. Follow-on to the grey-screen fix (PR #59), which was the first symptom of this gap.
+**Status:** ✅ code complete + **backend DEPLOYED** (`func publish`, `/api/health` 200, `transfer-ownership` 401-not-404 direct + APIM) + **migration `014` APPLIED** (verified: 0 ownerless cliques; clique `9525a0ea` → Paula `role='owner'` + `created_by`=Paula; 0 empty-orphan cliques) · ⏳ migration `015` (notification type) + a re-deploy carry the new-owner notification · ⏳ mobile UI (Make-owner + notification rendering) ships in next app build. Follow-on to the grey-screen fix (PR #59), which was the first symptom of this gap.
 
 **Why.** Cliques had no ownership lifecycle: deleting the creator's account left the clique with members but ZERO owners (`cliques.created_by_user_id` SET NULL + the owner's `clique_members` row CASCADE-deleted), there was no transfer endpoint (`leaveClique` told owners to "Transfer ownership before leaving" but nothing implemented it), and an ownerless clique's last member leaving leaked all its media blobs. Orphan confirmed in prod: clique `9525a0ea` (Paula + Gene, both `role='member'`, no owner).
 
@@ -22,7 +22,9 @@ Last updated: 2026-06-11 (COST INCIDENT: transcoder Container Apps Job billed ~$
 
 **Deploy when ready:** `func azure functionapp publish func-cliquepix-fresh` (the endpoint is harmless until a client calls it) + apply `014` via psql → re-query `9525a0ea` (expect Paula `role='owner'`, `created_by`=Paula). Mobile UI rides the next app build.
 
-**Deferred:** notifying the auto-promoted new owner (needs a new `notifications.type` + client routing); role-as-single-source-of-truth refactor (breaks old builds' `isOwner`).
+**New-owner notification (added same day):** all three ownership-change paths now call `notifyNewOwner` (in-app `clique_ownership_transferred` row + FCM push "You're now the owner of X" → taps to the clique). Best-effort (try/catch) so it can never break the ownership change. Migration `015_clique_ownership_notification_type.sql` adds the type to the `notifications.type` CHECK (additive, idempotent). Client renders the new type (icon/title/tap routing in `notifications_screen.dart`). Deploying code BEFORE `015` is safe — the INSERT would just fail the CHECK and be swallowed until `015` lands.
+
+**Still deferred:** role-as-single-source-of-truth refactor (breaks old builds' `isOwner`).
 
 ---
 

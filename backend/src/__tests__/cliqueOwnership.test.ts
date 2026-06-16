@@ -23,11 +23,12 @@ jest.mock('../shared/services/blobService', () => ({ deleteMediaAssets: jest.fn(
 jest.mock('../shared/services/fcmService', () => ({ sendToMultipleTokens: jest.fn() }));
 jest.mock('../shared/services/avatarEnricher', () => ({ enrichUserAvatar: jest.fn() }));
 
-import { selectSuccessorUserId, promoteToOwner } from '../shared/services/cliqueOwnershipService';
+import { selectSuccessorUserId, promoteToOwner, notifyNewOwner } from '../shared/services/cliqueOwnershipService';
 import { transferOwnership } from '../functions/cliques';
 import { query, queryOne, execute } from '../shared/services/dbService';
 import { authenticateRequest } from '../shared/middleware/authMiddleware';
 import { trackEvent } from '../shared/services/telemetryService';
+import { sendToMultipleTokens } from '../shared/services/fcmService';
 
 const CLIQUE = '33333333-3333-3333-3333-333333333333';
 const OWNER = '11111111-1111-1111-1111-111111111111';
@@ -39,11 +40,12 @@ const exec = execute as jest.Mock;
 const auth = authenticateRequest as jest.Mock;
 
 beforeEach(() => {
-  (query as jest.Mock).mockReset();
+  (query as jest.Mock).mockReset().mockResolvedValue([]);
   qOne.mockReset();
   exec.mockReset().mockResolvedValue(1);
   auth.mockReset();
   (trackEvent as jest.Mock).mockReset();
+  (sendToMultipleTokens as jest.Mock).mockReset();
 });
 
 function ctx(): InvocationContext {
@@ -85,6 +87,33 @@ describe('promoteToOwner', () => {
     const [cbSql, cbParams] = exec.mock.calls[1];
     expect(cbSql).toContain('UPDATE cliques SET created_by_user_id');
     expect(cbParams).toEqual([CLIQUE, TARGET]);
+  });
+});
+
+describe('notifyNewOwner', () => {
+  it('writes an in-app row and pushes FCM to the new owner', async () => {
+    qOne.mockResolvedValueOnce({ name: 'Trip Crew' }); // clique-name lookup
+    (query as jest.Mock).mockResolvedValueOnce([{ token: 'tok-1' }]); // push tokens
+    (sendToMultipleTokens as jest.Mock).mockResolvedValueOnce({ permanentlyInvalid: [], totalFailed: 0 });
+
+    await notifyNewOwner(CLIQUE, TARGET);
+
+    const insert = exec.mock.calls.find((c) => String(c[0]).includes('INSERT INTO notifications'));
+    expect(insert).toBeDefined();
+    expect(insert![0]).toContain("'clique_ownership_transferred'");
+    expect(insert![1][0]).toBe(TARGET);
+    expect(insert![1][1]).toContain(CLIQUE);
+    expect(sendToMultipleTokens).toHaveBeenCalledWith(
+      ['tok-1'],
+      expect.any(String),
+      expect.stringContaining('Trip Crew'),
+      { clique_id: CLIQUE },
+    );
+  });
+
+  it('is best-effort: a DB failure never throws (ownership change is already committed)', async () => {
+    qOne.mockRejectedValueOnce(new Error('db down'));
+    await expect(notifyNewOwner(CLIQUE, TARGET)).resolves.toBeUndefined();
   });
 });
 

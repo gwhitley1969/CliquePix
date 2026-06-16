@@ -12,7 +12,7 @@ import { MIN_AGE, ageBucket, calculateAge, parseDob } from '../shared/utils/ageU
 import { deleteEntraUserByOid } from '../shared/auth/entraGraphClient';
 import { buildAuthUserResponse } from '../shared/services/avatarEnricher';
 import { deleteSubscriberFromRc } from '../shared/services/revenuecatRestClient';
-import { selectSuccessorUserId, promoteToOwner } from '../shared/services/cliqueOwnershipService';
+import { selectSuccessorUserId, promoteToOwner, notifyNewOwner } from '../shared/services/cliqueOwnershipService';
 import { forceSyncFromRcApi } from '../shared/services/entitlementService';
 
 const TENANT_ID = process.env.ENTRA_TENANT_ID || '';
@@ -256,6 +256,7 @@ async function deleteMe(req: HttpRequest, context: InvocationContext): Promise<H
       const successor = await selectSuccessorUserId(clique_id, authUser.id);
       if (successor) {
         await promoteToOwner(clique_id, successor);
+        await notifyNewOwner(clique_id, successor);
         trackEvent('clique_ownership_transferred', {
           cliqueId: clique_id,
           from: authUser.id,
