@@ -1,4 +1,5 @@
-import { queryOne, execute } from './dbService';
+import { query, queryOne, execute } from './dbService';
+import { sendToMultipleTokens } from './fcmService';
 
 /**
  * Clique ownership lifecycle helpers.
@@ -53,4 +54,53 @@ export async function promoteToOwner(
     `UPDATE cliques SET created_by_user_id = $2 WHERE id = $1`,
     [cliqueId, successorUserId],
   );
+}
+
+/**
+ * Notify the NEW owner of `cliqueId` that they now own it — used by all three
+ * ownership-change paths (explicit transfer, owner-leave auto-promote,
+ * account-deletion auto-promote), so a member who gets handed ownership isn't
+ * surprised. Writes an in-app `clique_ownership_transferred` row (independent of
+ * push tokens, so web-only users get it) + an FCM push to their devices.
+ *
+ * BEST-EFFORT: fully wrapped so a notification failure can NEVER break the
+ * ownership change itself (which has already been committed by the caller).
+ */
+export async function notifyNewOwner(
+  cliqueId: string,
+  newOwnerUserId: string,
+): Promise<void> {
+  try {
+    const clique = await queryOne<{ name: string }>(
+      'SELECT name FROM cliques WHERE id = $1',
+      [cliqueId],
+    );
+    const cliqueName = clique?.name ?? 'a clique';
+
+    await execute(
+      `INSERT INTO notifications (id, user_id, type, payload_json)
+       VALUES (gen_random_uuid(), $1, 'clique_ownership_transferred', $2::jsonb)`,
+      [newOwnerUserId, JSON.stringify({ clique_id: cliqueId, clique_name: cliqueName })],
+    );
+
+    const tokens = await query<{ token: string }>(
+      'SELECT token FROM push_tokens WHERE user_id = $1',
+      [newOwnerUserId],
+    );
+    if (tokens.length > 0) {
+      const sendResult = await sendToMultipleTokens(
+        tokens.map((t) => t.token),
+        "You're now an owner",
+        `You're now the owner of ${cliqueName}`,
+        { clique_id: cliqueId },
+      );
+      // Only purge PERMANENTLY-invalid tokens (NOTIF-2), never transient failures.
+      if (sendResult.permanentlyInvalid.length > 0) {
+        await execute('DELETE FROM push_tokens WHERE token = ANY($1)', [sendResult.permanentlyInvalid]);
+      }
+    }
+  } catch (err) {
+    // Never let a notification failure surface to the ownership-change caller.
+    console.error('notifyNewOwner failed:', err);
+  }
 }

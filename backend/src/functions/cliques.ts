@@ -12,7 +12,7 @@ import { Clique, CliqueMember, CliqueWithMemberCount } from '../shared/models/cl
 import { sendToMultipleTokens } from '../shared/services/fcmService';
 import { enrichUserAvatar } from '../shared/services/avatarEnricher';
 import { deleteMediaAssets } from '../shared/services/blobService';
-import { selectSuccessorUserId, promoteToOwner } from '../shared/services/cliqueOwnershipService';
+import { selectSuccessorUserId, promoteToOwner, notifyNewOwner } from '../shared/services/cliqueOwnershipService';
 import * as crypto from 'crypto';
 
 // Max accepted length when validating an inbound invite code on join. MUST stay
@@ -407,6 +407,7 @@ async function leaveClique(req: HttpRequest, context: InvocationContext): Promis
       const successor = await selectSuccessorUserId(cliqueId, authUser.id);
       if (successor) {
         await promoteToOwner(cliqueId, successor);
+        await notifyNewOwner(cliqueId, successor);
         trackEvent('clique_ownership_transferred', {
           cliqueId,
           from: authUser.id,
@@ -550,6 +551,8 @@ export async function transferOwnership(req: HttpRequest, context: InvocationCon
     );
     // Keep created_by_user_id in lockstep so the client recognizes the new owner.
     await execute('UPDATE cliques SET created_by_user_id = $2 WHERE id = $1', [cliqueId, targetUserId]);
+
+    await notifyNewOwner(cliqueId, targetUserId);
 
     trackEvent('clique_ownership_transferred', {
       cliqueId,

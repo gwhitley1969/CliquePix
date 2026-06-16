@@ -144,6 +144,7 @@ class NotificationsScreen extends ConsumerWidget {
         }
         break;
       case 'member_joined':
+      case 'clique_ownership_transferred':
         if (cliqueId != null) {
           context.push('/cliques/$cliqueId');
           return;
@@ -324,6 +325,8 @@ class _NotificationTile extends StatelessWidget {
         return (Icons.delete_forever_rounded, [const Color(0xFF6B7280), const Color(0xFFEF4444)]);
       case 'member_joined':
         return (Icons.person_add_rounded, [AppColors.electricAqua, AppColors.violetAccent]);
+      case 'clique_ownership_transferred':
+        return (Icons.workspace_premium_rounded, [AppColors.violetAccent, AppColors.deepBlue]);
       case 'new_event':
         return (Icons.event_rounded, [AppColors.electricAqua, AppColors.deepBlue]);
       default:
@@ -341,6 +344,7 @@ class _NotificationTile extends StatelessWidget {
       case 'event_expired': return 'Event Expired';
       case 'event_deleted': return 'Event Deleted';
       case 'member_joined': return 'New Member';
+      case 'clique_ownership_transferred': return 'You\'re Now Owner';
       case 'new_event': return 'New Event';
       default: return 'Notification';
     }
