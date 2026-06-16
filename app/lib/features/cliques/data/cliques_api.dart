@@ -54,4 +54,11 @@ class CliquesApi {
   Future<void> removeMember(String cliqueId, String userId) async {
     await dio.delete(ApiEndpoints.cliqueMember(cliqueId, userId));
   }
+
+  Future<void> transferOwnership(String cliqueId, String userId) async {
+    await dio.post(
+      ApiEndpoints.cliqueTransferOwnership(cliqueId),
+      data: {'user_id': userId},
+    );
+  }
 }

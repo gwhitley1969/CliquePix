@@ -254,6 +254,9 @@ These are load-bearing rules — each was added after an incident, an audit find
 ### Media deletion — always via `deleteMediaAssets`
 - **All media deletes go through `deleteMediaAssets(media)`** (`backend/src/shared/services/blobService.ts`), which prefix-deletes a video's whole dir (HLS/fallback/poster) vs a photo's original+thumb. Deleting only `blob_path`+`thumbnail_blob_path` orphans video blobs forever (hit `deleteEvent`/`deleteMe`/expiry/`leaveClique` before the fix). Sole-owner `leaveClique` deletes blobs **before** `DELETE FROM cliques` (CASCADE removes the rows otherwise).
 
+### Clique ownership — keep `created_by` and `role='owner'` in lockstep
+- **A clique with ≥1 member must have exactly one `role='owner'` member, and `cliques.created_by_user_id` must point at that member.** `created_by_user_id` is nullable (FK `ON DELETE SET NULL` when a creator deletes their account) and the **client reads it for `isOwner`**, so EVERY ownership change updates BOTH `role` AND `created_by` (`cliqueOwnershipService.promoteToOwner`; `transferOwnership`'s single-statement `CASE` swap). `deleteMe` + `leaveClique` auto-promote the longest-tenured member (`joined_at ASC, user_id ASC`); migration `014` backfilled existing orphans. Don't switch the client to a role-only `is_owner` model without a forced-update floor — already-installed builds read `created_by`. (Added 2026-06-16; the grey-screen crash, PR #59, was the first symptom.)
+
 ### Invite codes — 128-bit entropy is the only brute-force defense
 - **`generateInviteCode` stays `crypto.randomBytes(16)` (128-bit); the join validator `INVITE_CODE_MAX_LENGTH` (64) stays ≥ the code length.** Join resolves a clique by `invite_code` alone with no rate limiting; a too-small cap silently truncated codes and made every new clique un-joinable (the INV-1 regression).
 

@@ -69,6 +69,36 @@ class _CliqueDetailScreenState extends ConsumerState<CliqueDetailScreen>
     }
   }
 
+  Future<void> _showMakeOwnerDialog(String memberName, String memberId) async {
+    final confirmed = await confirmDestructive(
+      context,
+      title: 'Make Owner',
+      body:
+          'Make $memberName the owner of this clique? You will become a regular member and lose owner controls.',
+      confirmLabel: 'Make Owner',
+    );
+
+    if (confirmed && mounted) {
+      try {
+        await ref.read(cliquesRepositoryProvider).transferOwnership(cliqueId, memberId);
+        ref.invalidate(cliqueDetailProvider(cliqueId));
+        ref.invalidate(cliqueMembersProvider(cliqueId));
+        ref.invalidate(cliquesListProvider);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('$memberName is now the owner'), backgroundColor: const Color(0xFF1A2035)),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to transfer ownership: $e'), backgroundColor: const Color(0xFFEF4444)),
+          );
+        }
+      }
+    }
+  }
+
   Future<void> _showLeaveCliqueDialog(String cliqueName) async {
     final confirmed = await confirmDestructive(
       context,
@@ -296,11 +326,11 @@ class _CliqueDetailScreenState extends ConsumerState<CliqueDetailScreen>
                         children: List.generate(members.length, (i) {
                           final m = members[i];
                           final isLast = i == members.length - 1;
-                          final canRemove = isOwner && m.userId != currentUserId;
+                          final canManage = isOwner && m.userId != currentUserId;
                           return Column(
                             children: [
                               InkWell(
-                                onTap: canRemove ? () => _showRemoveMemberDialog(m.displayName, m.userId) : null,
+                                onTap: null,
                                 borderRadius: isLast
                                     ? const BorderRadius.vertical(bottom: Radius.circular(16))
                                     : i == 0
@@ -343,14 +373,31 @@ class _CliqueDetailScreenState extends ConsumerState<CliqueDetailScreen>
                                             ),
                                           ),
                                         ),
-                                      if (canRemove)
-                                        Padding(
-                                          padding: const EdgeInsets.only(left: 8),
-                                          child: Icon(
-                                            Icons.remove_circle_outline,
+                                      if (canManage)
+                                        PopupMenuButton<String>(
+                                          icon: Icon(
+                                            Icons.more_vert_rounded,
                                             size: 20,
-                                            color: Colors.white.withValues(alpha: 0.2),
+                                            color: Colors.white.withValues(alpha: 0.4),
                                           ),
+                                          color: const Color(0xFF1A2035),
+                                          onSelected: (value) {
+                                            if (value == 'make_owner') {
+                                              _showMakeOwnerDialog(m.displayName, m.userId);
+                                            } else if (value == 'remove') {
+                                              _showRemoveMemberDialog(m.displayName, m.userId);
+                                            }
+                                          },
+                                          itemBuilder: (_) => const [
+                                            PopupMenuItem<String>(
+                                              value: 'make_owner',
+                                              child: Text('Make owner', style: TextStyle(color: Colors.white)),
+                                            ),
+                                            PopupMenuItem<String>(
+                                              value: 'remove',
+                                              child: Text('Remove from clique', style: TextStyle(color: Color(0xFFEF4444))),
+                                            ),
+                                          ],
                                         ),
                                     ],
                                   ),

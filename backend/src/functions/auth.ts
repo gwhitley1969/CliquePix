@@ -12,6 +12,7 @@ import { MIN_AGE, ageBucket, calculateAge, parseDob } from '../shared/utils/ageU
 import { deleteEntraUserByOid } from '../shared/auth/entraGraphClient';
 import { buildAuthUserResponse } from '../shared/services/avatarEnricher';
 import { deleteSubscriberFromRc } from '../shared/services/revenuecatRestClient';
+import { selectSuccessorUserId, promoteToOwner } from '../shared/services/cliqueOwnershipService';
 import { forceSyncFromRcApi } from '../shared/services/entitlementService';
 
 const TENANT_ID = process.env.ENTRA_TENANT_ID || '';
@@ -237,6 +238,31 @@ async function deleteMe(req: HttpRequest, context: InvocationContext): Promise<H
     const rcDeleted = await deleteSubscriberFromRc(authUser.id);
     if (!rcDeleted) {
       trackEvent('rc_subscriber_delete_failed', { userId: authUser.id });
+    }
+
+    // 5b. Hand off ownership of cliques the user OWNS that still have other
+    //     members, so the clique isn't left ownerless after the cascade below
+    //     deletes the user's clique_members(role='owner') row and SET NULLs
+    //     created_by. (Sole-owner-sole-member cliques were already deleted in
+    //     step 2; this handles the multi-member case — disjoint sets.) Promote
+    //     the longest-tenured remaining member and keep created_by in lockstep.
+    const ownedMultiMember = await query<{ clique_id: string }>(
+      `SELECT cm.clique_id FROM clique_members cm
+       WHERE cm.user_id = $1 AND cm.role = 'owner'
+       AND (SELECT COUNT(*) FROM clique_members x WHERE x.clique_id = cm.clique_id) > 1`,
+      [authUser.id],
+    );
+    for (const { clique_id } of ownedMultiMember) {
+      const successor = await selectSuccessorUserId(clique_id, authUser.id);
+      if (successor) {
+        await promoteToOwner(clique_id, successor);
+        trackEvent('clique_ownership_transferred', {
+          cliqueId: clique_id,
+          from: authUser.id,
+          to: successor,
+          reason: 'account_deleted',
+        });
+      }
     }
 
     // 6. Delete user record (CASCADE: clique_members, reactions, push_tokens, notifications)
