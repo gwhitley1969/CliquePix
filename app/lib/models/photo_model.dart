@@ -70,7 +70,9 @@ class PhotoModel {
     return PhotoModel(
       id: json['id'] as String,
       eventId: json['event_id'] as String,
-      uploadedByUserId: json['uploaded_by_user_id'] as String,
+      // Nullable-tolerant: uploader FK is SET NULL on account deletion (see
+      // CliqueModel). '' keeps uploader `==` checks correct without crashing.
+      uploadedByUserId: json['uploaded_by_user_id'] as String? ?? '',
       uploadedByName: json['uploaded_by_name'] as String?,
       uploadedByAvatarUrl: json['uploaded_by_avatar_url'] as String?,
       uploadedByAvatarThumbUrl: json['uploaded_by_avatar_thumb_url'] as String?,

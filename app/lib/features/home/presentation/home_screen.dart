@@ -351,8 +351,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       });
     }
 
-    final events = eventsAsync.value ?? [];
-    final cliques = cliquesAsync.value ?? [];
+    // Use valueOrNull, NOT value: AsyncValue.value RETHROWS when the provider
+    // is in an error state, so `value ?? []` would throw during build (the
+    // `??` never runs) and crash the whole Home screen. valueOrNull returns
+    // null on error, so a provider failure degrades to an empty section here
+    // (and the refresh-error pill / error boundary surface the problem)
+    // instead of taking down the screen.
+    final events = eventsAsync.valueOrNull ?? [];
+    final cliques = cliquesAsync.valueOrNull ?? [];
     final homeState = _computeState(events, cliques);
 
     final activeEvents = events.where((e) => e.isActive).toList()

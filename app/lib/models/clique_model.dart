@@ -20,7 +20,11 @@ class CliqueModel {
       id: json['id'] as String,
       name: json['name'] as String,
       inviteCode: json['invite_code'] as String,
-      createdByUserId: json['created_by_user_id'] as String,
+      // Nullable-tolerant: the FK `cliques.created_by_user_id` is SET NULL when
+      // the creator's account is deleted, so the API can legitimately return
+      // null here. '' (never a real user id) keeps ownership `==` checks correct
+      // and avoids a `Null is not a subtype of String` crash on the whole list.
+      createdByUserId: json['created_by_user_id'] as String? ?? '',
       memberCount: (json['member_count'] as num?)?.toInt() ?? 0,
       createdAt: DateTime.parse(json['created_at'] as String),
     );

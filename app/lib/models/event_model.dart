@@ -55,7 +55,9 @@ class EventModel {
       cliqueId: json['clique_id'] as String,
       name: json['name'] as String,
       description: json['description'] as String?,
-      createdByUserId: json['created_by_user_id'] as String,
+      // Nullable-tolerant: creator FK is SET NULL on account deletion (see
+      // CliqueModel). '' keeps organizer `==` checks correct without crashing.
+      createdByUserId: json['created_by_user_id'] as String? ?? '',
       createdByName: json['created_by_name'] as String?,
       createdByAvatarUrl: json['created_by_avatar_url'] as String?,
       createdByAvatarThumbUrl: json['created_by_avatar_thumb_url'] as String?,
