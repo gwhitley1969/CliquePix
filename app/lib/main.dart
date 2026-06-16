@@ -135,6 +135,102 @@ String briefError(Object e) {
   return first.length > 64 ? first.substring(0, 64) : first;
 }
 
+/// Full-screen diagnostic shown by [ErrorWidget.builder] when any widget
+/// throws during build/layout. Deliberately dependency-free and trivial to
+/// render: wraps its own [Directionality], uses only [Container]/[Text], and
+/// avoids ShaderMask/shadows/images/slivers so the safety net can never itself
+/// fail to paint. Brand dark surface (NOT grey) so its appearance is itself a
+/// signal: dark readout = a Dart exception was caught (cause is on screen);
+/// still grey = no exception (render-level / Impeller issue).
+///
+/// Diagnostic verbosity is gated by [_kVerboseErrorScreen]. Flip it to `false`
+/// for a friendly production message once the root cause is fixed.
+const bool _kVerboseErrorScreen = true;
+
+class DiagnosticErrorScreen extends StatelessWidget {
+  final FlutterErrorDetails details;
+  const DiagnosticErrorScreen(this.details, {super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    const surface = Color(0xFF0E1525);
+    if (!_kVerboseErrorScreen) {
+      return const Directionality(
+        textDirection: TextDirection.ltr,
+        child: ColoredBox(
+          color: surface,
+          child: Center(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Text(
+                'Something went wrong on this screen.\nPlease restart the app.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white, fontSize: 16),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    final exception = details.exceptionAsString();
+    final stackHead =
+        (details.stack?.toString() ?? '').split('\n').take(14).join('\n');
+
+    return Directionality(
+      textDirection: TextDirection.ltr,
+      child: ColoredBox(
+        color: surface,
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'CLIQUE Pix — this screen hit an error',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  const Text(
+                    'Please screenshot this whole screen and send it to support.',
+                    style: TextStyle(color: Colors.white70, fontSize: 13),
+                  ),
+                  const SizedBox(height: 20),
+                  SelectableText(
+                    exception,
+                    style: const TextStyle(
+                      color: Color(0xFFFF6B6B),
+                      fontSize: 13,
+                      fontFamily: 'monospace',
+                      height: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  SelectableText(
+                    stackHead,
+                    style: const TextStyle(
+                      color: Colors.white60,
+                      fontSize: 11,
+                      fontFamily: 'monospace',
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Called when an FCM message arrives while the app is in the foreground.
 /// Shows a local notification since Android does NOT auto-display foreground FCM messages.
 void _handleForegroundFcmMessage(RemoteMessage message) {
@@ -154,6 +250,34 @@ void _handleForegroundFcmMessage(RemoteMessage message) {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Global error boundary. Without this, an uncaught exception during a
+  // widget's build()/layout in a RELEASE build renders Flutter's default
+  // RenderErrorBox — a silent light-GREY box with no text (the red error
+  // screen is debug-only). That is the "grey screen of death".
+  //
+  // Diagnostic build: replace the grey box with an on-screen readout of the
+  // exception + stack on the brand DARK surface (NOT grey), so a build/layout
+  // throw on a specific device (e.g. the Z Fold 7 Home screen) is visible
+  // without logcat. If the screen is the dark readout -> an exception was
+  // thrown (root cause is on screen). If it stays GREY -> no exception fired
+  // -> a render-level (Impeller) issue, not a Dart throw.
+  //
+  // FlutterError.onError catches build/layout/render errors;
+  // platformDispatcher.onError catches uncaught async errors. Both keep the
+  // default console dump so logcat still works where available. This is also
+  // the durable fix for the whole grey-screen class — see DEPLOYMENT plan.
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.presentError(details); // preserve the default logcat dump
+    // TODO(telemetry): forward to TelemetryService.reportError once the
+    // /api/telemetry/error endpoint lands (must NOT trigger token refresh).
+  };
+  WidgetsBinding.instance.platformDispatcher.onError = (error, stack) {
+    debugPrint('[CliquePix] uncaught async error: $error');
+    return true; // handled — don't crash the isolate
+  };
+  ErrorWidget.builder =
+      (FlutterErrorDetails details) => DiagnosticErrorScreen(details);
 
   try {
     await Firebase.initializeApp();

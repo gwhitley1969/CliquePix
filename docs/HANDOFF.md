@@ -275,6 +275,11 @@ These are load-bearing rules — each was added after an incident, an audit find
 - **Sign-out/delete de-register the FCM token before clearing the JWT** (`DELETE /api/push-tokens`).
 - **Only permanent FCM errors (404 `UNREGISTERED` / 400 `INVALID_ARGUMENT`) purge a token** (`isPermanentTokenError`) — a transient blip must not purge valid tokens (it was disabling the Layer-2 silent-push defense fleet-wide).
 
+### Client models — tolerate null creator/uploader FKs; never read `AsyncValue.value` in build
+- **Deleting a user account nulls `created_by_user_id` / `uploaded_by_user_id`** on that user's cliques/events/photos/videos (FK `ON DELETE SET NULL`) — a legit, reachable state. The Flutter models MUST parse these as `as String? ?? ''` (NOT `as String`), or a single orphaned-creator row throws `Null is not a subtype of String` and errors the whole list provider. `''` is safe — these ids are only used in `== currentUserId` ownership checks. Guarded by `app/test/model_null_creator_test.dart`. (Z Fold 7 grey-screen crash, 2026-06-16.)
+- **Never read `AsyncValue.value` inside `build()` — use `.valueOrNull`.** `.value` **rethrows** when the provider is in an error state, so `value ?? []` throws during build and greys out the whole screen. This is what turned one bad clique into a full Home crash.
+- **`main.dart` has a global error boundary** (`FlutterError.onError` + `platformDispatcher.onError` + `ErrorWidget.builder`) so a build-time throw self-reports on a dark diagnostic screen instead of Flutter's silent grey `RenderErrorBox`. `_kVerboseErrorScreen` shows the stack (beta); flip to `false` once client crash telemetry (`/api/telemetry/error`) lands. Don't remove the boundary.
+
 ### Photo quality — editor cap must stay ≥ the compression cap
 - **In `camera_capture_screen.dart`, `pro_image_editor`'s `imageGenerationConfigs.maxOutputSize` (`Size(4032,4032)`) must stay ≥ `AppConstants.maxImageDimension` (3024).** The editor's default is `Size(2000,2000)`, which silently re-caps every photo below 3024 before the authoritative compress step — degrading quality with no error. Photos are **3024 px / JPEG q88** (mobile + web in lockstep), avatars **q90** (mobile).
 

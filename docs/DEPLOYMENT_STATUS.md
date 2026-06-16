@@ -2,6 +2,32 @@
 
 Last updated: 2026-06-11 (COST INCIDENT: transcoder Container Apps Job billed ~$447 MTD — root-caused + mitigated, see new top entry. Prior same-day: app-wide lockout — all 14 users' backfilled trials expired 2026-06-09 and the Android paywall rendered a blank screen [placeholder RC key + no PaywallView fallback]. Resolved same-day: trials extended +30d via SQL; reviewer lifetime promo grant live end-to-end; TWO production backend bugs fixed + deployed [webhook app_user_id resolution order, RC REST client on v1 API with a v2-only key]; paywall never-blank hardening + stable-router fix on `main` pending next mobile build. See top entry. Prior: Play rejection of versionCode 6 fixed [PR #52], versionCode 7 uploaded 2026-06-10 — in Google review.)
 
+## CRASH FIX: post-auth grey Home screen (null creator FK) — fixed + device-verified (2026-06-16)
+
+**Status:** ✅ root-caused + fixed on `main` working tree · ✅ **device-verified on a Samsung Galaxy Z Fold 7** (Gene, 2026-06-16 — Home renders correctly) · ⏳ ships in the next mobile build (rides versionCode 8 with the other pending Flutter fixes) · ⏳ commit/PR pending.
+
+**The bug.** After sign-in, some users hit a **blank grey Home screen** (Flutter's silent release-mode `RenderErrorBox`). Reported on a Z Fold 7; it *looked* device-specific but was **account-data-specific**.
+
+**Root cause (confirmed against prod DB).** One clique (`9525a0ea-5faa-428a-8404-9248a0646c07`) had **`created_by_user_id = NULL`** — the creator's account was deleted and the FK is `ON DELETE SET NULL` (almost certainly the reviewer account deleted+recreated 2026-06-11). The Fold 7 tester is a member of that clique; other test accounts aren't, hence the false device-correlation. Two layered defects:
+1. `CliqueModel.fromJson` cast `json['created_by_user_id'] as String` (non-null) → threw `type 'Null' is not a subtype of type 'String' in type cast`, erroring the cliques provider.
+2. `home_screen.dart` read `cliquesAsync.value`, and **`AsyncValue.value` rethrows on an error state** → the rethrow crashed the whole Home `build()` → grey box.
+
+**Blast radius.** The same non-null cast existed in **four models** — `clique_model`, `event_model`, `photo_model`, `video_model` (`created_by_user_id`/`uploaded_by_user_id`). Because account deletion nulls all those FKs, **any** user deleting their account would have crashed the app for every co-member viewing that clique's cliques/events/photos/videos. Pre-release landmine, not a one-off.
+
+**Diagnosis method.** The app had **no global error handling**, so the release `RenderErrorBox` rendered silently and nothing was logged; the tester couldn't capture logcat. Added a temporary on-device error boundary (`FlutterError.onError` + a trivial `ErrorWidget.builder` that prints the exception + stack on the brand dark surface) → the tester screenshotted the exact exception + `home_screen.dart:355` frame. Kept as a **permanent** safety net.
+
+**Fix.**
+- 4 models: creator/uploader id now `as String? ?? ''` (`''` is safe — only used in `== currentUserId` ownership checks).
+- `home_screen.dart`: `.value` → `.valueOrNull` (no rethrow during build).
+- `main.dart`: permanent global error boundary (`FlutterError.onError` + `platformDispatcher.onError` + `ErrorWidget.builder`). Verbosity gated by `_kVerboseErrorScreen` (currently `true` — shows the stack; flip to `false` for a friendly production message once client crash telemetry lands).
+- Regression test `app/test/model_null_creator_test.dart` (4 cases).
+
+**Verification.** `flutter analyze` 54-issue baseline preserved · **120/120 tests** (116 + 4 new) · clean release APK built (`flutter clean` + `build apk --release`, 67.9 MB) · **device-confirmed on the Z Fold 7.**
+
+**Follow-ups.** (1) Wire client crash telemetry (`/api/telemetry/error`) then flip `_kVerboseErrorScreen=false` before public release. (2) Decide whether an orphaned-creator clique should reassign ownership to a remaining member (the FK `SET NULL` itself is a legit design choice; clients now tolerate it). (3) Verify the web client tolerates null creators (JS likely doesn't runtime-crash, but confirm).
+
+---
+
 ## COST INCIDENT: transcoder job $447 month-to-date — root-caused + mitigated (2026-06-11)
 
 **Status:** ✅ mitigated live (`az containerapp job update --min-executions 0`, verified — execution churn stopped at 2026-06-12T01:31Z) · ✅ docs updated (CLAUDE.md, VIDEO_ARCHITECTURE_DECISIONS.md Decision 12 revision, VIDEO_INFRASTRUCTURE_RUNBOOK.md) · ⏳ **Azure support ticket for the June 3-9 metering anomaly (~$435) — recommended, not yet filed.**
