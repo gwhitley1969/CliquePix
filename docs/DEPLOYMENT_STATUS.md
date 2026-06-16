@@ -1,6 +1,36 @@
 # DEPLOYMENT_STATUS.md — CLIQUE Pix v1
 
-Last updated: 2026-06-11 (COST INCIDENT: transcoder Container Apps Job billed ~$447 MTD — root-caused + mitigated, see new top entry. Prior same-day: app-wide lockout — all 14 users' backfilled trials expired 2026-06-09 and the Android paywall rendered a blank screen [placeholder RC key + no PaywallView fallback]. Resolved same-day: trials extended +30d via SQL; reviewer lifetime promo grant live end-to-end; TWO production backend bugs fixed + deployed [webhook app_user_id resolution order, RC REST client on v1 API with a v2-only key]; paywall never-blank hardening + stable-router fix on `main` pending next mobile build. See top entry. Prior: Play rejection of versionCode 6 fixed [PR #52], versionCode 7 uploaded 2026-06-10 — in Google review.)
+Last updated: 2026-06-16 (ANDROID BILLING: RevenueCat Play app created + `goog_` key wired into the client (PR #62, merged to `main`, versionCode bumped to 9); RC products/entitlement/offering fully wired for Android; **blocked on two independent Google-side clocks** — (1) service-account "subscriptions API" permission propagation, (2) Payments-profile org-name verification [BlueBuildApps→Xtend-AI]. See new top entry. Prior — 2026-06-11: COST INCIDENT transcoder Container Apps Job billed ~$447 MTD, root-caused + mitigated. Prior same-day: app-wide lockout — all 14 users' backfilled trials expired 2026-06-09 and the Android paywall rendered a blank screen [placeholder RC key + no PaywallView fallback]; resolved same-day: trials extended +30d via SQL, reviewer lifetime promo grant live end-to-end, TWO production backend bugs fixed + deployed [webhook app_user_id resolution order, RC REST client on v1 API with a v2-only key], paywall never-blank hardening + stable-router fix on `main` pending next mobile build. Prior: Play rejection of versionCode 6 fixed [PR #52], versionCode 7 uploaded 2026-06-10 — in Google review.)
+
+## ANDROID BILLING: RevenueCat Play setup + `goog_` key — wired, blocked on two Google clocks (2026-06-16)
+
+**Status:** ✅ `goog_` Android SDK key captured + wired into the client (PR #62 **merged to `main`**, versionCode **9**) · ✅ RevenueCat Android fully configured (Play app, products, entitlement, offering packages) · ⏳ **two independent Google-side waits** before Android purchases work end-to-end. The next mobile build (versionCode 9) is the first to carry the real Android key — until then Android `Purchases.configure()` short-circuited on the placeholder.
+
+**What shipped (code):** PR #62 (`chore/android-revenuecat-key-vc9`, merged `26a0bcd`) — `app/lib/core/constants/revenuecat_constants.dart` Android key `goog_CxDvuOryuEQtBiylZjCbkabcdHF` (replaces the `goog_REPLACE_WITH` placeholder, which also disarms the `isPlaceholderKey` short-circuit so the SDK actually configures on Android) + pubspec `1.0.0+8 → 1.0.0+9`. Flutter CI green.
+
+**RevenueCat state (verified via API, project `proj04f5314d`):**
+- Apps: `Clique Pix (App Store)` `app8720f8aecb`, **`Clique Pix (Play Store)` `appbdff3c693e`** (package `com.cliquepix.clique_pix`), `Test Store`.
+- Android public SDK key: **`goog_CxDvuOryuEQtBiylZjCbkabcdHF`** (public-safe, shipped in client).
+- Play products (active in RC): **`plus_monthly:monthly`** (`prod346a7e0e37`), **`plus_annual:annual`** (`prod8178fcaf60`) — correct `subscriptionId:basePlanId` format.
+- Entitlement `plus` (`entldcaccca2c3`): both Play products attached (6 products total incl. iOS + Test Store).
+- Offering `default` (`ofrng6deb872be8`, `is_current`): **assistant attached both Play products to the packages** — `$rc_monthly` (`pkge952d5ad91f`) + `$rc_annual` (`pkge8992e56a7f`) now each carry Test+App+Play. (They were attached to the entitlement but missing from the offering packages — fixed 2026-06-16. Without it, Android packages had no purchasable product.)
+- Cosmetic only: the two Play products have `display_name: null` (iOS reads "Plus Monthly"/"Plus Annual"). No API/MCP tool edits an existing product's display name — manual dashboard edit if desired; functionally irrelevant (paywall pulls titles/prices from the store at runtime).
+
+**The two Google-side clocks (both must go green; independent of each other):**
+1. **Service-account "subscriptions API" permission.** RevenueCat's "Credentials need attention" → "View details" shows ✅ inappproducts API, ✅ monetization API, ❌ **subscriptions API**. The subscriptions API specifically requires the **"Manage orders and subscriptions"** account-level permission in Play Console (the other two pass via "View app information" / "View financial data"). Service account: `revenuecat-play@clique-pix-d7fde.iam.gserviceaccount.com`, GCP project `clique-pix-d7fde`. Gene verified the grant is correct (account-level, Apply+Save, right SA) and cross-checked community articles → conclusion: **purely Google permission propagation** (up to ~24–36h; the other two already flipped green). Nudge re-check with the ⟳ icon. The Google Play Android Developer API enablement was the fix that turned inappproducts+monetization green (Gene had to enable it).
+2. **Payments-profile / org-name verification.** Tax was verified 2026-06-03; identity/Payments profile still shows an issue. Gene submitted documentation to Google showing the org name change **BlueBuildApps, LLC → Xtend-AI, LLC** — now in Google's review queue. This gates *activating/selling* subscriptions (Play Console Monetize → Products UI shows "There is an issue with your payments profile"). You can *define* subscriptions while it pends, just not Activate.
+
+**Do-this-when-green (the short remaining path):**
+1. **Pre-stage (can do now, before either clock clears — only Activate is gated):** Play Console → Monetize → Subscriptions → create `plus_monthly` (base plan id `monthly`, auto-renewing, Monthly, **$3.99**) + `plus_annual` (base plan id `annual`, Yearly, **$39.99**, + offer `free-trial`: 7-day free-trial phase → $39.99 pricing phase). **Base-plan IDs must match `monthly`/`annual`** or they won't link to the RC products `plus_monthly:monthly` / `plus_annual:annual`. Save; don't Activate yet.
+2. When **both** clocks are green → **Activate** the two base plans (+ the annual offer) in Play Console.
+3. **Wire RTDN** (RevenueCat → Play app → "Google developer notifications": copy the Pub/Sub topic RC generates, paste into Play Console). Currently unwired.
+4. Final end-to-end verify (RC `list-products`/offering packages already confirmed; verify Play purchase in a license-test account).
+
+**Not blocking / safety net:** all users on trials to **2026-07-11**; iOS path unaffected (TestFlight-ready, iOS key live). No lockout risk during the wait.
+
+**Rollback:** PR #62 is additive (a constant + version bump); `git revert 26a0bcd` restores the placeholder. RC package attachments can be detached. No DB/infra change.
+
+---
 
 ## FEATURE: clique ownership lifecycle (reassignment + transfer) — code complete (2026-06-16)
 
