@@ -207,7 +207,7 @@ Implemented + committed (6 commits): SDK v10, `EntitlementState` on `UserModel`,
 - ✅ iOS public SDK key wired into `app/lib/core/constants/revenuecat_constants.dart` (`appl_OvhNypnojnQSEebpQtBikJYTHBa`).
 - [x] **Android `goog_` SDK key wired (2026-06-16)** — `goog_CxDvuOryuEQtBiylZjCbkabcdHF` in `revenuecat_constants.dart` (PR #62, merged to `main`, versionCode 9). Replaces the placeholder + disarms the `isPlaceholderKey` short-circuit so `Purchases.configure()` runs on Android.
 - [ ] **On-device smoke** + `flutter build ipa --release` — needs a device + the published paywall + an Apple sandbox tester.
-- [ ] **Android on-device purchase smoke** — gated on the two Google clocks + Play subscriptions activated (see DEPLOYMENT_STATUS "ANDROID BILLING").
+- [~] **Android on-device purchase smoke** — both Google clocks cleared + subscriptions active; **vc9 AAB pushed to the Play production track 2026-06-17** (clean, upload-key signed). Test the buy via Play Console → Setup → **License testing** (no charge) on the staged production release before ramping to 100%. See DEPLOYMENT_STATUS "ANDROID PRODUCTION RELEASE".
 
 Original checklist (all implemented unless noted above):
 
