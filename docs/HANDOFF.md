@@ -111,6 +111,28 @@ flutter build ipa --release --build-number=<next>   # overrides CFBundleVersion 
 - **Sideloaded release APKs DO sign in** (verified 2026-06-06). CLIQUE Pix uses the CIAM **system-browser/Custom-Tabs** redirect flow (not the Authenticator broker), which does **not** validate the redirect-URI hash against the running app's signing cert. Only two things matter: the redirect hash is registered in Entra **and** declared as a `<data>` path in `AndroidManifest.xml` — both true for `4Fsai…`. Don't assume a cert mismatch blocks testing.
 - The Android manifest registers **both** the release (`4Fsai…`) and debug (`W28+…`) redirect paths. Both hashes are also registered in the Entra app registration. If you regenerate a keystore, update: the matching `dart_defines/*.json`, the manifest `<data>` path, and the Entra redirect URI (see `app/dart_defines/README.md` + `docs/AUTHENTICATION.md` AUTH-1).
 
+**iOS launch screen (branded splash) — native, no Flutter dependency:**
+The launch screen is the static image iOS shows during cold-start before Flutter boots. It is a **native iOS storyboard + asset catalog** — there is **no `flutter_native_splash` dependency** and **no Dart code**; do not add one. Design = the primary brand gradient with the camera icon + white "CLIQUE Pix" wordmark (added 2026-06-18, PR #67 — replaced Flutter's default placeholder, which had been tripping the "default placeholder launch image" build warning). Three files own it:
+- `app/ios/Runner/Base.lproj/LaunchScreen.storyboard` — three layers: full-bleed gradient `imageView` (`scaleToFill`, pinned to all 4 view edges, **behind everything**), a centered icon `imageView` (120×120pt, `centerY` offset −30 so the icon+label group reads as centered), and a white `UILabel` "CLIQUE Pix" (system bold 30pt) pinned 24pt below the icon. The label is real text, not an image, so it stays crisp at any resolution.
+- `app/ios/Runner/Assets.xcassets/LaunchBackground.imageset/` — the gradient PNG (single universal image, 1290×2796). A **vertical** gradient stretched with `scaleToFill` covers every device aspect ratio without visible distortion because each row is a single solid color.
+- `app/ios/Runner/Assets.xcassets/LaunchImage.imageset/` — the camera icon at 1x/2x/3x (120/240/360px), derived from `app/assets/logo.png`.
+
+Regenerate the assets (macOS, Pillow — `pip3 install pillow`):
+```python
+from PIL import Image
+AQUA, BLUE, VIOLET = (0,0xC2,0xD1), (0x25,0x63,0xEB), (0x7C,0x3A,0xED)   # #00C2D1 → #2563EB → #7C3AED
+def lerp(a,b,t): return tuple(round(a[i]+(b[i]-a[i])*t) for i in range(3))
+W,H = 1290,2796; g = Image.new("RGB",(W,H)); px = g.load()
+for y in range(H):
+    t = y/(H-1); c = lerp(AQUA,BLUE,t/0.5) if t<0.5 else lerp(BLUE,VIOLET,(t-0.5)/0.5)
+    for x in range(W): px[x,y] = c
+g.save("app/ios/Runner/Assets.xcassets/LaunchBackground.imageset/LaunchBackground.png")
+ic = Image.open("app/assets/logo.png").convert("RGBA")            # 512×512 icon w/ alpha
+d = "app/ios/Runner/Assets.xcassets/LaunchImage.imageset"
+for s,n in [("",120),("@2x",240),("@3x",360)]: ic.resize((n,n),Image.LANCZOS).save(f"{d}/LaunchImage{s}.png")
+```
+After changing the launch screen, `flutter clean` before rebuilding the IPA — Xcode caches the launch storyboard/asset catalog aggressively, and iOS itself caches it on-device (delete+reinstall to see changes on a device). To re-verify the layout *without* a full build, composite the gradient + 120pt icon (at `centerY` −30) + wordmark 24pt below in Pillow and eyeball contrast. The icon's own aqua square sits in the gradient's blue mid-zone but its light top + white camera body keep it legible — no white "platter" behind it is needed. If you change the gradient stops or icon, re-check that contrast. To change the wordmark, edit the `<label>` `text=` / `pointSize` in the storyboard (no asset regen needed).
+
 ### Web — `webapp/`
 
 ```bash
@@ -296,6 +318,10 @@ These are load-bearing rules — each was added after an incident, an audit find
 ---
 
 ## 7. Recent work log
+
+### 2026-06-18 — first App Store production build + branded iOS launch screen
+- **`1.0.0 (9)` IPA built on the Mac and uploaded to App Store Connect via Transporter — first production submission, now in Apple review.** (Build number `+9` matches Android Play vc9; iOS/TestFlight build numbers are tracked independently from Play, so verify the highest `+N` already in TestFlight under `1.0.0` before each iOS build to avoid a duplicate-rejection — bump just iOS with `flutter build ipa --release --build-number=<next>`.)
+- **Branded iOS launch screen** (PR #67) replaced Flutter's default placeholder — primary brand gradient + camera icon + white "CLIQUE Pix" wordmark. Cleared the "default placeholder launch image" build warning. Native storyboard + asset catalog only, no `flutter_native_splash`. Full build/regen recipe in §3 → "iOS launch screen (branded splash)".
 
 ### 2026-06-11 — lockout incident (blank screen after login) — resolved same-day
 
