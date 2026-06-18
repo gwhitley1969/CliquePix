@@ -1,6 +1,6 @@
 # HANDOFF.md — CLIQUE Pix
 
-**Last updated:** 2026-06-11
+**Last updated:** 2026-06-18
 **Purpose:** Single entry-point for anyone taking over (or returning to) CLIQUE Pix. Read this top-to-bottom; it points into the deep docs for detail. If you read only one file, read this one.
 
 > **What's authoritative:** `.claude/CLAUDE.md` is the development guardrails (it wins on scope/architecture/patterns). This file is the *operational* handoff — how to build, deploy, where things live, current state, and the rules you must not break. Where they overlap, CLAUDE.md is the source of truth and this file links to it.
@@ -31,9 +31,9 @@
 
 **Architecture in one line:** `Flutter (iOS/Android) + React web → Azure Front Door → APIM → Azure Functions (TypeScript) → PostgreSQL + Blob Storage`, with the FFmpeg transcoder on **Container Apps Jobs**, **Entra External ID (CIAM)** for auth, and **Azure Web PubSub** for DM + `video_ready` real-time.
 
-**Current launch status (2026-06-07):**
-- **iOS:** TestFlight-only (`https://testflight.apple.com/join/hWznNvJ6`) pending App Store review; Apple ID `6766294274`.
-- **Android:** sideloaded release APK + Play (internal testing). Play subscription setup in progress (tax verified; identity verification to confirm).
+**Current launch status (2026-06-18):**
+- **iOS:** 🍎 **in active Apple App Store review (2026-06-18)** — `1.0.0`, Apple ID `6766294274`, bundle `com.cliquepix.app`; currently still TestFlight (`https://testflight.apple.com/join/hWznNvJ6`) until the public listing is approved. iOS billing already wired (RevenueCat iOS key live; reviewer `vwhitley1967@gmail.com` has a verified lifetime promo grant). On approval: flip this line to public + switch the invite badge TestFlight → App Store.
+- **Android:** ✅ **PUBLIC on Google Play production — vc9 passed Google review + released at 100% (2026-06-18)**, the first public release and first with working Android billing. Android billing fully unblocked end-to-end (subscriptions active, RTDN wired). Went straight to public on approval, so the License-testing purchase smoke test was **descoped** (billing validated by real public traffic + RC webhooks). Short tail owed: revert the temporary Admin grant on the RC service account to least-privilege, and Android tester promos. See `docs/GENE.md` / `docs/DEPLOYMENT_STATUS.md`.
 - **Paywall:** live — single tier `plus`, **$3.99/mo or $39.99/yr**, 7-day no-card trial granted at first sign-in.
 - **Web:** live at clique-pix.com.
 
