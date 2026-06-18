@@ -1,6 +1,6 @@
 # HANDOFF.md — CLIQUE Pix
 
-**Last updated:** 2026-06-11
+**Last updated:** 2026-06-18
 **Purpose:** Single entry-point for anyone taking over (or returning to) CLIQUE Pix. Read this top-to-bottom; it points into the deep docs for detail. If you read only one file, read this one.
 
 > **What's authoritative:** `.claude/CLAUDE.md` is the development guardrails (it wins on scope/architecture/patterns). This file is the *operational* handoff — how to build, deploy, where things live, current state, and the rules you must not break. Where they overlap, CLAUDE.md is the source of truth and this file links to it.
@@ -31,9 +31,9 @@
 
 **Architecture in one line:** `Flutter (iOS/Android) + React web → Azure Front Door → APIM → Azure Functions (TypeScript) → PostgreSQL + Blob Storage`, with the FFmpeg transcoder on **Container Apps Jobs**, **Entra External ID (CIAM)** for auth, and **Azure Web PubSub** for DM + `video_ready` real-time.
 
-**Current launch status (2026-06-07):**
+**Current launch status (2026-06-18):**
 - **iOS:** TestFlight-only (`https://testflight.apple.com/join/hWznNvJ6`) pending App Store review; Apple ID `6766294274`.
-- **Android:** sideloaded release APK + Play (internal testing). Play subscription setup in progress (tax verified; identity verification to confirm).
+- **Android:** ✅ **LIVE on Google Play production — vc9 approved + published at 100% (2026-06-18)**, the first production release and first with working Android billing. Android billing fully unblocked end-to-end (subscriptions active, RTDN wired). Short tail owed: live-production purchase smoke test (via License testing), revert the temporary Admin grant on the RC service account to least-privilege, and Android tester promos. See `docs/GENE.md` / `docs/DEPLOYMENT_STATUS.md`.
 - **Paywall:** live — single tier `plus`, **$3.99/mo or $39.99/yr**, 7-day no-card trial granted at first sign-in.
 - **Web:** live at clique-pix.com.
 
