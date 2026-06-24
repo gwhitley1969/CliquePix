@@ -235,19 +235,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
       } else {
         debugPrint('[AUTH-SIGNIN-FAIL] stack=${st.toString().split("\n").take(8).join(" | ")}');
       }
-      if (e is DioException && e.response?.statusCode == 403) {
-        final err = e.response?.data is Map<String, dynamic>
-            ? e.response!.data['error'] as Map<String, dynamic>?
-            : null;
-        if (err?['code'] == 'AGE_VERIFICATION_FAILED') {
-          await _repository.resetSession();
-          final serverMessage = err?['message'] as String?;
-          state = AuthError(
-            serverMessage ?? 'You must be at least 13 years old to use CLIQUE Pix.',
-          );
-          return;
-        }
-      }
 
       final msg = e.toString();
       // MSAL errors (cache corruption, user cancel, session expired) and

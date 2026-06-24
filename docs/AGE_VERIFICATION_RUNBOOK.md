@@ -1,5 +1,8 @@
 # Age Verification Runbook — Claim-Based Backend Enforcement
 
+> ⚠️ **DEPRECATED — 2026-06-23. The DOB age gate described here has been REMOVED.**
+> Apple App Store Review rejected the DOB collection under Guideline 5.1.1(v) (date of birth is not relevant to core photo-sharing functionality, and the 13+ gate was self-imposed policy, not a legal requirement). The claim-based backend check, the `dateOfBirth` Entra attribute/claim, `decideAgeGate`/`ageUtils.ts`, the under-13 Graph delete, and the `age_gate_*` telemetry events are all gone. The `users.age_verified_at` column remains in the DB but is dead. 13+ is now a **stated eligibility line in the Terms of Service only** (no in-app check, no DOB collected). This document is retained for historical record (including the reverted-CAE history and the Microsoft Graph `User.ReadWrite.All` consent that may need teardown). Do NOT use it to re-introduce the gate. See `docs/DEPLOYMENT_STATUS.md` (2026-06-23 entry).
+
 **Requirement:** CLIQUE Pix users must be 13+ at sign-up.
 
 **Strategy:** Entra External ID's `SignUpSignIn` user flow collects `dateOfBirth` as a required custom attribute during first-time sign-up. The attribute is emitted on every access token as a directory-schema-extension claim. CLIQUE Pix's backend (`POST /api/auth/verify`) reads that claim on first login, computes age server-side, blocks under-13 users with HTTP 403, and best-effort deletes their orphaned Entra account via Microsoft Graph.

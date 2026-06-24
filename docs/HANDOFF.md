@@ -25,7 +25,7 @@
 - **Photo:** sign in → create Event → capture/pick photo → edit (crop/draw/stickers/filters) → compress on-device → upload to Blob via SAS → feed + push → react/save/share → auto-delete.
 - **Video:** capture/pick → client validate → resumable block upload → server transcode (FFmpeg → HLS + MP4 + poster) → uploader plays instantly from the local file while it transcodes → others play via HLS/MP4 → auto-delete.
 
-**What's built (v1):** Entra CIAM auth (email+password, Google, Apple) with a 5-layer refresh-token defense; 13+ age gate; Cliques + invite (link/QR/SMS, deep-linked); Events; in-app camera + gallery for photo & video; client photo compression; video transcoding pipeline; event feed + reactions + save/share + uploader-or-organizer delete; event-scoped 1:1 DMs; avatars; **subscription paywall + 7-day free trial** (RevenueCat); FCM push; auto-expiry + orphan cleanup; **React web client** at clique-pix.com.
+**What's built (v1):** Entra CIAM auth (email+password, Google, Apple) with a 5-layer refresh-token defense (13+ is a stated Terms-of-Service eligibility requirement only — no DOB collected, no age gate; removed 2026-06-23); Cliques + invite (link/QR/SMS, deep-linked); Events; in-app camera + gallery for photo & video; client photo compression; video transcoding pipeline; event feed + reactions + save/share + uploader-or-organizer delete; event-scoped 1:1 DMs; avatars; **subscription paywall + 7-day free trial** (RevenueCat); FCM push; auto-expiry + orphan cleanup; **React web client** at clique-pix.com.
 
 **Hard "do not build":** group chat, followers, public feeds/discovery, custom photo-editor (use `pro_image_editor`), video editing, 4K/HDR-preserved video, live streaming, AI features, Firebase backend (FCM transport only), Redis/SignalR/Service Bus.
 
@@ -237,7 +237,7 @@ Deploy history + per-item status: `docs/DEPLOYMENT_STATUS.md`.
 **Key Vault contents (names only):** PostgreSQL connection string · FCM credentials · `revenuecat-webhook-secret` · `revenuecat-secret-api-key`. Function App reads them via Key Vault references (its managed identity has `Key Vault Secrets User`). Storage/Queue access is RBAC + managed identity (no account keys in code).
 
 ### Entra External ID (CIAM)
-Tenant `cliquepix.ciamlogin.com` · app client `7db01206-135b-4a34-a4d5-2622d1a888bf` · custom API scope `access_as_user` · age gate via the `dateOfBirth` claim. **Android redirect hashes** registered (Entra + manifest): release/Play `4FsaiJ4wJWgM09R/hUh3osYJhgg=`, debug `W28+gAaZ9fNu1yL/GMRe94rK0dY=`. Web SPA redirects: `https://clique-pix.com/auth/callback`, `http://localhost:5173/auth/callback`. Full setup: `docs/AUTHENTICATION.md`, `docs/AGE_VERIFICATION_RUNBOOK.md`.
+Tenant `cliquepix.ciamlogin.com` · app client `7db01206-135b-4a34-a4d5-2622d1a888bf` · custom API scope `access_as_user`. No age gate — DOB is not collected and there is no in-app/backend age check; 13+ is a stated Terms-of-Service eligibility requirement only (age gate removed 2026-06-23). **Android redirect hashes** registered (Entra + manifest): release/Play `4FsaiJ4wJWgM09R/hUh3osYJhgg=`, debug `W28+gAaZ9fNu1yL/GMRe94rK0dY=`. Web SPA redirects: `https://clique-pix.com/auth/callback`, `http://localhost:5173/auth/callback`. Full setup: `docs/AUTHENTICATION.md`, `docs/AGE_VERIFICATION_RUNBOOK.md`.
 
 ### RevenueCat (paywall)
 Project `04f5314d` · entitlement `plus` · offering `default` (Monthly `$3.99` + Annual `$39.99`, 7-day trial) · webhook `whintgr721b9e5264` → `POST /api/internal/revenuecat-webhook` (Bearer secret in Key Vault) · iOS public SDK key `appl_OvhNypnojnQSEebpQtBikJYTHBa` (in `app/lib/core/constants/revenuecat_constants.dart`); **Android `goog_` key still pending Play setup.** Reviewer + beta access = RevenueCat **Promotional** grants (see §6). Punch list: `docs/GENE.md`.
@@ -381,7 +381,7 @@ This session opened by pulling the security-audit branch from a Mac workstation 
 | `docs/ARCHITECTURE.md` | Full technical architecture, data model, security, deployment |
 | `docs/AUTHENTICATION.md` | Auth orientation — providers, flows, iOS/Android/web specifics, reviewer demo account |
 | `docs/ENTRA_REFRESH_TOKEN_WORKAROUND.md` | The 5-layer token-refresh defense, in full |
-| `docs/AGE_VERIFICATION_RUNBOOK.md` | 13+ age gate (claim-based, Entra config) |
+| `docs/AGE_VERIFICATION_RUNBOOK.md` | Historical record of the removed 13+ age gate (claim-based, Entra config). 13+ now stated-policy-only |
 | `docs/EVENT_DM_CHAT_ARCHITECTURE.md` | Event-scoped 1:1 DMs (Web PubSub) |
 | `docs/VIDEO_ARCHITECTURE_DECISIONS.md` | 17 video decisions (transcoder, HLS SAS, player, rotation, etc.) |
 | `docs/VIDEO_INFRASTRUCTURE_RUNBOOK.md` | As-built Azure video infra (ACR, Container Apps, queue, RBAC, image version history) |

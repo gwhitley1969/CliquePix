@@ -78,17 +78,6 @@ api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError<{ error?: { code?: string; message?: string } }>) => {
     const status = error.response?.status;
-    const errorCode = error.response?.data?.error?.code;
-    const errorMessage = error.response?.data?.error?.message;
-
-    if (status === 403 && errorCode === 'AGE_VERIFICATION_FAILED') {
-      toast.error(errorMessage ?? 'You must be at least 13 years old to use CLIQUE Pix.');
-      const pca = getPca();
-      setTimeout(() => {
-        pca.logoutRedirect({ postLogoutRedirectUri: '/' }).catch(console.error);
-      }, 2500);
-      return Promise.reject(error);
-    }
 
     if (status === 401) {
       trackEvent('web_api_401', { url: error.config?.url });

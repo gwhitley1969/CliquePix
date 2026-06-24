@@ -35,7 +35,7 @@ Primary:
 Secondary:
 - Mixed groups (friends, couples, events)
 
-**Minimum age: 13.** Verified at sign-up via a self-declared date of birth on the Entra External ID signup form. The DOB is stored on the Entra user principal (never in CLIQUE Pix's product database) and emitted as a `dateOfBirth` claim on every access token. CLIQUE Pix's backend reads the claim on first login (`POST /api/auth/verify`), computes age server-side, and either stamps `users.age_verified_at` on ≥13 or returns HTTP 403 + best-effort Microsoft Graph account deletion on <13. See `docs/ARCHITECTURE.md` §5, `docs/AGE_VERIFICATION_RUNBOOK.md`, and `website/privacy.html` §2.2 + §11.
+**Minimum age: 13.** This is a stated eligibility requirement in our Terms of Service (notice-based), not an in-app verification. CLIQUE Pix does not collect date of birth and performs no in-app or backend age check. See the Terms of Service and Privacy Policy at `clique-pix.com/docs/terms` and `clique-pix.com/docs/privacy`.
 
 ---
 
@@ -186,7 +186,7 @@ A persistent group of people (e.g., “Girls Night Out” or bachelor party)
 
 Users can upload a headshot that replaces their initials everywhere in the app. The photo shows on the Profile screen, on every photo and video card they've ever uploaded, in clique member lists, and in DM thread headers + message bubbles.
 
-- **First-sign-in welcome prompt** on the Home (Events) screen after a new user passes the age gate: "Make yourself known — Add a photo so friends recognize who's sharing." Three choices: **Yes** (opens the editor immediately), **Maybe Later** (re-prompts in 7 days), **No Thanks** (never prompts again). State persisted server-side so the choice survives reinstall and works across mobile + web
+- **First-sign-in welcome prompt** on the Home (Events) screen for a new user: "Make yourself known — Add a photo so friends recognize who's sharing." Three choices: **Yes** (opens the editor immediately), **Maybe Later** (re-prompts in 7 days), **No Thanks** (never prompts again). State persisted server-side so the choice survives reinstall and works across mobile + web
 - **Tappable profile avatar** on the Profile screen — tap the gradient ring to open a bottom sheet (Take Photo / Choose from Library / Remove)
 - **Premium polish**:
   - Animated pulse on the empty-state gradient ring to signal "tap me"
@@ -426,7 +426,7 @@ A browser-based client at `clique-pix.com`. Feature-parity with the mobile app f
 - No auto-redirect for authed users — the landing page stays accessible; the top-right CTA swaps to "My Events →"
 
 **Authenticated app (at `/events`, `/cliques`, `/messages`, `/notifications`, `/profile`):**
-- Sign in via MSAL.js (same Entra tenant, 13+ age gate enforced server-side on `/api/auth/verify`)
+- Sign in via MSAL.js (same Entra tenant). 13+ is a stated Terms-of-Service eligibility requirement — no DOB collected, no in-app age check
 - Create and join Cliques; view members; **print branded QR invite cards** (gradient header/footer, logo, wordmark — suitable for wedding reception tables)
 - Create and manage Events (same 24h / 3 days / 7 days presets). Creating a Clique auto-opens the Invite dialog so sharing is one click away
 - Upload photos from a file picker or drag-drop, with client-side compression + EXIF strip + HEIC→JPEG conversion
@@ -467,6 +467,6 @@ Everything in this version supports that loop and avoids unnecessary complexity.
 | `CLAUDE.md` | Development guardrails and locked decisions for Claude Code |
 | `AUTHENTICATION.md` | Single-source orientation doc for auth: providers, end-to-end flow, platform specifics, demo account, configuration reference, migration history |
 | `ENTRA_REFRESH_TOKEN_WORKAROUND.md` | Authentication token refresh implementation details (5-layer defense for the 12-hour CIAM bug) |
-| `AGE_VERIFICATION_RUNBOOK.md` | 13+ age gate — claim emission, backend validation, troubleshooting |
+| `AGE_VERIFICATION_RUNBOOK.md` | Historical record of the removed 13+ age gate (claim emission, backend validation). 13+ is now a stated Terms-of-Service eligibility requirement only — no DOB collected, no in-app check |
 | `WEB_CLIENT_ARCHITECTURE.md` | Web client architecture, deployment, CORS/CSP config |
 

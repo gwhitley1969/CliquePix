@@ -32,7 +32,7 @@ For depth on specific subsystems, this doc points to the specialized companion d
 | User flow | `SignUpSignIn` |
 | Local-account method | **Email + password** (since 2026-05-06; was Email OTP previously) |
 | Federated providers | Google, Apple |
-| Minimum age | 13 (enforced via `dateOfBirth` claim, backend-validated) |
+| Minimum age | 13 — **stated Terms-of-Service eligibility requirement only** (no DOB collected, no in-app or backend age check; age gate removed 2026-06-23) |
 | Mobile MSAL library | `msal_auth ^3.3.0` (Flutter) |
 | Web MSAL library | `@azure/msal-browser` + `@azure/msal-react` (React SPA, PKCE) |
 | Token storage (mobile) | `flutter_secure_storage` (Keychain on iOS, EncryptedSharedPreferences on Android) |
@@ -51,8 +51,8 @@ For depth on specific subsystems, this doc points to the specialized companion d
    - Email field + password field + "Sign up" link
    - "Sign in with Google" button
    - "Sign in with Apple" button
-4. User chooses path. For email+password sign-up: types email → sets password → confirms password → fills date-of-birth attribute (required) → submits.
-5. Backend validates the access token, runs the age gate (13+). If pass: user upserted, lands on **Events** screen. If fail (under 13): red banner, Entra account best-effort deleted via Microsoft Graph.
+4. User chooses path. For email+password sign-up: types email → sets password → confirms password → submits. (No date-of-birth is collected; 13+ is a stated Terms-of-Service eligibility requirement only.)
+5. Backend validates the access token and upserts the user → lands on **Events** screen. No age check is performed.
 
 ### Returning user (cached session)
 
@@ -77,7 +77,7 @@ For depth on specific subsystems, this doc points to the specialized companion d
 ### Email + password (primary, since 2026-05-06)
 
 The default local-account method. Users:
-- Sign up with email → set password (Entra enforces complexity) → fill DOB attribute → land in app.
+- Sign up with email → set password (Entra enforces complexity) → land in app. (No DOB is collected.)
 - Sign in with email + password.
 - Recover via "Forgot password?" link on the hosted page (uses email-OTP as the SSPR verification factor — separate from the local-account method).
 
@@ -113,16 +113,13 @@ LoginScreen "Get Started" tap
      ├─ iOS:    ASWebAuthenticationSession (ephemeral, via Broker.msAuthenticator)
      └─ Android: Chrome Custom Tabs (browser_sign_out_enabled: true)
   → Entra-hosted page (cliquepix.ciamlogin.com)
-     ├─ Email + password OR Google OR Apple
-     └─ DOB attribute on signup
+     └─ Email + password OR Google OR Apple   (no DOB collected)
   → MSAL receives access_token (audience = client ID, signed by CIAM keys)
   → AuthRepository.verifyAndGetUser(token, 10s timeout)
   → POST https://api.clique-pix.com/api/auth/verify
      → APIM (apim-cliquepix-003) → Function authVerify
      → JWT validation (issuer, audience, signature via JWKS)
-     → decideAgeGate(dateOfBirth claim)
-        ├─ ≥13: upsert user with age_verified_at = NOW(), age_gate_passed
-        └─ <13: HTTP 403 AGE_VERIFICATION_FAILED + Microsoft Graph user delete
+     → upsert user   (no age check)
   → Returns enriched UserModel
   → TokenStorageService.saveTokens(token, lastRefreshTime = NOW())
   → AuthNotifier.state = AuthAuthenticated(user)
@@ -245,29 +242,17 @@ Every authenticated endpoint runs through this middleware. The validation rules:
 
 The middleware also fires-and-forgets a `last_activity_at` update on the user row (capped 1/min/user) — this feeds the Layer-2 silent-push timer.
 
-### Age gate (claim-based)
+### Age eligibility (13+, stated policy only)
 
-The `dateOfBirth` claim rides on every access token (configured in the app reg as `extension_<b2cAppId>_dateOfBirth` from the Directory schema extension). On first login, `authVerify`:
-
-1. Reads the claim via `extractDobFromClaims` (handles GUID-prefixed key form via case-insensitive substring match)
-2. Computes age via `ageUtils.calculateAge`
-3. Branches:
-   - **≥13:** `INSERT ... ON CONFLICT (external_auth_id) DO UPDATE SET age_verified_at = COALESCE(users.age_verified_at, NOW())`. The `COALESCE` preserves the original timestamp on returning logins.
-   - **<13:** Returns HTTP 403 `AGE_VERIFICATION_FAILED`, fires `age_gate_denied_under_13` telemetry, calls `deleteEntraUserByOid(oid)` via Microsoft Graph (best-effort; failure logged as `age_gate_entra_delete_failed` but does not block the 403).
-
-Returning users are never re-prompted — the COALESCE preserves `age_verified_at` and Entra holds the DOB on the user principal.
-
-**Privacy posture:** CLIQUE Pix's `users` table stores only `age_verified_at` (a timestamp), never DOB. Entra stores DOB on the user principal.
-
-Full details: **`docs/AGE_VERIFICATION_RUNBOOK.md`**.
+There is **no age gate**. 13+ is a stated eligibility requirement in the Terms of Service (notice-based), not enforced in code. `authVerify` does not read a `dateOfBirth` claim, compute age, or delete under-13 accounts; no DOB is collected anywhere. The `users.age_verified_at` column is retained in the DB but dead (no longer read or written). The claim-based age gate was removed 2026-06-23 — see the Migration history below and `docs/AGE_VERIFICATION_RUNBOOK.md` for the historical record.
 
 ### User upsert
 
-After age-gate pass, `authVerify` upserts the user row keyed on the JWT `sub` claim (fallback `oid`). `email_or_phone`, `display_name`, and `external_auth_id` are sourced from the token claims. The response wraps the user via `buildAuthUserResponse` from `backend/src/shared/services/avatarEnricher.ts` — single source of truth for the canonical auth response shape.
+`authVerify` upserts the user row keyed on the JWT `sub` claim (fallback `oid`). `email_or_phone`, `display_name`, and `external_auth_id` are sourced from the token claims. The response wraps the user via `buildAuthUserResponse` from `backend/src/shared/services/avatarEnricher.ts` — single source of truth for the canonical auth response shape.
 
 ### Telemetry
 
-Successful sign-ins fire `auth_verify_success`. Age-gate decisions fire `age_gate_passed { ageBucket }` (coarse bucket, never raw DOB) or `age_gate_denied_under_13`. Authentication failures during silent refresh fire layer-specific events: `silent_push_refresh_success/_failed`, `foreground_refresh_success/_failed`, `wm_refresh_success/_failed`, `welcome_back_shown { source: 'interceptor' | 'lifecycle', reason: <AADSTS code> }`, `cold_start_relogin_required`.
+Successful sign-ins fire `auth_verify_success`. (The former `age_gate_passed` / `age_gate_denied_under_13` events were removed with the age gate on 2026-06-23.) Authentication failures during silent refresh fire layer-specific events: `silent_push_refresh_success/_failed`, `foreground_refresh_success/_failed`, `wm_refresh_success/_failed`, `welcome_back_shown { source: 'interceptor' | 'lifecycle', reason: <AADSTS code> }`, `cold_start_relogin_required`.
 
 Useful Kusto queries: see `BETA_OPERATIONS_RUNBOOK.md` §2 ("User reports unexpected re-login").
 
@@ -279,7 +264,7 @@ Useful Kusto queries: see `BETA_OPERATIONS_RUNBOOK.md` §2 ("User reports unexpe
 
 Apple App Review Guideline 2.1 requires working credentials reviewers can hand-type. The reviewer login is **`vwhitley1967@gmail.com`**.
 
-> ⚠️ **Corrected 2026-06-05:** the original design specced a *dedicated* `appreview@cliquepix.com` account, but that was **never created** — `cliquepix.com` is not an owned domain (the app domain is `clique-pix.com`, and it has no mailboxes). The real reviewer login is `vwhitley1967@gmail.com` — an **email + password** account (NOT Google/Apple sign-in); its password is **held by Gene out-of-band, NOT in Azure Key Vault**. The DOB shown below is illustrative (the real value is an adult one, past the 13+ gate).
+> ⚠️ **Corrected 2026-06-05:** the original design specced a *dedicated* `appreview@cliquepix.com` account, but that was **never created** — `cliquepix.com` is not an owned domain (the app domain is `clique-pix.com`, and it has no mailboxes). The real reviewer login is `vwhitley1967@gmail.com` — an **email + password** account (NOT Google/Apple sign-in); its password is **held by Gene out-of-band, NOT in Azure Key Vault**. (No DOB is collected — the age gate was removed 2026-06-23.)
 
 A dedicated reviewer login:
 
@@ -294,7 +279,6 @@ A dedicated reviewer login:
 | Username (email) | `vwhitley1967@gmail.com` |
 | Sign-in method | Email + password, hand-typed (NOT Google/Apple federation) |
 | Password | Held by Gene out-of-band — **NOT** in Azure Key Vault |
-| DOB | An adult DOB, past the 13+ age gate (exact value not tracked here) |
 | Membership | Member of "Apple Review Demo" Clique with one helper account (Gene's primary) |
 | Pre-seeded content | One 7-day Event with 4–6 sample photos + 1 short video (≤30 sec) uploaded by helper |
 
@@ -309,7 +293,7 @@ Events expire after 7 days. **Re-seed within 48 hours of every App Store submiss
 | Sign-in required | Yes |
 | Username | `vwhitley1967@gmail.com` |
 | Password | (held by Gene — not in Key Vault) |
-| Notes | Short paragraphs explaining (a) the pre-seeded Clique with sample content, (b) age gate (DOB ≥ 13), (c) Google + Apple federation also available but reviewer should use supplied credentials, (d) where Privacy Policy is linked from inside the app |
+| Notes | Short paragraphs explaining (a) the pre-seeded Clique with sample content, (b) Google + Apple federation also available but reviewer should use supplied credentials, (c) where Privacy Policy is linked from inside the app |
 | Contact | `genewhitley2017@gmail.com` + phone |
 
 ---
@@ -388,11 +372,9 @@ If the MSAL config requested only OIDC scopes (no custom API scope), `result.acc
 | What | Where |
 |---|---|
 | Auth middleware (JWT validation + last-activity update) | `backend/src/shared/middleware/authMiddleware.ts` |
-| `authVerify` endpoint + age gate | `backend/src/functions/auth.ts` |
-| Age-gate utils | `backend/src/shared/utils/ageUtils.ts` |
-| Microsoft Graph client (under-13 cleanup) | `backend/src/shared/auth/entraGraphClient.ts` |
+| `authVerify` endpoint (user upsert; no age check since 2026-06-23) | `backend/src/functions/auth.ts` |
 | User table avatar enricher (canonical response shape) | `backend/src/shared/services/avatarEnricher.ts` |
-| Migration: `users.age_verified_at` | `backend/src/shared/db/migrations/008_user_age_verification.sql` |
+| Migration: `users.age_verified_at` (legacy column, now dead) | `backend/src/shared/db/migrations/008_user_age_verification.sql` |
 | Migration: `users.last_activity_at` + `last_refresh_push_sent_at` | `backend/src/shared/db/migrations/009_user_activity_tracking.sql` |
 
 ---
@@ -483,6 +465,10 @@ For developer-side diagnostics: tap the version number 7× on the Profile screen
 
 ## Migration history
 
+### 2026-06-23: Age gate removed (DOB no longer collected)
+
+Removed the claim-based 13+ age gate entirely. Motivated by Apple App Store Guideline 5.1.1(v) — date of birth is not core-relevant to the app's function, so collecting it is disfavored. The DOB attribute is removed from the Entra `SignUpSignIn` user flow (manual portal step); the backend no longer reads a `dateOfBirth` claim, computes age, stamps `age_verified_at`, or deletes under-13 accounts (`decideAgeGate`, `extractDobFromClaims`, `parseAnyDob`, `ageUtils.ts`, the 403 `AGE_VERIFICATION_FAILED` block, the `age_gate_*` telemetry, and the under-13 `deleteEntraUserByOid` call are all gone). 13+ is now a **stated Terms-of-Service eligibility requirement only** (notice-based, not enforced). The `users.age_verified_at` column is left in place but dead (migration 008 untouched as immutable history). Privacy policy + Terms updated to match. The 2026-04-18 entry below remains as the historical record of the gate that was removed.
+
 ### 2026-05-06: Cross-account data leak on sign-out → sign-up (fixed)
 
 **Trigger:** User reported that on iPhone, signing out as User A and signing up as User B on the same device showed User A's events, cliques, and photos in User B's UI. Reproducible only on iOS in the user's testing; backend was confirmed sound.
@@ -538,7 +524,7 @@ Added the `api://7db01206-135b-4a34-a4d5-2622d1a888bf/access_as_user` scope. Wit
 | Document | What it covers |
 |---|---|
 | `ENTRA_REFRESH_TOKEN_WORKAROUND.md` | Full 5-layer refresh defense — code samples, telemetry, Kusto queries, per-layer behavior, iOS / Android limitations |
-| `AGE_VERIFICATION_RUNBOOK.md` | 13+ age gate — claim emission, backend validation, deprecated CAE attempt, troubleshooting |
+| `AGE_VERIFICATION_RUNBOOK.md` | Historical record of the removed 13+ age gate (claim emission, backend validation, deprecated CAE attempt). 13+ is now a stated Terms-of-Service eligibility requirement only |
 | `WEB_CLIENT_ARCHITECTURE.md` | Web client auth (MSAL.js singleton wiring, sessionStorage cache, no 5-layer needed) |
 | `BETA_OPERATIONS_RUNBOOK.md` | Auth incident response (10+ documented scenarios with diagnostic Kusto queries and fix paths) |
 | `BETA_TEST_PLAN.md` §1 | Manual auth smoke-test checklist (cold start, OTP regression, password sign-up, federation, SSPR, reviewer account, edge cases) |

@@ -19,7 +19,7 @@ This is a manual smoke test checklist to run before each beta release. Every ite
 ## 1. Authentication
 
 - [ ] **Sign in (existing OTP-only account, regression — added 2026-05-06)** — pre-2026-05-06 account signs in via OTP path. Per Microsoft documented behavior, change-in-method only affects new users. Lands on Events.
-- [ ] **Sign up — new account, password (added 2026-05-06)** — Get Started → form asks for email → password + confirm → DOB ≥ 13 → backend `authVerify` returns 200 → lands on Events. App Insights `age_gate_passed`.
+- [ ] **Sign up — new account, password (added 2026-05-06)** — Get Started → form asks for email → password + confirm (no DOB field) → backend `authVerify` returns 200 → lands on Events.
 - [ ] **Sign in — email + password (happy path, added 2026-05-06)** — lands on Events.
 - [ ] **Sign in — wrong password (added 2026-05-06)** — retry handled inside the Entra-hosted page, no app crash, no raw MsalException toast. Cancel browser → clean LoginScreen, no error banner.
 - [ ] **Sign in — Google federation (regression, added 2026-05-06)** — lands on Events. Existing Google users unaffected by local-account method change.
@@ -44,14 +44,9 @@ This is a manual smoke test checklist to run before each beta release. Every ite
 - [ ] **Silent push refresh (Layer 2) — iOS fallback flag** — same setup on iOS. Acceptable outcomes: either `silent_push_refresh_success` directly, OR `silent_push_fallback_flag_set` followed by `foreground_refresh_success` on next foreground. Both paths keep the user signed in.
 - [ ] **Silent push does not wake — force-kill case (iOS)** — force-kill app, wait 13h, reopen → `cold_start_relogin_required` + Welcome Back dialog. Expected (iOS policy).
 - [ ] **Token Diagnostics unlock** — Profile → tap version 7× → "Token Diagnostics unlocked" snackbar; new "Token Diagnostics" text link appears below the version.
-> **Age gate enforced server-side** in `authVerify` via the `dateOfBirth` token claim. Entra collects DOB once at signup; backend reads the claim on first login; under-13 returns HTTP 403 and the Entra account is best-effort deleted via Microsoft Graph. See `docs/AGE_VERIFICATION_RUNBOOK.md`.
+> **No age gate.** The 13+ age gate was removed 2026-06-23 — no DOB is collected and there is no in-app or backend age check. 13+ is now a stated Terms-of-Service eligibility requirement only. There is nothing to test here; the rows below remain only to confirm the gate is gone.
 
-- [ ] **Age gate — new sign-up over 13** — tap Get Started → Entra sign-up form asks for DOB once → **DOB ≥ 13** (e.g. 1990-05-15) → signup completes → app lands on home screen. App Insights: `age_gate_passed` event with coarse `ageBucket` (never raw DOB). SQL: `SELECT age_verified_at FROM users WHERE email_or_phone = '<test>'` returns a recent timestamp.
-- [ ] **Age gate — new sign-up under 13** — tap Get Started → Entra sign-up form → **DOB < 13** (e.g. 2020-01-01) → Entra signup completes, but the app returns to the login screen with a red error banner reading *"You must be at least 13 years old to use CLIQUE Pix."* (surfaced from backend `AGE_VERIFICATION_FAILED` response, mapped in `auth_providers.dart:AuthNotifier.signIn`). Tapping **Dismiss** clears the banner. App Insights: `age_gate_denied_under_13`. Within ~60s verify the Entra account is deleted: `az rest --method GET --uri "https://graph.microsoft.com/v1.0/users?\$filter=mail eq '<test-email>'"` returns empty `value: []`.
-- [ ] **Age gate — returning user — no re-prompt** — sign out of a valid over-13 account, tap Get Started → Entra sign-in only (no DOB field) → lands on home screen. `age_verified_at` unchanged (COALESCE preserves it).
-- [ ] **Age gate — different account on same device** — sign out, register a NEW account with a different email → Entra sign-up form asks for DOB (new account). Independent of prior account's verification.
-- [ ] **Age gate — JWT claim check** — decode a post-login access token at `https://jwt.ms`. Verify `extension_<GUID>_dateOfBirth` is present in claims.
-- [ ] **Age gate — endpoint check** — unauth `curl -X POST https://func-cliquepix-fresh.azurewebsites.net/api/auth/verify` returns 401 with `UNAUTHORIZED`. `validate-age` endpoint returns 404 (deleted — expected).
+- [ ] **No DOB on sign-up** — tap Get Started → Entra sign-up form asks for email + password ONLY. There must be NO date-of-birth field. Sign-up completes → app lands on home screen. No `age_gate_*` events appear in App Insights.
 - [ ] **App shell — branded header on all 4 tabs** — after sign-in, tap through Home → Cliques → Notifications → Profile. Every tab shows the same branded hero: rounded app-icon logo (with a soft aqua glow) next to the "CLIQUE Pix" wordmark in the aqua → blue → violet gradient, with the per-screen title ("Home" / "My Cliques" / "Notifications" / "Profile") in its own gradient below it. Each tab has a distinct background wash (aqua on Home, deep blue on Cliques, violet on Notifications, pink on Profile). Scroll the Home feed up — the branded hero collapses away, leaving a thin dark toolbar (with any per-screen actions like Refresh on Cliques / Clear All on Notifications). Scroll back to top — header reappears.
 
 ## 2. Cliques
@@ -258,7 +253,7 @@ Client-only, scheduled via `flutter_local_notifications.zonedSchedule`. No FCM, 
 
 ## 10. Profile Pictures (Avatars)
 
-- [ ] **First-sign-in welcome prompt — Yes path** (fresh test account): sign up + pass age gate → lands on Events → welcome modal "Make yourself known" appears. Tap "Add a Photo" → picker sheet → crop + filter + frame → Save. Verify: avatar appears on Profile hero; kill & reopen app → prompt does NOT reappear (`shouldPromptForAvatar` now false because blob path is set).
+- [ ] **First-sign-in welcome prompt — Yes path** (fresh test account): sign up → lands on Events → welcome modal "Make yourself known" appears. Tap "Add a Photo" → picker sheet → crop + filter + frame → Save. Verify: avatar appears on Profile hero; kill & reopen app → prompt does NOT reappear (`shouldPromptForAvatar` now false because blob path is set).
 - [ ] **First-sign-in welcome prompt — Maybe Later** (fresh account): tap "Maybe Later" → modal closes, no upload. Kill & relaunch → prompt does NOT reappear. SQL: `SELECT avatar_prompt_snoozed_until FROM users WHERE email_or_phone='<test>'` returns ~7 days out.
 - [ ] **First-sign-in welcome prompt — No Thanks** (fresh account): tap "No Thanks" → modal closes. Relaunch → prompt does NOT reappear. SQL: `avatar_prompt_dismissed = TRUE`.
 - [ ] **Cross-device welcome honoring**: sign in on iPhone, tap "Maybe Later". Sign in on Android 5 minutes later → prompt does NOT appear.
@@ -337,7 +332,7 @@ Run in a fresh browser window per test where possible; for cross-browser coverag
 
 - [ ] **Sign in** — Get Started → Entra hosted form → returns to `/auth/callback` → lands on `/events` without any visible error state
 - [ ] **EntitlementGuard recoverable error (web, regression, added 2026-06-04)** — sign in, then force a non-401 `/auth/verify` failure (e.g. block `api.clique-pix.com` in DevTools or simulate a 5xx) and reload an authenticated route. The app shows a 'Could not load your account' screen with a 'Try again' button (NOT a permanent blank screen). Unblock the API → 'Try again' → the app shell loads. (A 401 still self-heals via logoutRedirect.)
-- [ ] **Age gate** — if a new test account under 13 signs up, the backend returns 403 AGE_VERIFICATION_FAILED → toast "You must be at least 13…" → logoutRedirect back to `/`
+- [ ] **No age gate (web)** — a new account signs up with no DOB field on the Entra hosted form; sign-up completes and lands on `/events`. No 403 `AGE_VERIFICATION_FAILED`, no age-gate toast (age gate removed 2026-06-23).
 - [ ] **Network tab** — every request to `api.clique-pix.com` carries `Authorization: Bearer …`; no 401s in a normal session
 - [ ] **Sign-out** — profile → sign out → MSAL clears → lands on `/` with "Sign in" visible again
 
