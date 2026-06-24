@@ -13,7 +13,6 @@ export interface User {
   avatar_frame_preset: number;
   avatar_prompt_dismissed: boolean;
   avatar_prompt_snoozed_until: Date | null;
-  age_verified_at: Date | null;
   // Subscription entitlement state (migration 012). All nullable except
   // entitlement_active which defaults FALSE. Fed by RevenueCat webhooks
   // at POST /api/internal/revenuecat-webhook + reconciled every 6h by

@@ -88,9 +88,8 @@ All `VITE_*`-prefixed, baked into the bundle at build. Every value is a public O
 Mirrors the Flutter MSAL flow. MSAL.js uses hidden iframes for silent renewal, so the **12-hour CIAM refresh-token inactivity bug does NOT apply** to web — no 5-layer defense needed.
 
 - **Cache**: `sessionStorage` — per-tab, survives reload, clears on tab close. Safer than `localStorage` against XSS.
-- **Sign-in**: `loginRedirect(loginRequest)`. The Entra hosted form handles DOB collection, identical to mobile.
-- **Post-sign-in**: `useAuthVerify` hook calls `POST /api/auth/verify` exactly once per session. The backend upserts the user (keyed on the JWT `sub` claim, fallback `oid`) and enforces the 13+ age gate. Returns the `User` object. **On HTTP 401, the hook force-calls `pca.logoutRedirect` for a clean re-sign-in** — a broken session is never allowed to persist as a rendered-but-broken app.
-- **Age gate**: HTTP 403 `AGE_VERIFICATION_FAILED` → axios interceptor surfaces the server's message via toast and triggers `logoutRedirect`. Same behavior as mobile.
+- **Sign-in**: `loginRedirect(loginRequest)`. The Entra hosted form collects no DOB, identical to mobile (13+ is a stated Terms-of-Service eligibility requirement only — no in-app age check).
+- **Post-sign-in**: `useAuthVerify` hook calls `POST /api/auth/verify` exactly once per session. The backend upserts the user (keyed on the JWT `sub` claim, fallback `oid`). Returns the `User` object. **On HTTP 401, the hook force-calls `pca.logoutRedirect` for a clean re-sign-in** — a broken session is never allowed to persist as a rendered-but-broken app.
 
 ### 4.1 MSAL singleton wiring (load-bearing, do not regress)
 

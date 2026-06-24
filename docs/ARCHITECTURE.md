@@ -160,9 +160,9 @@ Supports:
 - social providers (Google, Apple) configured via Entra identity providers
 - no Firebase dependency (FCM used for push transport only)
 
-## Age gate (13+)
+## Age eligibility (13+)
 
-Sign-up enforces a 13+ age gate via claim-based backend validation. The Entra External ID `SignUpSignIn` user flow collects `dateOfBirth` as a required custom attribute once on first sign-up; Entra emits it on every subsequent access token as a Directory schema extension claim (`extension_<b2cAppId>_dateOfBirth`). Our backend (`authVerify` in `backend/src/functions/auth.ts`) reads the claim on first login, computes age via `ageUtils.calculateAge`, and branches: **≥13** upserts the user with `age_verified_at = NOW()` and fires `age_gate_passed`; **<13** returns HTTP 403 `AGE_VERIFICATION_FAILED`, fires `age_gate_denied_under_13`, and best-effort deletes the Entra account via `deleteEntraUserByOid` (`backend/src/shared/auth/entraGraphClient.ts`) using the Function App's managed identity against Microsoft Graph. Returning users are never re-prompted — Entra holds DOB, the claim rides the token, and `authVerify`'s user upsert uses `COALESCE` to preserve the original `age_verified_at`. CLIQUE Pix's Postgres stores only the verification timestamp, never DOB. See `docs/AGE_VERIFICATION_RUNBOOK.md` for the full runbook + the Deprecated appendix documenting why the Custom Authentication Extension approach (MAB's pattern) was abandoned: Microsoft's own migration docs state *"Age gating isn't currently supported in Microsoft Entra External ID"*, and we hit days of opaque "Something went wrong" failures before pivoting.
+13+ is a **stated eligibility requirement in the Terms of Service** (notice-based), not an enforced age gate. CLIQUE Pix does not collect date of birth and performs no in-app or backend age verification: there is no DOB attribute, no `dateOfBirth` claim check, no age computation, and no under-13 account deletion. The `users.age_verified_at` column remains in the schema but is dead (no longer read or written). The previous claim-based age gate was removed on 2026-06-23 — `docs/AGE_VERIFICATION_RUNBOOK.md` retains the historical record.
 
 ## Token Acquisition (MSAL)
 
@@ -423,7 +423,7 @@ Relational model fits the cliques/events/memberships domain cleanly. Predictable
 | avatar_frame_preset | SMALLINT | 0..4. 0 = auto-gradient from name hash. 1..4 = user-chosen palette index |
 | avatar_prompt_dismissed | BOOLEAN | Set when user taps "No Thanks" on the first-sign-in welcome prompt — never re-prompt |
 | avatar_prompt_snoozed_until | TIMESTAMPTZ | Set when user taps "Maybe Later" (NOW + 7 days). Re-prompt eligible after this timestamp |
-| age_verified_at | TIMESTAMPTZ | Nullable. Stamped on first successful auth via age-gate claim check |
+| age_verified_at | TIMESTAMPTZ | **Legacy** — unused since the age gate was removed 2026-06-23 (no longer read or written). Column retained in the DB; a future migration may drop it |
 | last_activity_at | TIMESTAMPTZ | Nullable. Fire-and-forget update by authMiddleware, capped 1/min/user |
 | last_refresh_push_sent_at | TIMESTAMPTZ | Nullable. Written by refreshTokenPushTimer; enforces 6h dedup |
 | revenuecat_customer_id | TEXT | Nullable. RevenueCat App User ID (usually = users.id). Migration 012 |

@@ -557,17 +557,14 @@ photos/{cliqueId}/{eventId}/{videoId}/poster.jpg           # video poster frame
 
 ---
 
-## Age Gate (13+) — Claim-based backend enforcement
+## Age eligibility (13+) — stated policy only (no DOB collected)
 
-13+ minimum enforced by a **claim-based backend check** — NOT a Custom Authentication Extension (Microsoft docs state age gating isn't supported in External ID; the CAE-on-`OnAttributeCollectionSubmit` approach was tried and reverted 2026-04-18 as unsupported/opaque). DOB is collected once by the Entra-hosted signup form, stored on the user principal, emitted as a `dateOfBirth` claim. `authVerify` (`backend/src/functions/auth.ts`) reads it on first login, computes age server-side: ≥13 upserts `age_verified_at = NOW()`; <13 returns HTTP 403 `AGE_VERIFICATION_FAILED` and best-effort deletes the Entra account via Graph. Returning users fast-path (claim + `age_verified_at` already set; never re-prompted).
+13+ is a **stated eligibility requirement in the Terms of Service only** — there is NO in-app age check and NO date-of-birth collection. The former claim-based DOB age gate was **removed 2026-06-23** to satisfy App Store Review Guideline 5.1.1(v) (DOB is not relevant to core photo-sharing functionality; the gate was self-imposed policy, not a legal requirement). See `docs/DEPLOYMENT_STATUS.md` and the deprecated `docs/AGE_VERIFICATION_RUNBOOK.md` for the removed design.
 
 **Hard rules:**
-- `MIN_AGE = 13` lives in `backend/src/shared/utils/ageUtils.ts`. If policy changes, **three files move together**: `ageUtils.ts`, `website/privacy.html` (§11), `website/terms.html` (§2).
-- **No login-screen DOB picker in the client** — the login screen is just the "Get Started" MSAL button. On a 403, `AuthNotifier.signIn` reads `error.message`, calls `resetSession()` to clear the MSAL cache (so the invalid token isn't reused), and emits `AuthError(serverMessage)` rendered as a red banner.
-- Postgres `users` stores only `age_verified_at` (a timestamp), **never DOB** (Entra holds DOB). Upsert uses `COALESCE` so a grandfathered user's original timestamp is never overwritten.
-- Telemetry never logs raw DOB or precise age — only coarse `ageBucket` (`age_gate_passed` / `age_gate_denied_under_13` / `age_gate_entra_delete_failed`).
-
-Key code: `decideAgeGate` / `extractDobFromClaims` (GUID-prefixed `extension_<b2cAppId>_dateOfBirth`) / `parseAnyDob` in `auth.ts`; `deleteEntraUserByOid` in `entraGraphClient.ts`; migration `008_user_age_verification.sql`. Entra portal setup (custom attribute, claim mapping, manifest `acceptMappedClaims` + `accessTokenAcceptedVersion: 2`, Graph `User.ReadWrite.All` consent), full flow, CAE failure modes, and reverted-attempt history: **`docs/AGE_VERIFICATION_RUNBOOK.md`**.
+- **Do NOT re-introduce a DOB picker, a `dateOfBirth` claim, or any backend age computation** without explicit product approval — Apple rejected DOB collection. If a 13+ posture must be re-asserted, prefer a non-PII "I'm 13+" confirmation over collecting a birthdate, and keep Terms §2 + privacy.html §11 (in `webapp/public/docs/`, the live SWA-served copies — there is no `website/` dir) consistent.
+- The DOB attribute is removed from the Entra `SignUpSignIn` user flow; backend `authVerify` no longer reads any age claim (a missing claim was always a pass).
+- The `users.age_verified_at` column remains in the DB but is **dead** (never read or written; migration 008 left as immutable history). `entraGraphClient.ts` is retained for a future v1.5 user-initiated account-deletion path but is currently uncalled.
 
 ---
 

@@ -28,7 +28,6 @@ export interface User extends AvatarFields {
   emailOrPhone: string;
   displayName: string;
   createdAt?: string;
-  ageVerified?: boolean;
   /**
    * Computed by backend: true when avatar_blob_path is null AND the user
    * has not yet dismissed/snoozed the first-sign-in welcome prompt. Used
