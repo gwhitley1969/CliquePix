@@ -15,11 +15,13 @@ iOS **1.0 (10)** was **REJECTED** (Submission `7d415cdc…`, reviewed Jun 25). G
 1. **2.1(b) — IAPs still not submitted (REPEAT).** The previous "✅ done" below was wrong: the subscriptions never got the mandatory **App Review Screenshot**, so they stayed "Ready to Submit" and were never reviewed. **Hard rule going forward: an IAP is only "submitted" when ASC shows it as "Waiting for Review" — never trust "Ready to Submit."**
 2. **2.1(a) — NEW.** Reviewer tapped the "…" troubleshooting ellipsis on the Microsoft sign-in page and saw error **50058** (benign silent-SSO / no-session diagnostic). Fix = hide the sign-in page footer in Entra company branding (no code).
 
-**Next clicks for Gene (full runbook: `C:\Users\genew\.claude\plans\how-do-i-get-cozy-hejlsberg.md`):**
-- [ ] **Get an App Review Screenshot of the paywall** (the part Gene didn't know how to do): on the TestFlight build, sign up a throwaway account → force it non-entitled via psql (`UPDATE users SET entitlement_active=FALSE, trial_ends_at=NOW()-INTERVAL '1 day' WHERE id='<uuid>'`) → the app drops you on the real paywall ($3.99/$39.99) → screenshot → restore the trial. Backstop: RevenueCat paywall preview `pw9ac01d9e31184633` (placeholder prices only).
-- [ ] **Upload it** to BOTH subscriptions' App Review Information in ASC; attach both to the 1.0 version; confirm status = **"Waiting for Review."**
-- [ ] **Hide the Entra sign-in footer** (admin center → external tenant → Company branding → Default sign-in → Layout → uncheck "Show footer"); reload `cliquepix.ciamlogin.com` and confirm the "…" is gone.
-- [ ] **Build + submit 1.0 (11)** with the IAPs in the same submission; add App Review Notes (reviewer account is comped, so the paywall screenshot is how they see the offer); reply to Apple on both findings.
+**✅ DONE — 1.0 (11) resubmitted 2026-06-29 (in Apple review).** Full runbook: `C:\Users\genew\.claude\plans\how-do-i-get-cozy-hejlsberg.md`.
+- [x] **Got an App Review Screenshot of the paywall** — forced a test account non-entitled via psql (`UPDATE users SET entitlement_active=FALSE, trial_ends_at=NOW()-INTERVAL '1 day' WHERE id=...`), captured the real paywall on-device ($3.99/$39.99), then restored the trial.
+- [x] **Uploaded it** to BOTH subscriptions' App Review Information; both attached to the 1.0 version; reviewer notes updated.
+- [x] **Hid the Entra sign-in footer** (admin center → external tenant → Company branding → Default sign-in → Layout → "Show footer" off); verified the "…" is gone from `cliquepix.ciamlogin.com`.
+- [x] **Built + submitted 1.0 (11)** (pubspec `1.0.0+11`, PR #72 merged) with the IAPs in the same submission.
+- [ ] **Verify on the submission that both subscriptions show "Waiting for Review"/"In Review"** (not "Ready to Submit") — the exact thing that failed twice.
+- [ ] Delete the local `IMG_0920.jpeg` working file (do not commit).
 
 ---
 
