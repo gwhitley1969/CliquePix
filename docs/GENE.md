@@ -8,6 +8,21 @@ Last updated **2026-06-24** — **🍎 APPLE REJECTION REMEDIATED → 1.0 (10) R
 
 ---
 
+## 🍎 SECOND Apple rejection — 1.0 (10) rejected on 2.1(b) + 2.1(a) (2026-06-29)
+
+iOS **1.0 (10)** was **REJECTED** (Submission `7d415cdc…`, reviewed Jun 25). Good news: the four 1.0(9) findings are cleared (the reviewer signed up with Apple straight into the app). Two findings remain — neither is a code bug:
+
+1. **2.1(b) — IAPs still not submitted (REPEAT).** The previous "✅ done" below was wrong: the subscriptions never got the mandatory **App Review Screenshot**, so they stayed "Ready to Submit" and were never reviewed. **Hard rule going forward: an IAP is only "submitted" when ASC shows it as "Waiting for Review" — never trust "Ready to Submit."**
+2. **2.1(a) — NEW.** Reviewer tapped the "…" troubleshooting ellipsis on the Microsoft sign-in page and saw error **50058** (benign silent-SSO / no-session diagnostic). Fix = hide the sign-in page footer in Entra company branding (no code).
+
+**Next clicks for Gene (full runbook: `C:\Users\genew\.claude\plans\how-do-i-get-cozy-hejlsberg.md`):**
+- [ ] **Get an App Review Screenshot of the paywall** (the part Gene didn't know how to do): on the TestFlight build, sign up a throwaway account → force it non-entitled via psql (`UPDATE users SET entitlement_active=FALSE, trial_ends_at=NOW()-INTERVAL '1 day' WHERE id='<uuid>'`) → the app drops you on the real paywall ($3.99/$39.99) → screenshot → restore the trial. Backstop: RevenueCat paywall preview `pw9ac01d9e31184633` (placeholder prices only).
+- [ ] **Upload it** to BOTH subscriptions' App Review Information in ASC; attach both to the 1.0 version; confirm status = **"Waiting for Review."**
+- [ ] **Hide the Entra sign-in footer** (admin center → external tenant → Company branding → Default sign-in → Layout → uncheck "Show footer"); reload `cliquepix.ciamlogin.com` and confirm the "…" is gone.
+- [ ] **Build + submit 1.0 (11)** with the IAPs in the same submission; add App Review Notes (reviewer account is comped, so the paywall screenshot is how they see the offer); reply to Apple on both findings.
+
+---
+
 ## 🍎 Apple rejection remediation — DOB age gate removed + 1.0 (10) resubmitted (2026-06-24)
 
 Apple rejected iOS **1.0 (9)** (Submission `f39d9a0a-43af-40c4-9a01-fef7524f572a`) on four findings. All fixed; **1.0 (10)** resubmitted and **in Apple review**.
@@ -17,7 +32,7 @@ Apple rejected iOS **1.0 (9)** (Submission `f39d9a0a-43af-40c4-9a01-fef7524f572a
 | **5.1.1(v)** required DOB | Removed `dateOfBirth` from the Entra `SignUpSignIn` user flow; backend age-gate code deleted (PR #70). 13+ is now a stated Terms-of-Service eligibility line only — no in-app check, no DOB collected. | ✅ |
 | **Guideline 4** name/email after Apple | Verified clean on a brand-new Apple ID (straight into the app, no re-prompt). Was the Entra attribute page; no repo fix exists for it — 100% Entra config. | ✅ |
 | **5.1.2(i)** tracking | App Store Connect → App Privacy → **"Does not track"** (no ATT code needed; app has no tracking SDKs — verified). | ✅ |
-| **2.1(b)** IAPs not submitted | `plus_monthly` + `plus_annual` attached + App Review screenshot + **new binary 1.0 (10)** submitted together. | ✅ |
+| **2.1(b)** IAPs not submitted | ❌ **NOT actually done — Apple rejected 1.0(10) on this same point again.** The App Review Screenshot was never uploaded, so the IAPs stayed "Ready to Submit" and the binary submitted without them. See the 2026-06-29 section at the very top of this file. | ❌ REOPENED |
 | App-name polish | Apple **Services ID** `com.cliquepix.app.service` **Description** renamed "Clique Pix Entra Service" → **"CLIQUE Pix"** (that field drives the Sign-in-with-Apple consent sheet — Apple caches it, so it propagates slowly). | ✅ |
 
 **Repo:** PR #70 merged to `main` — DOB age gate removed across backend/clients/legal/docs; `users.age_verified_at` column left dead; migration 008 untouched; pubspec `1.0.0+10`. Privacy policy redeployed with DOB-collection language removed. The branded launch screen (#67) was preserved through a merge conflict.
