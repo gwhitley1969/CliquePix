@@ -12,8 +12,8 @@ Last updated: 2026-07-02 (⚠️ **THIRD APPLE REJECTION** — iOS **1.0 (11)** 
 
 **Guardrail (recurrence prevention):** on an IAP page in App Store Connect there are TWO image slots that look similar — **App Review Screenshot** (required, review-only, never public; identical images across subs are fine) and **App Store Promotion → Promotional Image** (optional, 1024×1024, shown publicly, must be unique per product and must not be the app icon). **Fill ONLY the App Review Screenshot. Leave Promotional Image empty** unless deliberately promoting IAPs on the App Store — CLIQUE Pix's sales surface is the in-app paywall, so there is no plan to.
 
-**Remaining (Gene, ASC — manual):**
-1. **Resubmit build 1.0 (11) as-is.** 2.3.2 is metadata-only and the binary was not faulted — if the version shows "Metadata Rejected," edit + resubmit the same binary; if it shows "Rejected," re-attach build 11 to the version. Either way: **no build 12, no pubspec bump.**
+**Remaining (Gene — manual):**
+1. **Resubmit with a fresh build 1.0 (12).** The binary was NOT faulted (2.3.2 is metadata-only) and resubmitting build 11 as-is would have sufficed, but Gene opted for a clean new build number (2026-07-02): pubspec bumped `1.0.0+11 → +12`. Code-identical to build 11 (only docs commits on `main` since PR #72). Build on the Mac (`flutter clean` → `flutter build ipa --release`) → upload via Transporter → attach build 12 to the version → resubmit.
 2. On submission, run the now-standard check: both subscriptions must read **"Waiting for Review"/"In Review"** — NOT "Ready to Submit."
 
 **Pattern note (2.1(b) → 2.3.2):** this rejection was caused by the *remediation* of the previous one — an ASC field got filled that should have stayed empty. When fixing store-metadata findings, change ONLY the field the rejection names.

@@ -17,7 +17,7 @@ iOS **1.0 (11)** was **REJECTED** (reviewed Jun 30, iPhone 17 Pro Max). Good new
 **Hard rule going forward: on an IAP page, fill ONLY the App Review Screenshot (required, review-only — identical across subs is fine). Leave App Store Promotion → Promotional Image EMPTY** unless deliberately promoting IAPs in App Store search/featuring (it must then be unique per product and not the app icon).
 
 - [x] **Deleted the promotional images** from both `plus_monthly` + `plus_annual` (ASC → subscription → App Store Promotion) — 2026-07-02. App Review Screenshots untouched.
-- [ ] **Resubmit build 1.0 (11) as-is** — metadata-only rejection, binary not faulted. "Metadata Rejected" → edit + resubmit same binary; "Rejected" → re-attach build 11 to the version. **No build 12, no pubspec bump.**
+- [ ] **Resubmit with a fresh build 1.0 (12)** — the binary was not faulted (resubmitting build 11 as-is was sufficient), but Gene opted for a clean new build number. Pubspec bumped `1.0.0+11 → +12` (2026-07-02); code-identical to build 11. Build on the Mac (`flutter clean` → `flutter build ipa --release`) → Transporter upload → attach build 12 to the version → resubmit. (Reminder: check ASC/TestFlight for the highest existing `+N` first — a duplicate build number is rejected at upload.)
 - [ ] **Verify both subscriptions show "Waiting for Review"/"In Review"** on the submission (not "Ready to Submit") — the standard check.
 - [ ] Housekeeping: `Applereject02.txt` + `applerejection01.txt` (repo root) and the two rejection PNGs in `docs/` are working files — don't commit; delete alongside `IMG_0920.jpeg` when done.
 
