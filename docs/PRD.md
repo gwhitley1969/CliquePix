@@ -422,7 +422,7 @@ Why Flutter for CLIQUE Pix:
 A browser-based client at `clique-pix.com`. Feature-parity with the mobile app for everything except native camera capture; uses the same backend API (Azure Functions behind APIM) and the same Entra External ID tenant.
 
 **Public landing page at `/`**:
-- Vibrant marketing surface with gradient brand accents, "Now in beta" chips, phone mockup with live tappable reactions, feature grid, use cases, QR code for laptop-to-phone jump, App Store + Google Play badges (placeholder URLs until listings publish)
+- Vibrant marketing surface with gradient brand accents, "Now in beta" chips, phone mockup with live tappable reactions, feature grid, use cases, QR code for laptop-to-phone jump, App Store + Google Play badges (live store URLs since 2026-07-03 — both listings public)
 - No auto-redirect for authed users — the landing page stays accessible; the top-right CTA swaps to "My Events →"
 
 **Authenticated app (at `/events`, `/cliques`, `/messages`, `/notifications`, `/profile`):**

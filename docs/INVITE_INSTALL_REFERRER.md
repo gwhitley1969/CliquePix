@@ -1,6 +1,6 @@
 # CLIQUE Pix — Install-Aware QR Invites (Deferred Deep Linking)
 
-**Last Updated:** May 13, 2026
+**Last Updated:** July 3, 2026 — **Phase C-final ACTIVATED** (iOS App Store listing approved + live; Smart App Banner shipped, TestFlight badge replaced with App Store badge)
 
 This doc explains how CLIQUE Pix QR-code invites bridge the "scanner doesn't have the app installed" gap. It complements `docs/ARCHITECTURE.md` (top-level system) and `docs/WEB_CLIENT_ARCHITECTURE.md` (web client design).
 
@@ -18,8 +18,8 @@ A four-phase design (Phase C split into interim + final after TestFlight confirm
 |---|---|---|---|
 | **A** | Web | Install banner on `/invite/{code}` + benefit bullets + platform-appropriate Store badge | Shipped 2026-05-13 |
 | **B** | Android | Play Install Referrer carries `invite_code=...` from the Play Store URL → Flutter reads it on first launch → auto-joins after sign-in | Shipped 2026-05-13 |
-| **C-interim** | iOS | TestFlight badge on the iOS branch of the install banner → user installs via TestFlight → retaps original invite link from Messages → Universal Link routes into the app and joins | Shipped 2026-05-13 |
-| **C-final** | iOS | Smart App Banner meta tag in `webapp/index.html` (`<meta name="apple-itunes-app">`) + `app-argument` rewrite; native Safari banner delivers the invite URL to the app via `NSUserActivity.webpageURL` post-install | Gated on iOS App Store listing approval |
+| **C-interim** | iOS | TestFlight badge on the iOS branch of the install banner → user installs via TestFlight → retaps original invite link from Messages → Universal Link routes into the app and joins | Shipped 2026-05-13; **superseded by C-final 2026-07-03** (`TestFlightBadge.tsx` deleted) |
+| **C-final** | iOS | Smart App Banner meta tag in `webapp/index.html` (`<meta name="apple-itunes-app">`) + `app-argument` rewrite; native Safari banner delivers the invite URL to the app via `NSUserActivity.webpageURL` post-install | **Shipped 2026-07-03** (App Store listing approved 2026-07-02, verified live via iTunes lookup `resultCount: 1`) |
 
 Each phase ships independently; none blocks the others.
 
@@ -142,9 +142,11 @@ Currently hardcoded as `TESTFLIGHT_URL` in `InstallBanner.tsx`. If the TestFligh
 
 ---
 
-## Phase C-final — iOS Smart App Banner (deferred, App Store listing dependency)
+## Phase C-final — iOS Smart App Banner (✅ SHIPPED 2026-07-03)
 
-**Activation steps when the iOS App Store listing goes live (Apple approves the public submission):**
+**Activated 2026-07-03** after Apple approved the public listing (1.0 (12), approved 2026-07-02). All five steps below were executed as written. Canonical listing URL (from the iTunes lookup, used in `InstallBanner.tsx`, `Hero.tsx`, `Download.tsx`): `https://apps.apple.com/us/app/clique-pix-group-pic-sharing/id6766294274` — the store name is "CLIQUE Pix: Group Pic Sharing"; any slug with the right numeric ID redirects, so the `clique-pix` slug in step 4 below also works. `TestFlightBadge.tsx` was deleted (unused after the swap); `AppStoreBadge.tsx` gained an `onClick` prop for the install-badge telemetry.
+
+**Activation steps (executed 2026-07-03):**
 
 1. Confirm the public listing is live via `https://itunes.apple.com/lookup?id=6766294274` — `resultCount: 1`.
 2. Add to `webapp/index.html` in `<head>` (Apple ID is `6766294274`):

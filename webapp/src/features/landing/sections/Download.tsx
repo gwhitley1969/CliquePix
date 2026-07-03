@@ -31,12 +31,12 @@ export function Download() {
             </p>
 
             <div className="mt-7 flex flex-wrap items-center gap-3">
-              <AppStoreBadge />
+              <AppStoreBadge href="https://apps.apple.com/us/app/clique-pix-group-pic-sharing/id6766294274" />
               <PlayStoreBadge href="https://play.google.com/store/apps/details?id=com.cliquepix.clique_pix" />
             </div>
             <div className="mt-4 flex items-center gap-2">
               <BetaChip />
-              <span className="text-xs text-white/50">Android open beta available now • iOS launching soon</span>
+              <span className="text-xs text-white/50">Available now on the App Store and Google Play</span>
             </div>
 
             <div className="mt-8">

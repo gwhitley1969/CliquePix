@@ -68,11 +68,11 @@ export function Hero() {
             >
               {primaryLabel} <ArrowRight size={18} />
             </Link>
-            <AppStoreBadge />
-            <PlayStoreBadge />
+            <AppStoreBadge href="https://apps.apple.com/us/app/clique-pix-group-pic-sharing/id6766294274" />
+            <PlayStoreBadge href="https://play.google.com/store/apps/details?id=com.cliquepix.clique_pix" />
           </div>
           <p className="mt-3 text-xs text-white/40">
-            App Store + Google Play links coming soon — sign in from the web today.
+            Available on the App Store and Google Play — or sign in from the web today.
           </p>
         </div>
 

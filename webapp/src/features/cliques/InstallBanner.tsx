@@ -1,11 +1,11 @@
 import { useEffect } from 'react';
 import { PlayStoreBadge } from '../landing/components/PlayStoreBadge';
-import { TestFlightBadge } from '../landing/components/TestFlightBadge';
+import { AppStoreBadge } from '../landing/components/AppStoreBadge';
 import { trackEvent } from '../../lib/ai';
 import type { Platform } from '../../lib/platform';
 
 const ANDROID_APP_ID = 'com.cliquepix.clique_pix';
-const TESTFLIGHT_URL = 'https://testflight.apple.com/join/hWznNvJ6';
+const APP_STORE_URL = 'https://apps.apple.com/us/app/clique-pix-group-pic-sharing/id6766294274';
 
 function buildPlayStoreUrl(inviteCode: string): string {
   const referrer = encodeURIComponent(`invite_code=${inviteCode}`);
@@ -38,8 +38,8 @@ export function InstallBanner({ inviteCode, platform }: { inviteCode: string; pl
       </ul>
       <div className="mt-5 flex flex-wrap items-center gap-3">
         {platform === 'ios' ? (
-          <TestFlightBadge
-            href={TESTFLIGHT_URL}
+          <AppStoreBadge
+            href={APP_STORE_URL}
             onClick={() => trackEvent('web_invite_install_badge_clicked', { platform: 'ios' })}
           />
         ) : (
@@ -49,11 +49,6 @@ export function InstallBanner({ inviteCode, platform }: { inviteCode: string; pl
           />
         )}
       </div>
-      {platform === 'ios' && (
-        <p className="mt-3 text-xs text-white/50">
-          iOS is in public beta on TestFlight. After installing, tap your invite link again to join the Clique.
-        </p>
-      )}
     </div>
   );
 }

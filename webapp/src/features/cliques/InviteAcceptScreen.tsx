@@ -42,6 +42,16 @@ export function InviteAcceptScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, code]);
 
+  // Phase C-final: the iOS Smart App Banner (meta tag in index.html) delivers
+  // this page's URL to the app via NSUserActivity.webpageURL on the post-install
+  // "OPEN" tap, so the invite code survives an App Store install.
+  useEffect(() => {
+    if (!code) return;
+    const meta = document.querySelector('meta[name="apple-itunes-app"]') as HTMLMetaElement | null;
+    if (!meta) return;
+    meta.content = `app-id=6766294274, app-argument=${window.location.href}`;
+  }, [code]);
+
   const onSignIn = () => {
     trackEvent('web_invite_web_signin_clicked');
     if (code) sessionStorage.setItem(PENDING_INVITE_KEY, code);
