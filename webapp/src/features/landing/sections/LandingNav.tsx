@@ -1,7 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useIsAuthenticated } from '@azure/msal-react';
 import { ArrowRight } from 'lucide-react';
-import { BetaChip } from '../components/BetaChip';
 
 export function LandingNav() {
   const isAuthenticated = useIsAuthenticated();
@@ -18,7 +17,6 @@ export function LandingNav() {
           <span className="text-lg font-bold bg-gradient-primary bg-clip-text text-transparent">
             CLIQUE Pix
           </span>
-          <BetaChip className="hidden sm:inline-flex" />
         </Link>
 
         {isAuthenticated ? (

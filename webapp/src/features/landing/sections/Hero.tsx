@@ -1,7 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useIsAuthenticated } from '@azure/msal-react';
 import { ArrowRight } from 'lucide-react';
-import { BetaChip } from '../components/BetaChip';
 import { PhoneMockup } from '../components/PhoneMockup';
 import { DemoMediaCard } from '../components/DemoMediaCard';
 import { AppStoreBadge } from '../components/AppStoreBadge';
@@ -39,9 +38,8 @@ export function Hero() {
       <div className="relative max-w-6xl mx-auto px-4 md:px-8 pt-10 md:pt-16 pb-16 md:pb-24 grid md:grid-cols-2 gap-10 md:gap-16 items-center">
         <div>
           <div className="mb-5">
-            <BetaChip />
-            <span className="hidden sm:inline ml-2 text-[10px] uppercase tracking-[0.18em] text-white/40">
-              · iOS · Android · Web
+            <span className="text-[10px] uppercase tracking-[0.18em] text-white/40">
+              iOS · Android · Web
             </span>
           </div>
 

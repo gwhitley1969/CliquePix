@@ -3,7 +3,6 @@ import { QRCodeSVG } from 'qrcode.react';
 import { ArrowRight } from 'lucide-react';
 import { AppStoreBadge } from '../components/AppStoreBadge';
 import { PlayStoreBadge } from '../components/PlayStoreBadge';
-import { BetaChip } from '../components/BetaChip';
 import { useRevealOnScroll } from '../hooks/useRevealOnScroll';
 
 export function Download() {
@@ -34,8 +33,7 @@ export function Download() {
               <AppStoreBadge href="https://apps.apple.com/us/app/clique-pix-group-pic-sharing/id6766294274" />
               <PlayStoreBadge href="https://play.google.com/store/apps/details?id=com.cliquepix.clique_pix" />
             </div>
-            <div className="mt-4 flex items-center gap-2">
-              <BetaChip />
+            <div className="mt-4">
               <span className="text-xs text-white/50">Available now on the App Store and Google Play</span>
             </div>
 
