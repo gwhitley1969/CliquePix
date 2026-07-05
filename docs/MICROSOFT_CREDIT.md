@@ -233,6 +233,51 @@ escalated) should be visible to the support/billing engineering team and is the 
 
 ---
 
+## 12. STAGED TICKET — ready to file the moment the June invoice posts (staged 2026-07-05)
+
+**Invoice check 2026-07-05:** the June-period invoice has NOT posted yet. Billing profile `KNVI-ZBIZ-BG7-PGB`
+shows May's invoice `G163862975` ($925.54) posted **June 9** — on that cadence the June invoice posts **~July 9**.
+Per §10, do not file before it exists.
+
+**When it posts** (re-check with the invoice-list call below), fill `<INVOICE_NUMBER>` and run the PUT.
+Support prerequisites verified 2026-07-05: `Microsoft.Support` RP is Registered on the Clique Pix subscription;
+classification chosen = Billing → **"Disagreement with a charge (workload or service) / Issue with Compute charge"**
+(ids below are live-verified).
+
+**1. Check the invoice posted (PowerShell, bearer-token pattern — az.cmd mangles `&` in URLs):**
+```powershell
+$token = az account get-access-token --query accessToken -o tsv; $h = @{ Authorization = "Bearer $token" }
+(Invoke-RestMethod -Headers $h -Uri ("https://management.azure.com/providers/Microsoft.Billing/billingAccounts/" +
+  "08ba551b-d9d2-53aa-686d-c72b57187141:8fb88a2a-bbef-430e-8d5b-b7ca40a64cba_2019-05-31/billingProfiles/" +
+  "KNVI-ZBIZ-BG7-PGB/invoices?api-version=2020-05-01&periodStartDate=2026-06-01&periodEndDate=2026-07-31")).value |
+  ForEach-Object { $_.name + "  " + $_.properties.invoicePeriodStartDate + "  " + $_.properties.totalAmount.value }
+# Expect a new invoice whose period is 2026-06-01 -> 2026-06-30. Confirm ~\$449 of Azure Container Apps is on it.
+```
+
+**2. File the ticket (fill `<INVOICE_NUMBER>`):**
+```powershell
+$body = @{ properties = @{
+  severity = "minimal"
+  serviceId = "/providers/Microsoft.Support/services/517f2da6-78fd-0498-4e22-ad26996b1dfc"
+  problemClassificationId = "/providers/Microsoft.Support/services/517f2da6-78fd-0498-4e22-ad26996b1dfc/problemClassifications/e5bc37bf-a84c-c670-441e-c4cdb47714c5"
+  title = "Container Apps metering anomaly June 3-9 2026 - credit request $411.25 (invoice <INVOICE_NUMBER>)"
+  description = "Requesting a credit of `$411.25 USD (conservative floor `$346.84) for anomalous Azure Container Apps active-usage billing, June 3-9 2026, on subscription Clique Pix (25410e67-b3c8-49a2-8cf0-ab9f77ce613f), invoice <INVOICE_NUMBER>. Resource: Container Apps Job caj-cliquepix-transcoder (rg-cliquepix-prod, East US). Meters: Standard vCPU/Memory Active Usage. THE CONTRADICTION: billed cost rose ~20x (steady `$3.74/day baseline to ~`$73/day, Jun 4-8) while every workload signal was provably flat - Azure Monitor Executions ~17,000-18,000/day (identical on cheap and expensive days; the KEDA 5s empty-queue poll), RequestedCores flat at 1.0, actual CPU (UsageNanoCores) zero or not emitting the entire window, console-log volume flat (~5,200 lines/day), and Application Insights records EXACTLY ONE real transcode all week (Jun 6 17:38 UTC, 19 seconds). Notably, the platform's own UsageNanoCores metric stopped emitting at exactly the cost-ramp onset (Jun 3 ~18:00 UTC) - the utilization signal went dark as the active-usage meter escalated, consistent with orphaned/zombie replicas held in a billed state or a metering error. No customer configuration or deployment change aligns with onset (Jun 3) or recovery (Jun 9-10). We are NOT disputing our own `$3.74/day idle baseline (minExecutions=1, since remediated to 0 on Jun 12 - Container Apps has billed `$0/day since). Claim = excess above baseline only: Jun 3 `$17.18, Jun 4 `$69.20, Jun 5 `$68.55, Jun 6 `$70.52, Jun 7 `$69.76, Jun 8 `$68.81, Jun 9 `$43.71, Jun 10 `$1.81, Jun 11 `$1.71 = `$411.25 total. All figures are reproducible with read-only Azure Monitor / Cost Management / Log Analytics queries (workspace log-cliquepix-prod, c158e174-b84f-41f3-bc36-03fbaf279eb7) - happy to provide the exact commands and our full evidence table on request."
+  contactDetails = @{
+    firstName = "Gene"; lastName = "Whitley"
+    preferredContactMethod = "email"; primaryEmailAddress = "bluebuildapps@gmail.com"
+    preferredTimeZone = "Eastern Standard Time"; country = "USA"; preferredSupportLanguage = "en-US"
+  }
+} } | ConvertTo-Json -Depth 5
+$token = az account get-access-token --query accessToken -o tsv
+Invoke-RestMethod -Method Put -Headers @{ Authorization = "Bearer $token"; "Content-Type" = "application/json" } `
+  -Uri "https://management.azure.com/subscriptions/25410e67-b3c8-49a2-8cf0-ab9f77ce613f/providers/Microsoft.Support/supportTickets/cliquepix-aca-metering-jun2026?api-version=2020-04-01" `
+  -Body $body
+```
+
+**3. Record** the returned `supportTicketId` here and in `DEPLOYMENT_STATUS.md`; follow to credit or written denial (§10.5).
+
+---
+
 ## 11. Data provenance & honesty notes
 
 - **Cost figures** are Azure Cost Management `ActualCost` values, queried 2026-06-22. Until the June invoice
