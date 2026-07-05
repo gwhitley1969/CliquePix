@@ -32,10 +32,10 @@ void main() {
         'clique_id': 'c1',
         'name': 'Orphaned Event',
         'created_by_user_id': null,
-        'retention_hours': 24,
+        'retention_hours': 72,
         'status': 'active',
         'created_at': '2026-06-01T00:00:00.000Z',
-        'expires_at': '2026-06-02T00:00:00.000Z',
+        'expires_at': '2026-06-04T00:00:00.000Z',
       });
       expect(e.createdByUserId, '');
     });

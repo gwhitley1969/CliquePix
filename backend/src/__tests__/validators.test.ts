@@ -148,7 +148,7 @@ describe('validateOptionalString', () => {
 // ─── validateRetentionHours ──────────────────────────────────────────────────
 
 describe('validateRetentionHours', () => {
-  it('accepts 24', () => {
+  it('accepts 24 (legacy — installed builds <=1.0.0+12 still send it)', () => {
     expect(validateRetentionHours(24)).toBe(24);
   });
 
@@ -158,6 +158,10 @@ describe('validateRetentionHours', () => {
 
   it('accepts 168', () => {
     expect(validateRetentionHours(168)).toBe(168);
+  });
+
+  it('accepts 336 (14 days)', () => {
+    expect(validateRetentionHours(336)).toBe(336);
   });
 
   it('rejects 0', () => {

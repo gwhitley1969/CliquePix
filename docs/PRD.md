@@ -44,7 +44,7 @@ Secondary:
 ### 4.1 Event
 A temporary shared photo session — the primary action in CLIQUE Pix
 - Example: “Friday Night – Downtown”
-- Duration: 24 hours, 3 days, or 7 days (default)
+- Duration: 3 days, 7 days (default), or 14 days
 - Created first, then assigned to a Clique
 
 ### 4.2 Clique
@@ -73,7 +73,7 @@ A persistent group of people (e.g., “Girls Night Out” or bachelor party)
 - Fields:
   - Event name
   - Optional description
-  - Duration (24h / 3 days / 7 days — three presets only, default 7 days)
+  - Duration (3 days / 7 days / 14 days — three presets only, default 7 days; 24h dropped 2026-07-05)
   - Clique picker (select existing Clique or create new one inline)
 - Create Event button
 - Event organizer (creator) can manually delete an event at any time
@@ -428,7 +428,7 @@ A browser-based client at `clique-pix.com`. Feature-parity with the mobile app f
 **Authenticated app (at `/events`, `/cliques`, `/messages`, `/notifications`, `/profile`):**
 - Sign in via MSAL.js (same Entra tenant). 13+ is a stated Terms-of-Service eligibility requirement — no DOB collected, no in-app age check
 - Create and join Cliques; view members; **print branded QR invite cards** (gradient header/footer, logo, wordmark — suitable for wedding reception tables)
-- Create and manage Events (same 24h / 3 days / 7 days presets). Creating a Clique auto-opens the Invite dialog so sharing is one click away
+- Create and manage Events (same 3 days / 7 days / 14 days presets). Creating a Clique auto-opens the Invite dialog so sharing is one click away
 - Upload photos from a file picker or drag-drop, with client-side compression + EXIF strip + HEIC→JPEG conversion
 - **Upload videos** from the browser via block-based upload (sequential 4 MB blocks, 5-retry exponential backoff, sessionStorage resume). Same backend endpoints as mobile
 - Event feed: vertical full-width cards mirroring mobile — uploader header + photo/video + ❤️ 😂 🔥 😮 reaction pills + one-click download + owner 3-dot menu with Delete

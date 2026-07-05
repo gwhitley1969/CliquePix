@@ -65,7 +65,7 @@ This is a manual smoke test checklist to run before each beta release. Every ite
 
 ## 3. Events
 
-- [ ] **Create event** — pick clique, enter name, select duration (24h / 3 days / 7 days), event appears in list
+- [ ] **Create event** — pick clique, enter name, select duration (3 days / 7 days / 14 days), event appears in list
 - [ ] **Event visible to member** — Device B sees the event in their list
 - [ ] **Event card shows photo count** — event card displays correct photo count with proper singular/plural ("1 photo" / "3 photos")
 - [ ] **Event card shows video count** — after uploading a video, event card shows video count with videocam icon (e.g., "1 photo 🎥 1 video")

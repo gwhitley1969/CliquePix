@@ -468,7 +468,7 @@ Unique constraint on (clique_id, user_id).
 | name | VARCHAR | |
 | description | VARCHAR | Nullable |
 | created_by_user_id | UUID | Nullable, FK → users (ON DELETE SET NULL) |
-| retention_hours | INTEGER | 24, 72, or 168 (three presets only) |
+| retention_hours | INTEGER | 72, 168, or 336 offered (3d/7d/14d — changed 2026-07-05, migration 016); legacy 24 still accepted from installed builds ≤1.0.0+12 and present on old rows |
 | status | VARCHAR | active / expired |
 | created_at | TIMESTAMPTZ | |
 | expires_at | TIMESTAMPTZ | Computed: created_at + retention_hours |
@@ -787,7 +787,7 @@ If multi-platform notification orchestration becomes complex, add Azure Notifica
 
 ## Product Requirement
 
-Photos in the cloud must expire automatically after the event's retention window (24h, 72h, or 168h from event creation).
+Photos in the cloud must expire automatically after the event's retention window (72h, 168h, or 336h from event creation; legacy 24h events from old builds also expire normally).
 
 ## Data Model
 

@@ -1,12 +1,13 @@
 class AppConstants {
   AppConstants._();
 
-  // Duration presets (in hours)
-  static const durationPresets = [24, 72, 168];
+  // Duration presets (in hours). 24h was dropped and 14 days added 2026-07;
+  // the backend still ACCEPTS 24 from older installed builds (legacy shim).
+  static const durationPresets = [72, 168, 336];
   static const durationLabels = {
-    24: '24 Hours',
     72: '3 Days',
     168: '7 Days',
+    336: '14 Days',
   };
   static const defaultDuration = 168;
 

@@ -30,11 +30,16 @@ export function validateOptionalString(value: unknown, maxLength = 500): string 
   return sanitizeString(value, maxLength);
 }
 
-export function validateRetentionHours(value: unknown): 24 | 72 | 168 {
-  if (value !== 24 && value !== 72 && value !== 168) {
-    throw new ValidationError('retention_hours must be 24, 72, or 168.');
+// Offered presets are 72/168/336 (3d/7d/14d) since 2026-07. 24 is LEGACY:
+// installed mobile builds <=1.0.0+12 still offer "24 Hours" and there is no
+// forced-update mechanism, so it stays accepted server-side. Tighten to
+// 72/168/336 in v1.5 once old builds age out. The error message names only
+// the offered presets on purpose.
+export function validateRetentionHours(value: unknown): 24 | 72 | 168 | 336 {
+  if (value !== 24 && value !== 72 && value !== 168 && value !== 336) {
+    throw new ValidationError('retention_hours must be 72, 168, or 336.');
   }
-  return value as 24 | 72 | 168;
+  return value as 24 | 72 | 168 | 336;
 }
 
 export function validateReactionType(value: unknown): 'heart' | 'laugh' | 'fire' | 'wow' {

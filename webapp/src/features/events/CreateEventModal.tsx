@@ -7,9 +7,9 @@ import { createEvent } from '../../api/endpoints/events';
 import { createClique, listCliques } from '../../api/endpoints/cliques';
 
 const RETENTION_OPTIONS = [
-  { hours: 24 as const, label: '24 hours' },
   { hours: 72 as const, label: '3 days' },
   { hours: 168 as const, label: '7 days' },
+  { hours: 336 as const, label: '14 days' },
 ];
 
 export function CreateEventModal({
@@ -22,7 +22,7 @@ export function CreateEventModal({
   const qc = useQueryClient();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [retentionHours, setRetentionHours] = useState<24 | 72 | 168>(168);
+  const [retentionHours, setRetentionHours] = useState<72 | 168 | 336>(168);
   const [cliqueId, setCliqueId] = useState('');
   const [newCliqueName, setNewCliqueName] = useState('');
   const [createNew, setCreateNew] = useState(false);

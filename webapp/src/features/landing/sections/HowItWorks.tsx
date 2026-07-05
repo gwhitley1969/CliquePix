@@ -10,7 +10,7 @@ const STEPS: { index: string; title: string; body: string; icon: LucideIcon }[] 
   {
     index: '01',
     title: 'Start an Event',
-    body: 'Name the moment, pick a duration — 24 hours, 3 days, or a week.',
+    body: 'Name the moment, pick a duration — 3 days, a week, or two weeks.',
     icon: Calendar,
   },
   {
