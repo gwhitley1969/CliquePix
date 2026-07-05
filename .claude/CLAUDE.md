@@ -182,7 +182,7 @@ Do not introduce dependencies not listed here without discussing the tradeoff fi
 - **Icons:** `lucide-react` (matches mobile's stated icon set).
 - **Telemetry:** `@microsoft/applicationinsights-web` shares the same App Insights resource as mobile. Event prefix `web_*`.
 - **Hosting:** Azure Static Web Apps (same SWA resource that previously hosted only `/privacy.html` + `/terms.html`). Web app at `clique-pix.com` root; static docs at `/docs/*`; deep-link files at `/.well-known/*` preserved byte-for-byte so Universal Links and App Links still work.
-- **Domain separation:** web at `clique-pix.com`, API at `api.clique-pix.com` — different origins, so CORS is mandatory (configured at APIM in `apim_policy.xml`).
+- **Domain separation:** web at `clique-pix.com`, API at `api.clique-pix.com` — different origins, so CORS is mandatory (Function App platform CORS on `func-cliquepix-fresh` since 2026-07-05; previously an APIM policy).
 - **Hard rule:** no Web Push in v1. No background notifications in browsers. Users who want background alerts use the mobile app. Notifications list is in-app (polling + Web PubSub real-time while the tab is open).
 - **Hard rule:** no blocking splash at launch. Optimistic-auth philosophy applies here too — sessionStorage cache + React Router redirect + background `/auth/verify` = no spinner blocking the login screen or the app shell.
 - **Hard rule:** `setApiMsalInstance(msalInstance)` MUST be called from `main.tsx` AFTER `await msalInstance.initialize()` and BEFORE `ReactDOM.createRoot(...).render(...)`. The axios interceptor in `api/client.ts` needs the same initialized PCA that `<MsalProvider>` uses. A previous regression built a fallback PCA on the fly that was never initialized, causing `acquireTokenSilent` to throw silently and requests to ship unauthenticated — users saw empty Events/Cliques that looked like "no data" instead of "not authenticated." Fix was PR #4. `getPca()` now throws a loud dev error if the wiring is skipped.
@@ -197,11 +197,10 @@ Do not introduce npm dependencies not listed in `docs/WEB_CLIENT_ARCHITECTURE.md
 
 | Layer | Service | Purpose |
 |-------|---------|---------|
-| Entry point | Azure Front Door | Global load balancing, SSL termination, WAF |
-| API gateway | Azure API Management | Rate limiting, API versioning, policy enforcement |
-| Compute (API) | Azure Functions (TypeScript, Node.js) | REST API, timer cleanup, photo thumbnail generation, video upload orchestration |
+| Entry point | Azure Front Door | Custom domain `api.clique-pix.com`, SSL termination, routes directly to the Function App (APIM removed 2026-07-05 — see Architecture Pattern below) |
+| Compute (API) | Azure Functions (TypeScript, Node.js) | REST API, timer cleanup, photo thumbnail generation, video upload orchestration. Platform CORS is the CORS source of truth |
 | Compute (video transcode) | Azure Container Apps Jobs | Runs FFmpeg transcoder per-video (HDR→SDR, 1080p HLS package, MP4 fallback, poster). Scale-to-zero. See `docs/VIDEO_ARCHITECTURE_DECISIONS.md` Decision 0. |
-| Container registry | Azure Container Registry (Standard SKU) | Hosts the FFmpeg transcoder image (`cracliquepix`). Standard chosen over Basic for throughput headroom (3x ReadOps/min) and 10x storage (100 GB vs 10 GB) — performance insurance at ~$15/month premium over Basic. |
+| Container registry | Azure Container Registry (Basic SKU) | Hosts the FFmpeg transcoder image (`cracliquepix`). Downgraded Standard → Basic 2026-07-05 (FinOps): registry stores ~265 MB of Basic's 10 GB allowance and the scale-to-zero job pulls one image occasionally — Standard's throughput headroom was paying ~$15/month for nothing. CI pushes via the `gh-actions-transcoder` ACR token (survived the downgrade, verified). |
 | Job dispatch | Azure Storage Queue | Queues video transcoding jobs. Triggered by video upload-confirm endpoint; polled by Container Apps Job |
 | Database | PostgreSQL Flexible Server | Relational data |
 | Object storage | Azure Blob Storage | Photo and video originals, photo thumbnails, HLS segments, MP4 fallbacks, video posters |
@@ -213,9 +212,14 @@ Do not introduce npm dependencies not listed in `docs/WEB_CLIENT_ARCHITECTURE.md
 
 ### Architecture Pattern
 
-All API traffic flows: **Flutter → Front Door → APIM → Azure Functions → PostgreSQL / Blob Storage**
+All API traffic flows: **Flutter → Front Door → Azure Functions → PostgreSQL / Blob Storage**
 
-No exceptions for the API control plane. No direct Function App URLs exposed to the client. APIM is the single published API surface.
+No exceptions for the API control plane. No direct Function App URLs exposed to the client. Front Door (`api.clique-pix.com`) is the single published API surface.
+
+**APIM was removed 2026-07-05 (FinOps).** By then its only live function was CORS injection (~$148/month for a CORS header) — rate limiting had been stripped after the six 429 incidents and JWT auth always lived in the Functions code. The pieces that replaced it (all are hard rules, do not regress):
+- **CORS source of truth is Function App platform CORS** (`az functionapp cors show -g rg-cliquepix-prod -n func-cliquepix-fresh`): origins `https://clique-pix.com` + `http://localhost:5173`, allow-credentials false. Never add CORS headers in function code on top of platform CORS — duplicate `Access-Control-Allow-Origin` headers make browsers hard-reject responses.
+- **The Function App is locked to Front Door traffic** via an access restriction (service tag `AzureFrontDoor.Backend` + header `X-Azure-FDID = 4e41fded-8d53-4ecd-bc17-af06024ecfad`; applied post-soak). Direct `func-cliquepix-fresh.azurewebsites.net` calls 403 — health checks and manual probes go through `api.clique-pix.com`. The SCM/Kudu site is deliberately NOT restricted (deploys via `func publish` depend on it).
+- **The transcoder callback (`FUNCTION_CALLBACK_URL`) points at `https://api.clique-pix.com/api/internal/video-processing-complete`** — never back at the raw azurewebsites host, or the FD lockdown breaks video processing.
 
 **Async video transcoding path (control plane stays inside the pattern):**
 Function API endpoint (`POST /api/events/{eventId}/videos`) → enqueues message on Azure Storage Queue → Container Apps Job triggered → FFmpeg transcodes → Job calls back to internal Function endpoint with results → Function updates DB, pushes `video_ready` via Web PubSub + FCM. The client only talks to the Function API; the Container Apps Job is an internal backend component.
@@ -223,7 +227,7 @@ Function API endpoint (`POST /api/events/{eventId}/videos`) → enqueues message
 **Video playback path:**
 Client calls `GET /api/videos/{videoId}/playback` → Function reads stored HLS manifest from Blob, rewrites segment URLs with fresh 15-minute User Delegation SAS per segment, returns rewritten manifest. Client plays HLS through `video_player`. Manifest is cached in-Function for 60 seconds to amortize blob reads across concurrent viewers.
 
-Front Door and APIM are included from day one. This matches the production pattern used in My AI Bartender and avoids the pain of retrofitting API gateway infrastructure after the fact.
+Front Door is included from day one as the TLS/custom-domain anchor and the future WAF attachment point. APIM was part of the original pattern (matching My AI Bartender) but was removed 2026-07-05 once it no longer enforced anything — see above.
 
 ---
 
@@ -694,9 +698,9 @@ Headshots replace the initials-gradient-ring fallback everywhere a user is surfa
 
 Full pipeline + schema: `docs/VIDEO_ARCHITECTURE_DECISIONS.md`, `docs/WEB_CLIENT_ARCHITECTURE.md §8.5`, `docs/ARCHITECTURE.md §7`.
 
-### ⚠️ APIM rate-limiting — DO NOT re-add
+### ⚠️ Gateway rate-limiting — historical guardrail (APIM removed 2026-07-05)
 
-Rate limiting was **removed entirely from APIM** after FIVE user-blocking 429 incidents (4 on 2026-04-27, 1 on 2026-04-29). APIM has **FOUR policy scopes** (Global, Product, API, Operation) and a limit at any one produces the same 429 body; the 2026-04-29 culprit was the auto-provisioned default `starter` **Product** policy (`<rate-limit calls="5"/>` + `<quota calls="100"/>`), which the prior API-scope-only cleanup missed. **Do not re-add `<rate-limit-by-key>` / `<rate-limit>` / `<quota>` at ANY scope** until APIM moves off Developer tier. When diagnosing any 429, audit **all four scopes** (`docs/BETA_OPERATIONS_RUNBOOK.md §2`). Abuse protection is application-layer (JWT, membership checks, SAS expiry, orphan cleanup); client `silentRetryOn429` absorbs one 429/5-min/device. Full 5-incident history: `apim_policy.xml`.
+**APIM itself was removed 2026-07-05** (FinOps — see Architecture Pattern), but the lesson survives it: six user-blocking 429 incidents (4 on 2026-04-27, 1 on 2026-04-29, 1 on 2026-05-05) were all caused by gateway rate limits that looked reasonable and weren't — the app's legitimate traffic (5-layer Entra refresh defense, 30s feed polling, avatar SAS regeneration, AuthInterceptor 401 retry) blows past intuition-sized limits for a single user in seconds. **If any gateway or rate limiter is ever re-introduced, load-test the limit against actual traffic patterns BEFORE enabling it.** Abuse protection is application-layer (JWT, membership checks, SAS expiry, orphan cleanup, per-user video cap); client `silentRetryOn429` absorbs one 429/5-min/device. Full 6-incident history: git history of `apim_policy.xml` (now a tombstone) + `docs/BETA_OPERATIONS_RUNBOOK.md` §2 (historical).
 
 ---
 
@@ -744,7 +748,7 @@ Serve from Azure Front Door or a simple static web app. Static JSON files that r
 - User belongs to the clique/event they are accessing (membership check)
 - On `DELETE /api/photos/{id}` and `DELETE /api/videos/{id}`: caller must be the uploader OR the event organizer (`events.created_by_user_id`). Use the shared `canDeleteMedia` helper in `backend/src/shared/utils/permissions.ts`; uploader takes precedence; record `deleterRole` ∈ `'uploader' | 'organizer'` on the `photo_deleted` / `video_deleted` telemetry event alongside `uploaderId` and `eventOrganizerId`. Both handlers JOIN `events` in the SELECT for a single round-trip.
 
-**Invite-code entropy (hard rule, security audit C1, 2026-06-04):** `generateInviteCode` in `backend/src/functions/cliques.ts` uses `crypto.randomBytes(16).toString('hex')` (128-bit). NEVER shrink it. `POST /api/cliques/_/join` resolves a clique by `invite_code` alone and there is NO APIM rate limiting (deliberately removed) — anything weaker is brute-forceable to join private cliques.
+**Invite-code entropy (hard rule, security audit C1, 2026-06-04):** `generateInviteCode` in `backend/src/functions/cliques.ts` uses `crypto.randomBytes(16).toString('hex')` (128-bit). NEVER shrink it. `POST /api/cliques/_/join` resolves a clique by `invite_code` alone and there is NO gateway rate limiting (deliberately removed; APIM itself removed 2026-07-05) — anything weaker is brute-forceable to join private cliques.
 
 ### Blob Storage Access — RBAC + User Delegation SAS:
 - **No storage account keys in application code.** All CliquePix blob/queue access uses `DefaultAzureCredential` (managed identity). No account-key-based SAS tokens anywhere.
@@ -1090,7 +1094,7 @@ Use Flutter flavor/environment mechanisms. Do not hardcode environment-specific 
 | App Insights | `appi-cliquepix-{env}` |
 | Key Vault | `kv-cliquepix-{env}` |
 | Front Door | `fd-cliquepix-prod` |
-| APIM | `apim-cliquepix-003` (Basic v2, since 2026-05-05 — migrated from `apim-cliquepix-002` Developer tier) |
+| ~~APIM~~ | **Removed 2026-07-05** (was `apim-cliquepix-003` Basic v2). Front Door routes directly to the Function App |
 | Web PubSub | `wps-cliquepix-prod` |
 | Container Registry | `cracliquepix` (ACR names disallow hyphens) — **new for video v1** |
 | Container Apps Environment | `cae-cliquepix-prod` — **new for video v1** |

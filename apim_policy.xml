@@ -1,171 +1,36 @@
 <!--
-  APIM policy for the "CliquePix API v1" - applies at the "All operations"
-  scope on that API (NOT the global / "All APIs" scope).
+  TOMBSTONE - APIM was removed from the CLIQUE Pix architecture on 2026-07-05.
 
-  HISTORY OF RATE-LIMIT REMOVAL (most recent first):
+  This file previously held the API-scope policy for "CliquePix API v1" on
+  apim-cliquepix-003 (Basic v2). By removal time the only live policy was the
+  CORS block for https://clique-pix.com + http://localhost:5173 - i.e. the
+  service had become a ~$148/month CORS header. It was removed in the July
+  2026 FinOps pass.
 
-  2026-05-05 (incident #6 — orphaned op-scope policies declared in bicep/apim/main.bicep):
-    User reported the red "Sign in failed" banner on Android after rebuilding
-    the APK. Diagnosis took three escalating steps: (a) clear app data on
-    device — didn't help (the rate-limit counter is keyed on JWT subject =
-    user oid, so reinstalling the same user can't reset it); (b) Azure App
-    Insights — backend `auth_verify_success` events were firing fine, no
-    server-side exceptions, but no `requests` row matched the URL filter
-    (filter wrong, but the absence-of-exception was the signal); (c) shipped
-    a one-line `[AUTH-SIGNIN-FAIL]` debugPrint in
-    auth_providers.dart:174-180 that prints the runtimeType, message, and
-    (for DioException) status + body. Captured trace showed
-    `DioException [bad response]: 429` with body
-    `{statusCode: 429, message: "Rate limit is exceeded. Try again in 1
-    seconds."}` on /api/auth/verify.
+  Where things live now:
+  - CORS source of truth: Function App platform CORS on func-cliquepix-fresh
+    (az functionapp cors show -g rg-cliquepix-prod -n func-cliquepix-fresh).
+    Allowed origins: https://clique-pix.com and http://localhost:5173.
+    allow-credentials remains false. The old expose-headers x-request-id was
+    intentionally not replicated - clients read request_id from the response
+    body, never the header.
+  - Routing: client -> Front Door (api.clique-pix.com) -> func-cliquepix-fresh.
+    No gateway in between.
+  - Abuse protection: unchanged - it was already application-layer only
+    (JWT validation, membership checks, User Delegation SAS expiry, orphan
+    cleanup, per-user video cap). APIM added nothing here since 2026-04-27.
 
-    Audit at all four APIM scopes (the Phase 0+A script audits operation
-    scope but the prior cleanups stopped at API/Product). Found six
-    operation-scope <rate-limit-by-key> policies on cliquepix-v1:
-      - auth-verify        : calls=30 / renewal-period=60 (THIS bit the user)
-      - upload-url         : calls=10 / renewal-period=60
-      - catch-all-delete   : calls=30 / renewal-period=60
-      - catch-all-patch    : calls=30 / renewal-period=60
-      - catch-all-post     : calls=30 / renewal-period=60
-      - catch-all-put      : calls=30 / renewal-period=60
-    All keyed on JWT Subject (CIAM oid). 30 calls/60s is too tight for the
-    app's actual sign-in retry pattern — the 5-layer Entra refresh defense
-    + verify-in-background + AuthInterceptor 401 retry + a few user retries
-    can blow past 30/min for one user in seconds.
+  HISTORY: this file's git history preserves the full six-incident record of
+  APIM rate-limiting failures (2026-04-27 x4, 2026-04-29, 2026-05-05) and the
+  reasoning for removing rate-limit/quota at all four APIM scopes. Read it
+  with: git log -p - - apim_policy.xml   (remove the space between the dashes;
+  a literal double-dash cannot appear inside an XML comment - the exact
+  footgun documented in HANDOFF.md section 6, which has bitten this repo twice.)
 
-    The bigger surprise: these policies were declared in bicep/apim/main.bicep at the
-    repo root (lines 1247-1322 pre-fix). The 2026-04-29 cleanup deleted them
-    in live APIM but a subsequent bicep deploy re-introduced them. The fix
-    therefore had to touch BOTH source-of-truth (bicep) AND live APIM:
-      Phase A: edit bicep/apim/main.bicep — remove the 6 apis/operations/policies
-               resources, replace with explanatory comment block.
-      Phase B: az rest DELETE on each of the 6 .../operations/{op}/policies/policy
-               URLs. Each operation falls through to API-scope (clean).
-      Phase C: sleep 90 + an `az apim api update` flush call (with the
-               protocols=https setting) to refresh Developer-tier in-memory
-               counters and force gateway pod refresh.
-    Verified: sign-in lands on Events screen post-fix; backend probe of
-    /api/auth/verify returns 401 (canonical UNAUTHORIZED), not 429.
-
-    OPERATIONAL LESSONS:
-      1. The Phase 0+A audit script in BETA_OPERATIONS_RUNBOOK.md §2 audits
-         live APIM. It DOES NOT audit IaC. Augment with:
-           grep -nE 'apis/operations/policies' bicep/apim/main.bicep
-         Any match needs to be checked for rate-limit-by-key in the inline
-         policy XML.
-      2. bicep/apim/main.bicep is the source of truth for ALL APIM resources,
-         including operation-scope policies. This file (apim_policy.xml)
-         only covers the API scope. The two are partially redundant — the
-         API-scope policy is duplicated between this file and bicep
-         line 1147. A future cleanup should consolidate to one source.
-      3. The `[AUTH-SIGNIN-FAIL]` debugPrint at auth_providers.dart:174-180
-         was the difference between days of guesswork and 60-second triage.
-         It stays in the codebase as a permanent diagnostic.
-
-  2026-04-29 (incident #5 — the one this comment is about):
-    A brand-new test user hit the same 429 on their FIRST upload attempt
-    even though this file was clean. Audit at all four APIM policy scopes
-    found <rate-limit calls="5" renewal-period="60" /> AND
-    <quota calls="100" renewal-period="604800" /> on the "starter"
-    PRODUCT-scope policy — APIM's default scaffolding from when the
-    service was first provisioned, never touched. New users auto-subscribe
-    to "starter" and got slammed at 5 requests/min on first sign-in. The
-    fix was to PUT a base/-only policy on the starter product. The lesson:
-    when diagnosing a 429, audit ALL FOUR APIM policy scopes — global,
-    product, API, operation — not just the API scope. This file only
-    covers the API scope; cleaning it does not clean the others.
-
-  2026-04-27 (incidents #1-4 — the original mass cleanup):
-  rate-limit-by-key was removed from this policy after four consecutive
-  user-blocking failures in beta:
-    1. Original 120/min limit was easily exceeded by normal usage
-       (5-layer Entra refresh defense, 30s feed polling, avatar SAS
-       regeneration on every list/detail handler).
-    2. Bumping to 300/min did not help; the Developer-tier in-memory
-       counter cache appears to persist stale state across policy edits.
-    3. Bumping to 600/min and bypassing critical paths still produced
-       429 responses on a first-attempt upload (verified via
-       APIM "RateLimitExceeded" metric).
-    4. The same first-upload 429 reappeared on a follow-up attempt.
-
-  Abuse protection now comes entirely from the application layer:
-    - JWT bearer-token validation (every endpoint)
-    - Event / clique membership check (every endpoint that accepts an
-      event_id or clique_id)
-    - User Delegation SAS (5-minute expiry, scoped to a single blob
-      path; client cannot read or list)
-    - Orphan cleanup timer (every 15 min) deletes pending uploads
-    - Per-user video count cap (PER_USER_VIDEO_LIMIT, enforced in
-      backend/src/functions/videos.ts)
-
-  If real abuse risk emerges post-beta, the right response is:
-    - Move APIM off Developer tier (Standard v2 has a distributed
-      rate-limit cache and an SLA), THEN
-    - Add per-user upload-frequency caps at the Functions layer where
-      we control the logic and can debug it
-    - Configure Azure Front Door WAF for genuine bot traffic patterns
-
-  Do NOT re-add rate-limit-by-key OR <rate-limit> OR <quota> at ANY
-  APIM scope without first migrating off APIM Developer tier. The
-  6-incident history is documented reproducibly above; repeating it
-  would be a regression.
-
-  TIER NOTE: the prohibition above stands for ALL tiers, not just
-  Developer. Per Microsoft's own docs ("Limit call rate by key"),
-  rate limiting at APIM is "never completely accurate" on any tier
-  because of the distributed throttling architecture. Classic tiers
-  use sliding-window; v2 tiers use token-bucket. Migrating from
-  Developer to Basic v2 (~$525/month) buys an SLA and slightly more
-  burst-friendly bucket math, but does NOT make a too-tight limit
-  generous. Prior versions of this comment said "Standard v2 has a
-  distributed cache" — that's folkloric and isn't in Microsoft's
-  docs. The right precondition for re-introducing rate-limit-by-key
-  is LOAD-TESTING the limit against actual traffic patterns, not
-  tier upgrade.
-
-  Source of truth: this file (API scope only). For the other three
-  scopes, the source of truth is the live APIM service — audit them
-  with the Phase 0+A script in docs/BETA_OPERATIONS_RUNBOOK.md §2.
-
-  Deploy this file via az rest PUT against the management API policy
-  URL with a JSON body of the form:
-    { "properties": { "format": "rawxml", "value": "<contents of this file>" } }
-
-  An Azure Monitor metric alert ("apim-429-detected") fires on any APIM
-  429 within 5 minutes; if it fires, run the Phase 0+A audit before
-  doing anything else.
+  The don't-regress lesson survives APIM itself: if any gateway or rate
+  limiter is ever re-introduced, load-test limits against real traffic
+  patterns (5-layer token refresh, 30s polling, retry storms) BEFORE
+  enabling. See docs/BETA_OPERATIONS_RUNBOOK.md section 2 (historical) and
+  docs/DEPLOYMENT_STATUS.md 2026-07-05 entry.
 -->
-<policies>
-    <inbound>
-        <base />
-        <cors allow-credentials="false">
-            <allowed-origins>
-                <origin>https://clique-pix.com</origin>
-                <origin>http://localhost:5173</origin>
-            </allowed-origins>
-            <allowed-methods preflight-result-max-age="3600">
-                <method>GET</method>
-                <method>POST</method>
-                <method>PUT</method>
-                <method>PATCH</method>
-                <method>DELETE</method>
-                <method>OPTIONS</method>
-            </allowed-methods>
-            <allowed-headers>
-                <header>*</header>
-            </allowed-headers>
-            <expose-headers>
-                <header>x-request-id</header>
-            </expose-headers>
-        </cors>
-    </inbound>
-    <backend>
-        <base />
-    </backend>
-    <outbound>
-        <base />
-    </outbound>
-    <on-error>
-        <base />
-    </on-error>
-</policies>
+<policies />

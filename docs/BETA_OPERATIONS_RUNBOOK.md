@@ -25,7 +25,7 @@ Operational procedures for the CLIQUE Pix open beta. Covers incident response, c
 | PostgreSQL | `pg-cliquepixdb` | Azure Portal → Azure Database for PostgreSQL |
 | Storage Account | `stcliquepixprod` | Azure Portal → Storage Accounts |
 | App Insights | `appi-cliquepix-prod` | Azure Portal → Application Insights |
-| APIM | `apim-cliquepix-003` (Basic v2, since 2026-05-05) | Azure Portal → API Management |
+| ~~APIM~~ | Removed 2026-07-05 (was `apim-cliquepix-003`, Basic v2) — FD → Functions direct | — |
 | Web PubSub | `wps-cliquepix-prod` | Azure Portal → Web PubSub |
 | ACR | `cracliquepix` | Azure Portal → Container Registries |
 
@@ -534,7 +534,9 @@ This is the sanctioned emergency unblock — it extends the app-managed trial, N
 
 ### Photo / video upload returns "Too many requests" (HTTP 429)
 
-**Should not happen in beta** — all four APIM policy scopes (Global, Product, API, Operation) AND `bicep/apim/main.bicep` were verified clean as of 2026-05-05 (see `apim_policy.xml` in-file comment for the six-incident history). The Azure Monitor alert `apim-429-detected` fires on any APIM 429 within 5 minutes; if it triggers, run the Phase 0+A audit BELOW first, before anything else.
+> **⚠️ HISTORICAL SINCE 2026-07-05 — APIM was removed from the architecture** (FinOps pass; Front Door now routes `api.clique-pix.com` directly to the Function App). A 429 can no longer come from APIM: nothing in the current chain (Front Door Standard without WAF, Azure Functions, application code) emits rate-limit 429s. If a 429 ever appears now, suspect (a) a Front Door WAF policy someone added, (b) an App Service platform limit (SNAT/scale), or (c) a future application-layer limiter. The `apim-429-detected` alert was deleted with the service. Everything below is preserved because the six-incident history is the reason no gateway rate limiting may be re-introduced without load-testing against real traffic patterns.
+
+**Should not happen in beta** — all four APIM policy scopes (Global, Product, API, Operation) AND `bicep/apim/main.bicep` were verified clean as of 2026-05-05 (see `apim_policy.xml` git history for the six-incident record). The Azure Monitor alert `apim-429-detected` fires on any APIM 429 within 5 minutes; if it triggers, run the Phase 0+A audit BELOW first, before anything else.
 
 #### Phase 0+A — Audit ALL FOUR APIM policy scopes AND `bicep/apim/main.bicep`
 

@@ -17,7 +17,7 @@ This is not a "someday" architecture. This is what we build and deploy.
 
 # 1. Architecture Principles
 
-1. **Build for production from day one** — Front Door, APIM, managed identity, RBAC. No shortcuts to retrofit later.
+1. **Build for production from day one** — Front Door, managed identity, RBAC. No shortcuts to retrofit later. (APIM was part of the day-one build but was removed 2026-07-05 once it no longer enforced anything — see §3.)
 2. **Optimize for the core product loop** — every architectural decision serves the Clique → Event → Photo → Feed → Expire flow.
 3. **Use managed Azure services** — minimize operational overhead, maximize reliability.
 4. **Separate concerns cleanly** — UI, state, API client, and backend are distinct layers.
@@ -75,7 +75,7 @@ Why Flutter for CLIQUE Pix:
 | Layer | Service | Purpose |
 |-------|---------|---------|
 | Entry point | **Azure Front Door** (Standard) | Global load balancing, SSL termination |
-| API gateway | **Azure API Management** | API versioning, CORS, single published API surface. **Rate limiting is intentionally NOT performed at APIM** — see "Abuse protection design" below |
+| ~~API gateway~~ | ~~Azure API Management~~ | **Removed 2026-07-05 (FinOps).** By removal its only live function was CORS for two origins (~$148/month). CORS moved to Function App platform config; Front Door routes `api.clique-pix.com` directly to the Function App. Rate limiting was never re-added after the six 429 incidents — see "Abuse protection design" below |
 | Compute | **Azure Functions** (TypeScript, Node.js) | REST API endpoints, timer-triggered cleanup, thumbnail generation |
 | Database | **PostgreSQL Flexible Server** | Relational data (users, cliques, events, photos, reactions) |
 | Object storage | **Azure Blob Storage** | Photo originals and thumbnails |
@@ -87,7 +87,7 @@ Why Flutter for CLIQUE Pix:
 
 ### Abuse protection design (the positive statement)
 
-Rate limiting is **deliberately performed at the application layer**, not at APIM. The design choice was made after six consecutive incidents (2026-04 through 2026-05) of APIM `<rate-limit>` / `<rate-limit-by-key>` / `<quota>` policies producing user-blocking 429s — the most painful being incident #6 (2026-05-05) where six op-scope `<rate-limit-by-key>` resources declared in `bicep/apim/main.bicep` 429-blocked sign-ins for a single user attempting normal retry patterns.
+Rate limiting is **deliberately performed at the application layer**, not at a gateway. The design choice was made after six consecutive incidents (2026-04 through 2026-05) of APIM `<rate-limit>` / `<rate-limit-by-key>` / `<quota>` policies producing user-blocking 429s — the most painful being incident #6 (2026-05-05) where six op-scope `<rate-limit-by-key>` resources declared in `bicep/apim/main.bicep` 429-blocked sign-ins for a single user attempting normal retry patterns. (APIM itself was removed 2026-07-05; the design principle outlives it.)
 
 Per Microsoft's own docs ("Limit call rate by key"), APIM rate limiting is *"never completely accurate"* on any tier because of the distributed throttling architecture — even Standard v2's token-bucket algorithm is just modestly more burst-friendly than Developer's sliding window. The fundamental issue is that any limit picked without measuring actual traffic patterns (5-layer Entra refresh defense, 30-second feed polling, avatar SAS regeneration on every list/detail handler, AuthInterceptor 401 retry, verify-in-background) will inevitably be either too tight (user-blocking) or too loose (no protection).
 
@@ -101,11 +101,11 @@ Per Microsoft's own docs ("Limit call rate by key"), APIM rate limiting is *"nev
 
 **If real abuse risk emerges post-beta**, the response order is:
 
-1. Add per-user upload-frequency caps **at the Functions layer** (not at APIM) — we control the logic, can debug it, and can tune limits with telemetry from `App Insights` instead of Microsoft's "never completely accurate" caveat.
-2. Configure Azure Front Door WAF for genuine bot traffic patterns (different problem domain — high-volume single-IP burst, not per-user limits).
-3. Only then consider re-introducing APIM rate-limit policies. Migration to APIM Basic v2 buys an SLA but does NOT make APIM rate-limiting accurate; the prerequisite for re-introducing `rate-limit-by-key` is **load-testing the limit against actual traffic patterns**, not tier upgrade.
+1. Add per-user upload-frequency caps **at the Functions layer** — we control the logic, can debug it, and can tune limits with telemetry from `App Insights` instead of Microsoft's "never completely accurate" caveat.
+2. Configure Azure Front Door WAF for genuine bot traffic patterns (different problem domain — high-volume single-IP burst, not per-user limits). Front Door is retained as the entry point precisely so WAF can be attached without re-architecture.
+3. Only then consider re-introducing a gateway with rate-limit policies. The prerequisite for any gateway rate limit is **load-testing the limit against actual traffic patterns**, not tier choice.
 
-The full incident history (six incidents, all reproducible) lives in `apim_policy.xml`'s in-file comment. The audit script that catches APIM policy regressions is in `docs/BETA_OPERATIONS_RUNBOOK.md` §2 — it now also greps `bicep/apim/main.bicep` so IaC declarations don't slip past live-APIM cleanup.
+The full incident history (six incidents, all reproducible) lives in the git history of `apim_policy.xml` (now a tombstone — APIM was removed 2026-07-05) and in `docs/BETA_OPERATIONS_RUNBOOK.md` §2 (historical).
 
 ### What Is Not In v1
 
@@ -125,10 +125,10 @@ The full incident history (six incidents, all reproducible) lives in `apim_polic
 All API traffic follows this path — no exceptions:
 
 ```
-Flutter App → Azure Front Door → Azure API Management → Azure Functions → PostgreSQL / Blob Storage
+Flutter App → Azure Front Door → Azure Functions → PostgreSQL / Blob Storage
 ```
 
-No direct Function App URLs are exposed to the client. APIM is the single published API surface. Front Door handles SSL and global routing. Custom domain: `api.clique-pix.com`.
+No direct Function App URLs are exposed to the client. Front Door is the single published API surface (custom domain `api.clique-pix.com`, SSL, route `default-route` → origin group `func-origin-group` → `func-cliquepix-fresh`). The Function App is locked to Front Door traffic via an access restriction (service tag `AzureFrontDoor.Backend` + `X-Azure-FDID` header match); the SCM/Kudu site stays unrestricted for `func publish` deploys. CORS for the web origin is Function App platform CORS (`https://clique-pix.com`, `http://localhost:5173`). APIM sat between Front Door and Functions until 2026-07-05 — removed when its only remaining function was CORS (~$148/month).
 
 ## Photo Upload Flow
 
@@ -953,7 +953,7 @@ Every API endpoint must enforce:
 - user is authenticated (valid Entra token verified by the Function)
 - user belongs to the clique/event they are accessing (membership check)
 - on media delete: caller must be the uploader OR the event organizer (`events.created_by_user_id`); see `canDeleteMedia` in `backend/src/shared/utils/permissions.ts`
-- **Invite-code entropy (security audit C1, 2026-06-04):** `generateInviteCode` uses `crypto.randomBytes(16).toString('hex')` (128-bit). `POST /api/cliques/_/join` resolves a clique by `invite_code` alone and there is NO APIM rate limiting (deliberately removed — see §3), so the code's entropy is the sole brute-force defense against joining private cliques. NEVER shrink it; the join validator bounds `invite_code` by `INVITE_CODE_MAX_LENGTH` (64) coupled to the generator.
+- **Invite-code entropy (security audit C1, 2026-06-04):** `generateInviteCode` uses `crypto.randomBytes(16).toString('hex')` (128-bit). `POST /api/cliques/_/join` resolves a clique by `invite_code` alone and there is NO gateway rate limiting (deliberately removed — see §3; APIM itself removed 2026-07-05), so the code's entropy is the sole brute-force defense against joining private cliques. NEVER shrink it; the join validator bounds `invite_code` by `INVITE_CODE_MAX_LENGTH` (64) coupled to the generator.
 
 ## Blob Storage Security
 
@@ -1119,7 +1119,7 @@ All resources for a given environment:
 | Application Insights | `appi-cliquepix-{env}` |
 | Key Vault | `kv-cliquepix-{env}` |
 | Front Door | `fd-cliquepix-{env}` |
-| API Management | `apim-cliquepix-{env}` |
+| ~~API Management~~ | Removed 2026-07-05 (was `apim-cliquepix-003`) |
 | Web PubSub | `wps-cliquepix-{env}` |
 
 ### Managed Identity Role Assignments
@@ -1196,7 +1196,7 @@ None of these require rewriting the core architecture. They are additive.
 
 # 22. Final Architecture Position
 
-CLIQUE Pix v1 is a **production-grade, Azure-first, mobile-first application**. It uses managed identity and RBAC throughout, routes all traffic through Front Door and APIM, and handles the known Entra External ID token bug with a proven multi-layer defense.
+CLIQUE Pix v1 is a **production-grade, Azure-first, mobile-first application**. It uses managed identity and RBAC throughout, routes all traffic through Front Door (APIM removed 2026-07-05), and handles the known Entra External ID token bug with a proven multi-layer defense.
 
 The architecture is:
 - **Secure** — no storage keys, no long-lived credentials, RBAC everywhere

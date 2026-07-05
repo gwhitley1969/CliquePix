@@ -51,17 +51,17 @@ az monitor log-analytics workspace create \
 
 The workspace receives logs from the Container Apps Environment. SKU `PerGB2018` is the standard pay-per-GB tier.
 
-### 2. Azure Container Registry (Standard SKU)
+### 2. Azure Container Registry (Basic SKU — downgraded from Standard 2026-07-05)
 
 ```bash
 az acr create \
   --resource-group rg-cliquepix-prod \
   --name cracliquepix \
-  --sku Standard \
+  --sku Basic \
   --location eastus
 ```
 
-Standard SKU was chosen over Basic for throughput headroom (3x ReadOps/min) and 10x storage (100 GB vs 10 GB). See `docs/VIDEO_ARCHITECTURE_DECISIONS.md` Decision 0 — "ACR SKU selection" subsection.
+Standard SKU was originally chosen over Basic for throughput headroom (3x ReadOps/min) and 10x storage (100 GB vs 10 GB) — see `docs/VIDEO_ARCHITECTURE_DECISIONS.md` Decision 0. **Downgraded to Basic 2026-07-05 (FinOps):** the registry stores ~265 MB (one transcoder image) against Basic's 10 GB allowance, and the scale-to-zero job pulls the image only on cold start — Standard's headroom was ~$15/month of unused insurance. The `gh-actions-transcoder` ACR token + scope map used by CI survived the downgrade (verified enabled). Reverse with `az acr update -n cracliquepix --sku Standard` if throughput ever matters.
 
 ### 3. Storage Queue (`video-transcode-queue`)
 
@@ -373,7 +373,7 @@ az containerapp job update \
     "STORAGE_ACCOUNT_NAME=stcliquepixprod" \
     "STORAGE_QUEUE_NAME=video-transcode-queue" \
     "BLOB_CONTAINER_NAME=photos" \
-    "FUNCTION_CALLBACK_URL=https://func-cliquepix-fresh.azurewebsites.net/api/internal/video-processing-complete" \
+    "FUNCTION_CALLBACK_URL=https://api.clique-pix.com/api/internal/video-processing-complete" \
     "FUNCTION_APP_AUDIENCE=api://func-cliquepix-fresh" \
     "APPLICATIONINSIGHTS_CONNECTION_STRING=secretref:appinsights-connection-string"
 ```

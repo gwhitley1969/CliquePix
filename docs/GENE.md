@@ -250,7 +250,7 @@ Tax is verified, so these are moot: the IRS-147c call (`800-829-4933`, EIN name-
 ### Still TODO (non-blocking)
 
 - [ ] Extra jest tests for webhook event types + idempotency dedup + out-of-order + auth-fail (`revenuecatWebhook.test.ts`).
-- [ ] Add 2 operation declarations to `bicep/apim/main.bicep` (`/internal/revenuecat-webhook`, `/users/me/entitlement/refresh`) for IaC parity — **NO** rate-limit (6-incident history). APIM already routes them.
+- ~~Add 2 operation declarations to `bicep/apim/main.bicep`~~ — **MOOT 2026-07-05: APIM removed entirely** (FinOps pass — Front Door now routes api.clique-pix.com directly to the Function App; `bicep/apim/main.bicep` is a tombstone). See `DEPLOYMENT_STATUS.md` 2026-07-05 entry.
 
 **Deploy order rule (satisfied): backend deployed BEFORE the Plan 2 mobile build hits TestFlight**, so the `entitlement` field exists and mobile won't null-crash.
 

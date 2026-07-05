@@ -1,6 +1,6 @@
 # HANDOFF.md — CLIQUE Pix
 
-**Last updated:** 2026-06-18
+**Last updated:** 2026-07-05
 **Purpose:** Single entry-point for anyone taking over (or returning to) CLIQUE Pix. Read this top-to-bottom; it points into the deep docs for detail. If you read only one file, read this one.
 
 > **What's authoritative:** `.claude/CLAUDE.md` is the development guardrails (it wins on scope/architecture/patterns). This file is the *operational* handoff — how to build, deploy, where things live, current state, and the rules you must not break. Where they overlap, CLAUDE.md is the source of truth and this file links to it.
@@ -29,7 +29,7 @@
 
 **Hard "do not build":** group chat, followers, public feeds/discovery, custom photo-editor (use `pro_image_editor`), video editing, 4K/HDR-preserved video, live streaming, AI features, Firebase backend (FCM transport only), Redis/SignalR/Service Bus.
 
-**Architecture in one line:** `Flutter (iOS/Android) + React web → Azure Front Door → APIM → Azure Functions (TypeScript) → PostgreSQL + Blob Storage`, with the FFmpeg transcoder on **Container Apps Jobs**, **Entra External ID (CIAM)** for auth, and **Azure Web PubSub** for DM + `video_ready` real-time.
+**Architecture in one line:** `Flutter (iOS/Android) + React web → Azure Front Door → Azure Functions (TypeScript) → PostgreSQL + Blob Storage`, with the FFmpeg transcoder on **Container Apps Jobs**, **Entra External ID (CIAM)** for auth, and **Azure Web PubSub** for DM + `video_ready` real-time. (APIM sat between Front Door and Functions until 2026-07-05 — removed in the FinOps pass.)
 
 **Current launch status (2026-07-03):**
 - **iOS:** ✅ **PUBLIC on the App Store — 1.0 (12) approved 2026-07-02** after three rejection rounds (DOB/SIWA/tracking → IAP screenshots/Entra footer → IAP promotional images; full history in `docs/DEPLOYMENT_STATUS.md`). Listing: `https://apps.apple.com/us/app/clique-pix-group-pic-sharing/id6766294274` (store name "CLIQUE Pix: Group Pic Sharing", Apple ID `6766294274`, bundle `com.cliquepix.app`). Subscriptions `plus_monthly`/`plus_annual` approved with the binary. Invite flow flipped TestFlight → App Store + Smart App Banner activated (Phase C-final, `docs/INVITE_INSTALL_REFERRER.md`) 2026-07-03. Reviewer `vwhitley1967@gmail.com` retains the lifetime promo grant.
@@ -50,7 +50,7 @@ Deep docs: `docs/PRD.md`, `docs/ARCHITECTURE.md`, `.claude/CLAUDE.md`.
 | **Backend API** | Azure Functions (TypeScript, Node 20) | `backend/` | `docs/ARCHITECTURE.md` |
 | **Transcoder** | FFmpeg in a SHA-pinned `jrottenberg/ffmpeg:6-alpine` container, on Container Apps Jobs | `backend/transcoder/` | `docs/VIDEO_ARCHITECTURE_DECISIONS.md`, `docs/VIDEO_INFRASTRUCTURE_RUNBOOK.md` |
 
-**Request path (control plane, no exceptions):** client → **Front Door** (`fd-cliquepix-prod`) → **APIM** (`apim-cliquepix-003`, Basic v2) → **Functions** (`func-cliquepix-fresh`) → **PostgreSQL** (`pg-cliquepixdb`) / **Blob** (`stcliquepixprod`). No direct Function URLs are published to clients.
+**Request path (control plane, no exceptions):** client → **Front Door** (`fd-cliquepix-prod`, custom domain `api.clique-pix.com`, route → origin group `func-origin-group`) → **Functions** (`func-cliquepix-fresh`) → **PostgreSQL** (`pg-cliquepixdb`) / **Blob** (`stcliquepixprod`). No direct Function URLs are published to clients; the Function App is locked to Front Door traffic (access restriction on `AzureFrontDoor.Backend` + `X-Azure-FDID`, applied post-soak — direct azurewebsites calls 403). CORS = Function App platform CORS. **APIM was removed 2026-07-05** (it had become a ~$148/mo CORS-only pass-through).
 
 **Async video path:** confirm endpoint enqueues on Storage Queue `video-transcode-queue` → **Container Apps Job** (`caj-cliquepix-transcoder`) pulls, transcodes, calls back to an internal Function endpoint (function-key auth) → Function updates DB + pushes `video_ready` via Web PubSub (`wps-cliquepix-prod`) + FCM.
 
@@ -151,7 +151,8 @@ npm ci
 npm run lint && npx tsc --noEmit && npm test   # exactly what Backend CI runs (221 tests)
 npm run build                                  # tsc → dist/src/functions/*.js
 func azure functionapp publish func-cliquepix-fresh   # deploy (manual)
-# health: GET https://func-cliquepix-fresh.azurewebsites.net/api/health → 200
+# health: GET https://api.clique-pix.com/api/health → 200
+#   (the raw azurewebsites URL 403s once the Front Door lockdown is applied — always probe via the custom domain)
 ```
 
 ### Transcoder — `backend/transcoder/`
@@ -225,7 +226,7 @@ Deploy history + per-item status: `docs/DEPLOYMENT_STATUS.md`.
 | Storage (blob + queue) | `stcliquepixprod` |
 | PostgreSQL Flexible Server | `pg-cliquepixdb` |
 | Key Vault | `kv-cliquepix-prod` |
-| APIM | `apim-cliquepix-003` (Basic v2) |
+| ~~APIM~~ | Removed 2026-07-05 (was `apim-cliquepix-003`, Basic v2) — FD routes directly to the Function App |
 | Front Door | `fd-cliquepix-prod` |
 | Web PubSub | `wps-cliquepix-prod` |
 | Container Registry | `cracliquepix` |
@@ -270,8 +271,12 @@ These are load-bearing rules — each was added after an incident, an audit find
 - **Do NOT add `BGTaskSchedulerPermittedIdentifiers` to iOS `Info.plist`** — Layer 4 is Android-only; a declaration with no handler crashes with SIGABRT ("app vanishes after sign-in").
 - **iOS MSAL broker MUST be `Broker.msAuthenticator`, not `Broker.safariBrowser`**, at all 3 PCA sites — `safariBrowser`'s persistent cookie jar traps account-switchers on "Continue as <previous user>".
 
-### APIM — rate limiting REMOVED at all 4 scopes; never re-add
-- **No `<rate-limit>` / `<rate-limit-by-key>` / `<quota>` at ANY scope** (Global/Product/API/Operation) until APIM leaves Developer/Basic tier — five 429 incidents. Abuse protection is application-layer (JWT, membership checks, SAS expiry, orphan cleanup) + client `silentRetryOn429`. When diagnosing a 429, audit **all four scopes AND `bicep/apim/main.bicep`**.
+### API gateway — APIM removed 2026-07-05; CORS + lockdown invariants
+- **APIM is gone** (FinOps — it had become a $148/mo CORS header; six 429-incident history preserved in `apim_policy.xml` git history + BETA_OPERATIONS_RUNBOOK §2 historical). The invariants that replaced it:
+- **CORS source of truth = Function App platform CORS** (`az functionapp cors show -g rg-cliquepix-prod -n func-cliquepix-fresh`; origins `https://clique-pix.com` + `http://localhost:5173`). Never ALSO emit CORS headers from function code — duplicate `Access-Control-Allow-Origin` values make browsers reject responses.
+- **Function App access restriction `AllowFrontDoorOnly`** (service tag `AzureFrontDoor.Backend` + `X-Azure-FDID=4e41fded-8d53-4ecd-bc17-af06024ecfad`) — don't remove it; probe via `api.clique-pix.com`, not azurewebsites. SCM site stays unrestricted (deploys).
+- **Transcoder `FUNCTION_CALLBACK_URL` goes through `api.clique-pix.com`** — pointing it back at the raw azurewebsites host breaks video processing under the lockdown.
+- **If a gateway/rate limiter is ever re-introduced, load-test limits against real traffic patterns first** (5-layer refresh defense + 30s polling blow past intuition-sized limits) — the lesson from six user-blocking 429 incidents.
 
 ### Media deletion — always via `deleteMediaAssets`
 - **All media deletes go through `deleteMediaAssets(media)`** (`backend/src/shared/services/blobService.ts`), which prefix-deletes a video's whole dir (HLS/fallback/poster) vs a photo's original+thumb. Deleting only `blob_path`+`thumbnail_blob_path` orphans video blobs forever (hit `deleteEvent`/`deleteMe`/expiry/`leaveClique` before the fix). Sole-owner `leaveClique` deletes blobs **before** `DELETE FROM cliques` (CASCADE removes the rows otherwise).
