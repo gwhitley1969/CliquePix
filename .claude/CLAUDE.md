@@ -57,7 +57,7 @@ If a feature does not directly support one of these loops, it does not belong in
 - 5-layer token refresh defense for the Entra 12-hour timeout bug
 - Cliques: create, join via invite link / SMS / QR, list, view members, leave
 - Deep linking for Clique invites (Universal Links on iOS, App Links on Android)
-- Events: create Event first (pick or create Clique during creation), duration locked to three presets (24h / 3 days / 7 days default), list, expire, manual deletion by event organizer (with confirmation dialog)
+- Events: create Event first (pick or create Clique during creation), duration locked to three presets (3 days / 7 days / 14 days, 7-day default — 24h dropped and 14d added 2026-07-05; backend still ACCEPTS legacy 24 from installed builds ≤1.0.0+12, tighten in v1.5), list, expire, manual deletion by event organizer (with confirmation dialog)
 - In-app camera capture (photo + video)
 - Upload from camera roll (photo + video)
 - Client-side image compression before upload (strip EXIF, resize to max 3024px, JPEG quality 88, convert HEIC to JPEG)
@@ -512,7 +512,7 @@ Error:
 
 **clique_members**: id (UUID PK), clique_id (FK), user_id (FK), role (owner/member), joined_at — unique constraint on (clique_id, user_id)
 
-**events**: id (UUID PK), clique_id (FK), name, description (nullable), created_by_user_id (FK), retention_hours (24/72/168 — three presets only), status (active/expired), created_at, expires_at (computed: created_at + retention_hours)
+**events**: id (UUID PK), clique_id (FK), name, description (nullable), created_by_user_id (FK), retention_hours (72/168/336 offered; legacy 24 accepted from installed builds + present on old rows — migration 016), status (active/expired), created_at, expires_at (computed: created_at + retention_hours)
 
 **photos** (hosts both photo and video rows — the name is historical; will be renamed to `media` post-v1 once dust settles):
 - Core: id (UUID PK, generated server-side at upload-url step), event_id (FK), uploaded_by_user_id (FK), blob_path, original_filename, mime_type, width, height, file_size_bytes, status (pending/active/deleted/processing/rejected), created_at, expires_at (inherits from event), deleted_at (nullable)

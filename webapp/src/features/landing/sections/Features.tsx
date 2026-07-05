@@ -33,7 +33,7 @@ const FEATURES: { icon: LucideIcon; title: string; body: string }[] = [
   {
     icon: Timer,
     title: 'Auto-delete',
-    body: 'Pick 24 hours, 3 days, or a week. The cloud cleans up on time so your storage stays yours.',
+    body: 'Pick 3 days, a week, or two weeks. The cloud cleans up on time so your storage stays yours.',
   },
   {
     icon: Laptop,

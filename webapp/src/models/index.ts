@@ -68,7 +68,7 @@ export interface CliqueEvent {
   createdByAvatarThumbUrl?: string | null;
   createdByAvatarUpdatedAt?: string | null;
   createdByAvatarFramePreset?: number;
-  retentionHours: 24 | 72 | 168;
+  retentionHours: 24 | 72 | 168 | 336; // 24 = legacy (read-only; old rows / old installed builds)
   status: 'active' | 'expired';
   createdAt: string;
   expiresAt: string;

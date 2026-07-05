@@ -20,7 +20,7 @@ export async function createEvent(input: {
   cliqueId: string;
   name: string;
   description?: string;
-  retentionHours: 24 | 72 | 168;
+  retentionHours: 72 | 168 | 336;
 }): Promise<CliqueEvent> {
   const res = await api.post<{ data: CliqueEvent }>(
     `/api/cliques/${input.cliqueId}/events`,
