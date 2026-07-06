@@ -244,6 +244,14 @@ Support prerequisites verified 2026-07-05: `Microsoft.Support` RP is Registered 
 classification chosen = Billing → **"Disagreement with a charge (workload or service) / Issue with Compute charge"**
 (ids below are live-verified).
 
+**Cold-start prerequisites (for any agent/person executing this without prior context):**
+- Azure CLI logged in as **`bluebuildapps@gmail.com`** — the identity with billing-account access (verify:
+  `az account show --query user.name`). Any machine works; this is all ARM-over-443, no firewall dependencies.
+- Ticket creation is a WRITE to Azure Support (creates a real Microsoft ticket, emails the contact) —
+  fill `<INVOICE_NUMBER>` in BOTH the title and description before running; do not run with the placeholder.
+- The commands are PowerShell. The backtick-`$` escapes in the description are PowerShell literal-dollar escapes —
+  if porting to bash, replace `` `$ `` with `$`.
+
 **1. Check the invoice posted (PowerShell, bearer-token pattern — az.cmd mangles `&` in URLs):**
 ```powershell
 $token = az account get-access-token --query accessToken -o tsv; $h = @{ Authorization = "Bearer $token" }
@@ -251,10 +259,19 @@ $token = az account get-access-token --query accessToken -o tsv; $h = @{ Authori
   "08ba551b-d9d2-53aa-686d-c72b57187141:8fb88a2a-bbef-430e-8d5b-b7ca40a64cba_2019-05-31/billingProfiles/" +
   "KNVI-ZBIZ-BG7-PGB/invoices?api-version=2020-05-01&periodStartDate=2026-06-01&periodEndDate=2026-07-31")).value |
   ForEach-Object { $_.name + "  " + $_.properties.invoicePeriodStartDate + "  " + $_.properties.totalAmount.value }
-# Expect a new invoice whose period is 2026-06-01 -> 2026-06-30. Confirm ~\$449 of Azure Container Apps is on it.
+# Expect a new invoice whose period is 2026-06-01 -> 2026-06-30. Its name (e.g. G16xxxxxxx) is <INVOICE_NUMBER>.
 ```
 
-**2. File the ticket (fill `<INVOICE_NUMBER>`):**
+**1b. Confirm the anomaly is actually ON the invoice — GATE, do not skip.** The list call returns only totals.
+Sanity check: the invoice total should land near the June account actuals (~$1,226 across both subscriptions;
+Clique Pix alone was $718.69, of which $449.13 was Azure Container Apps). For line-level proof, download the
+invoice PDF: `POST .../invoices/<INVOICE_NUMBER>/download?api-version=2020-05-01` (same bearer pattern; the
+response/Location yields a `downloadUrl`), or eyeball Azure Portal → Cost Management + Billing → Invoices.
+**ABORT RULE (§10.2):** if the Container Apps line is materially reduced or absent — i.e. Microsoft already
+excluded the anomaly from the final invoice — DO NOT file. Record the outcome here and in DEPLOYMENT_STATUS,
+and close task #15. If the invoice total is ~$400+ lower than the ~$1,226 estimate, that is the tell.
+
+**2. File the ticket (fill `<INVOICE_NUMBER>` in title AND description):**
 ```powershell
 $body = @{ properties = @{
   severity = "minimal"
@@ -274,7 +291,13 @@ Invoke-RestMethod -Method Put -Headers @{ Authorization = "Bearer $token"; "Cont
   -Body $body
 ```
 
-**3. Record** the returned `supportTicketId` here and in `DEPLOYMENT_STATUS.md`; follow to credit or written denial (§10.5).
+**Expected response:** HTTP 200/201 with a body containing `properties.supportTicketId` (a numeric id like
+`2407090010001234`) — OR HTTP 202 (async) with a `Location` header; GET that URL until it returns the created
+ticket. The PUT is idempotent on the ticket name `cliquepix-aca-metering-jun2026` — safe to GET
+(`.../supportTickets/cliquepix-aca-metering-jun2026?api-version=2020-04-01`) to check whether it already exists
+before/after any retry. Known 400 trap: if `contactDetails.country` is rejected, try `"usa"` (lowercase) or `"US"`.
+
+**3. Record** the returned `supportTicketId` here and in `DEPLOYMENT_STATUS.md`; follow to credit or written denial (§10.5). Microsoft's replies go to bluebuildapps@gmail.com.
 
 ---
 
