@@ -239,6 +239,11 @@ escalated) should be visible to the support/billing engineering team and is the 
 shows May's invoice `G163862975` ($925.54) posted **June 9** — on that cadence the June invoice posts **~July 9**.
 Per §10, do not file before it exists.
 
+**Cost-data re-verification 2026-07-06:** June daily `Azure Container Apps` costs re-queried — **identical to the
+§4 evidence table to the penny** (Jun 2 $3.74 → Jun 4-8 $72-74/day → Jun 9 $47.45 → Jun 12 $0.46). Microsoft has
+NOT retroactively corrected the metering; expect the full ~$449 on the invoice, making the ticket necessary.
+The §1b gate below remains the final confirmation.
+
 **When it posts** (re-check with the invoice-list call below), fill `<INVOICE_NUMBER>` and run the PUT.
 Support prerequisites verified 2026-07-05: `Microsoft.Support` RP is Registered on the Clique Pix subscription;
 classification chosen = Billing → **"Disagreement with a charge (workload or service) / Issue with Compute charge"**
