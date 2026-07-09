@@ -235,6 +235,31 @@ escalated) should be visible to the support/billing engineering team and is the 
 
 ## 12. STAGED TICKET — ready to file the moment the June invoice posts (staged 2026-07-05)
 
+> ### ✅ FILED 2026-07-09 — support ticket **2607090040008626** (status Open)
+>
+> - **Invoice posted 2026-07-09:** `G170253352`, period Jun 1–30 2026, total **$1,226.67 USD**, due 07/09
+>   (card on file auto-charges; the credit comes back post-dispute).
+> - **§1b gate PASSED (line-level):** the invoice PDF groups by *service family* — "Containers $19.97" is
+>   Container Registry only. **Azure Container Apps bills under the "Compute" family**: a billing-profile-scope
+>   Cost Management query (ServiceFamily+ServiceName) confirms **$449.13 Container Apps** inside the invoice's
+>   Compute $602.39 line (449.13 ACA + 148.54 Functions + 4.75 App Service). Every family line reconciles to the
+>   invoice within pennies; grand total sums to $1,226.67 exactly. **Microsoft did NOT retroactively correct the
+>   metering** → abort rule not triggered, ticket filed per §10.
+> - **Filed via the §2 PUT** (ticket name `cliquepix-aca-metering-jun2026`): 202 → created 19:52:00 UTC,
+>   `supportTicketId` **2607090040008626**, severity minimal, contact bluebuildapps@gmail.com (Microsoft's
+>   auto-ack email sent 19:52:07).
+> - ⚠️ **Staged-command bug, worked around:** the staged `title` string contained an UNESCAPED `$411.25` inside
+>   PowerShell double quotes — `$411` expanded to an undefined variable (empty), so the created title reads
+>   "credit request .25". Title is immutable post-creation; the **description carries every amount intact**
+>   ($411.25 ask, $346.84 floor, full per-day breakdown), and a corrective communication
+>   (`title-amount-correction`, 19:53:45 UTC) was attached restating the $411.25 ask. **Lesson: backtick-escape
+>   EVERY literal `$` in double-quoted PowerShell strings, titles included.**
+> - **Next (§10.5):** follow case **2607090040008626** (Azure Portal → Help + support, or replies to
+>   bluebuildapps@gmail.com) to an issued credit or a written denial with reason. Record the outcome here.
+> - Aside noted on the invoice: a **$100/month "Microsoft Azure Support - 1 Month"** purchase (06/07→07/06 term).
+>   **Intentional — Gene keeps it for technical support** (confirmed 2026-07-09). Billing disputes like this one
+>   are free regardless, so the plan wasn't needed for the ticket itself.
+
 **Invoice check 2026-07-05:** the June-period invoice has NOT posted yet. Billing profile `KNVI-ZBIZ-BG7-PGB`
 shows May's invoice `G163862975` ($925.54) posted **June 9** — on that cadence the June invoice posts **~July 9**.
 Per §10, do not file before it exists.
