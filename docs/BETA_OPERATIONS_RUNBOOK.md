@@ -659,6 +659,19 @@ The 5-min App Insights alert (Kusto query B in §7) is the early-warning. If you
    - Pattern across multiple events by the same organizer → consider de-platforming via `DELETE /api/users/me` (admin variant TBD post-v1).
 4. **Long-term:** if abuse becomes a pattern, design an appeals/notification workflow (currently out of scope — the choice in the design phase was deliberately silent removal to keep moderation friction-free).
 
+### "After an Android target-SDK bump, users report back-button / rotation / crop problems" (added 2026-07-27)
+
+Google Play forces a `targetSdk` bump every year (see `docs/HANDOFF.md` §6). A bump changes platform behavior app-wide, so post-release reports cluster into three buckets. Triage in this order.
+
+1. **Back button misbehaves — the most likely and most serious.** Symptoms: back exits the app from a nested screen, back does nothing, or a dialog/sheet closes the whole route. Mechanism: from `targetSdk` 36 the system no longer calls `onBackPressed()` and no longer dispatches `KEYCODE_BACK`; back reaches Flutter only while an `OnBackInvokedCallback` is registered, which Flutter drives from `canHandlePop`. There is **no crash and no telemetry** — Android vitals will look clean, so trust user reports over dashboards here.
+   - **Fix (pre-authorized, ships as the next versionCode):** add `android:enableOnBackInvokedCallback="false"` to `<application>` in `app/android/app/src/main/AndroidManifest.xml`. It is the officially supported opt-out, is mechanically identical to pre-36 behavior, and also covers the third-party `UCropActivity` and MSAL activities. Mind the "no literal `--` inside an XML comment" rule when editing that file — it has broken all release builds before.
+   - Reproduce first with `docs/BETA_TEST_PLAN.md` §13.1 on a device actually running the new OS.
+2. **Avatar crop looks wrong or restarts on a tablet/foldable.** From `targetSdk` 36 the system ignores `android:screenOrientation` on displays ≥600 dp, so `UCropActivity`'s portrait lock no longer applies and rotating recreates the activity mid-crop. Restarting the crop is expected; a crash, black screen, or mis-cropped upload is not.
+   - Contingency: add `<property android:name="android.window.PROPERTY_COMPAT_ALLOW_RESTRICTED_RESIZABILITY" android:value="true" />` **scoped to `UCropActivity` only** — never at `<application>`, which would re-restrict the otherwise-adaptive `MainActivity`. Note this opt-out stops working at API 37, so treat it as a stopgap with a dated TODO.
+3. **Fullscreen video no longer auto-rotates on a large screen.** Same root cause — `setPreferredOrientations` is ignored ≥600 dp, so Chewie's fullscreen orientation forcing (both landscape and portrait) becomes a no-op. This is expected behavior at API 36+, not a bug. The user rotates manually.
+
+**Rollback reality check.** There is no server-side lever for any of this — it is purely a client platform change. If the release is already at 100% the rollout **cannot be reduced**, and halting a partial rollout protects only users who have not updated yet; nobody is ever downgraded. Remediation is always a **new versionCode**. Do **not** revert `targetSdk` to the previous level as a fix: that re-triggers the Play policy violation and blocks all future updates after the annual deadline.
+
 ---
 
 ## 3. Database Operations
@@ -841,13 +854,31 @@ az containerapp job update -n caj-cliquepix-transcoder -g rg-cliquepix-prod \
 
 ### Flutter App
 
-**Android APK:**
+**Android APK (sideload / device testing):**
 ```bash
 cd app
 flutter clean
-flutter build apk --release
+flutter build apk --release --dart-define-from-file=dart_defines/release.json
 # APK at build/app/outputs/flutter-apk/app-release.apk
 ```
+
+**Android AAB (Play upload):**
+```bash
+cd app
+flutter clean
+flutter build appbundle --release   # deliberately NO --dart-define: the Dart default IS the release hash
+# AAB at build/app/outputs/bundle/release/app-release.aab
+```
+
+⚠️ **Build order.** `flutter clean` wipes `build/` — including any AAB already produced. When you need both artifacts, build the **APK first** (for device testing) and the **AAB last**, then leave `build/` alone until the AAB is uploaded.
+
+**Post-build manifest assertion — run before every Play upload:**
+```bash
+M=build/app/intermediates/merged_manifest/release/processReleaseMainManifest/AndroidManifest.xml
+grep -n 'targetSdkVersion\|minSdkVersion\|versionCode=\|versionName=' "$M"
+grep -c 'READ_MEDIA_IMAGES\|READ_MEDIA_VIDEO\|SCHEDULE_EXACT_ALARM\|USE_EXACT_ALARM' "$M"   # MUST be 0
+```
+Assert the **merged** manifest, not the source: `targetSdkVersion` / `versionCode` must be what you intended, and the four `tools:node="remove"` permission pins must still produce a count of **0**. A `targetSdk` change alters which library manifest variants merge, and a re-appearance of any of the four is a repeat of the versionCode-6 Play rejection.
 
 **iOS (TestFlight):**
 ```bash

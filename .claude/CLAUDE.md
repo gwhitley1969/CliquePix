@@ -631,6 +631,14 @@ The rules that bite if violated — step-by-step layer implementation lives in `
 
 **`READ_MEDIA_IMAGES` / `READ_MEDIA_VIDEO` are NOT declared — do NOT re-add.** Google Play rejected versionCode 6 (2026-06-10) under the Photo and Video Permissions policy: these permissions are reserved for apps whose *core purpose* is broad gallery access. CLIQUE Pix never needs them — `image_picker` picks via the permission-free Android Photo Picker, and `gal` saves via MediaStore (permission-free on API 29+; legacy saves covered by `WRITE_EXTERNAL_STORAGE maxSdkVersion=29`). Both are pinned with `tools:node="remove"` in the manifest so no plugin update can re-introduce them in the merge. Any future feature that appears to need them should use the Photo Picker instead.
 
+### Android target SDK — Google Play's annual deadline (hard rule)
+
+**`compileSdk` and `targetSdk` are written as LITERAL integers in `app/android/app/build.gradle.kts`, and a `playTargetSdkFloor` `check()` after the `android { }` block fails the build if `targetSdk` drops below the Play floor.** Raise the floor constant and `defaultConfig.targetSdk` **together**. Do NOT delegate either to `flutter.compileSdkVersion` / `flutter.targetSdkVersion` — Flutter's defaults track the newest API, so a routine `flutter upgrade` would silently change runtime behavior with no reviewable diff. (`minSdk` stays delegated on purpose — much smaller blast radius.)
+
+**Google Play requires `targetSdk` within one year of the latest Android release, enforced ~Aug 31 annually. Missing it blocks ALL updates, hotfixes included, and the flag clears only on a PRODUCTION publish** — not CI, not internal testing. Current: **36 (Android 16), shipped in `1.0.1+14`**. Next: **API 37 by ~2026-08-31 — start July 2027.**
+
+A target bump changes platform behavior app-wide, so it is never "just a version number": run `docs/BETA_TEST_PLAN.md` §13 on a phone **and** a ≥600 dp device **actually running the new OS** (behavior changes for apps targeting API N only take effect on API-N devices), then assert the **merged** manifest — new `targetSdkVersion` present **and** still zero matches for the four `tools:node="remove"` permission pins. Standing decisions (2026-07): do **not** add `PROPERTY_COMPAT_ALLOW_RESTRICTED_RESIZABILITY` (expires at API 37; at `<application>` scope it would re-restrict an already-adaptive `MainActivity`); do **not** declare `android:enableOnBackInvokedCallback` in either direction — though `="false"` on `<application>` remains the supported opt-out and the pre-authorized hotfix if predictive back misbehaves.
+
 ### iOS Info.plist
 
 `UIBackgroundModes` must contain `remote-notification` (already set) for silent pushes to wake the app.
