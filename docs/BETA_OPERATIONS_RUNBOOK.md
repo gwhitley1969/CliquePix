@@ -659,6 +659,30 @@ The 5-min App Insights alert (Kusto query B in §7) is the early-warning. If you
    - Pattern across multiple events by the same organizer → consider de-platforming via `DELETE /api/users/me` (admin variant TBD post-v1).
 4. **Long-term:** if abuse becomes a pattern, design an appeals/notification workflow (currently out of scope — the choice in the design phase was deliberately silent removal to keep moderation friction-free).
 
+### "The app is a blank dark screen with one profile icon top-right after sign-in" (added 2026-07-27)
+
+**That screen is the PAYWALL, not Home** — the top-right `account_circle_outlined` → `/profile` is unique to `PaywallScreen` in the whole app, and no bottom nav renders because `/paywall` is outside the shell. The user has `effective_active=false` and the paywall body failed to paint. Triage in this order:
+
+1. **Is the account entitled?** `SELECT display_name, entitlement_active, trial_ends_at, (entitlement_active OR trial_ends_at > NOW()) AS has_access FROM users WHERE ...`. If `has_access=false` for the whole fleet, you have hit a **trial cliff** (this has now happened THREE times: 2026-06-09, 2026-07-11, and it recurs whenever `trial_ends_at` passes with no grants issued). Levers, in order of preference: (a) RevenueCat promotional grants (durable, the sanctioned mechanism — see "Subscription comp grants" below), (b) the trial-extension SQL (instant, fleet-wide, 30-day fuse), (c) the user subscribes through the (working) paywall.
+2. **Why is the paywall body blank instead of showing prices?** `adb logcat | grep -iE "Implementation Error|PaywallView"`. The known cause (fixed in vc14, 2026-07-27): `MainActivity` extended `FlutterActivity`; RevenueCat's `PaywallView` hard-requires `FlutterFragmentActivity` and throws in the native view factory with **no error channel** — the Dart pre-flight passes, `_PaywallFallback` never shows, the body is empty. Never revert `MainActivity`. If logcat instead shows `ClassNotFoundException`/`NoSuchMethodError`, R8 stripped RevenueCat/Compose classes — add RC's documented keep rules to `app/android/app/proguard-rules.pro`.
+3. **Telemetry caveat:** `AppRequests` in App Insights is structurally sparse for this app (single digits/day even in heavy use — the Functions host emits almost no request rows). Diagnose with `AppEvents`/`AppTraces`, live DB queries, and on-device logcat — an empty `AppRequests` is NOT evidence of an outage.
+
+### Subscription comp grants (records + procedure) (added 2026-07-27)
+
+Grants issued 2026-07-27 via the RC MCP (`grant-customer-entitlement`, entitlement `plus`/`entldcaccca2c3`, project `proj04f5314d`), each verified webhook→Postgres (`entitlement_store='PROMOTIONAL'`):
+
+| User | users.id (prefix) | Grant | Expires |
+|---|---|---|---|
+| Vivian (App Store reviewer) | `a16a8a7c` | lifetime (pre-existing, 2026-06-11) | 2100-01-01 |
+| Gene Whitley | `8a40e1c5` | lifetime | 2101-01-01 |
+| Paula Whitley | `16775840` | lifetime | 2101-01-01 |
+| Chase | `234687cf` | 1 year | 2027-07-27 |
+| Paul Whitley | `2ab78127` | 1 year | 2027-07-27 |
+
+**Still owed 1-year grants once their RC customer exists** (they must sign in on a real-key build first; grant attempts before that 404): Amber (`4e8e805c`), Paige Owens (`eb45228e`), Eugene Huffman (`d2db2b14`), Zachary Koeppen (`e0dd56e9`), René Carpenter (`c1975cb1`), Vanessa Carpenter (`4f3e9b47`). All are covered by the fleet trial extension to **2026-08-26** until then — ⏰ **that is the next trial cliff: issue these grants (or re-extend) before Aug 26.**
+
+Procedure for a new grant: (1) find `users.id` in Postgres; (2) `list-customers` search by that UUID — no match ⇒ wait for a sign-in; (3) `grant-customer-entitlement` with `expires_at` in ms epoch (1y ≈ now+31 536 000 000; lifetime = `4133980800000` = 2101-01-01); (4) verify `users.entitlement_active=TRUE AND entitlement_store='PROMOTIONAL'`. Never DB-override `entitlement_active` directly.
+
 ### "After an Android target-SDK bump, users report back-button / rotation / crop problems" (added 2026-07-27)
 
 Google Play forces a `targetSdk` bump every year (see `docs/HANDOFF.md` §6). A bump changes platform behavior app-wide, so post-release reports cluster into three buckets. Triage in this order.

@@ -8,11 +8,21 @@ Last updated **2026-07-27** — **⚠️ GOOGLE PLAY TARGET-API DEADLINE — ACT
 
 ---
 
+## ✅ RESOLVED 2026-07-27: the "app doesn't work / blank Home" report — you are UNBLOCKED NOW
+
+**What it was:** (1) every trial expired 2026-07-11 (the June extension ran out; the Phase-6 promo grants below were never issued) → the router correctly sent everyone to the paywall; (2) the Android paywall has never been able to render — RevenueCat's `PaywallView` requires `MainActivity` to extend `FlutterFragmentActivity`, ours didn't, and the failure mode is a BLANK dark screen with just the profile icon. NOT the APIM removal — the API was verified healthy end-to-end.
+
+**Already done for you (2026-07-27):** trials extended to **2026-08-26** for all accounts; RC promo grants issued + verified — **you and Paula: lifetime; Chase and Paul: 1 year**. **Force-close and reopen the app — Home is back on any build, including the vc14 sideload already on your Fold.** `MainActivity` fix rides vc14.
+
+**⏰ NEW DEADLINE — Aug 26, 2026:** Amber, Paige, Eugene, Zachary, René and Vanessa could not be granted yet (no RC customer until they sign in on a real-key build). Their extended trials lapse Aug 26. After vc14 is out, have them open the app + sign in once, then grant their 1-year promos (procedure + table: `BETA_OPERATIONS_RUNBOOK.md` §"Subscription comp grants").
+
+---
+
 ## ⚠️ Google Play: target Android 16 (API 36) — vc14 must be LIVE ON PRODUCTION by Aug 30, 2026 (2026-07-27)
 
 **Why it matters:** after Aug 30 you cannot publish any Android update at all until this is done. Existing installs keep working. The flag clears **only** on a production publish — not CI, not internal testing.
 
-**Code side (assistant):** `targetSdk` 35 → 36 in `app/android/app/build.gradle.kts`, a `playTargetSdkFloor` build guard so this can never silently regress, `pubspec.yaml` → `1.0.1+14` (also reconciles the Android 1.0.0 / iOS 1.0.1 split), docs. Nothing else changes — no manifest edit, no Dart change, no plugin bumps.
+**Code side (assistant):** `targetSdk` 35 → 36 in `app/android/app/build.gradle.kts`, a `playTargetSdkFloor` build guard so this can never silently regress, `pubspec.yaml` → `1.0.1+14` (also reconciles the Android 1.0.0 / iOS 1.0.1 split), **and (added 2026-07-27) `MainActivity.kt` → `FlutterFragmentActivity` — the paywall render fix**, docs. No plugin bumps.
 
 **Your steps, in order:**
 
@@ -22,7 +32,7 @@ Last updated **2026-07-27** — **⚠️ GOOGLE PLAY TARGET-API DEADLINE — ACT
 - [ ] **2. Internal testing upload.** The internal track is currently an empty draft (versionCode 0), so create/confirm the tester list first: Play Console → Test and release → Testing → Internal testing. Upload the vc14 AAB via the Console UI.
 - [ ] **3. Pre-launch report** — runs automatically on Google-hosted devices including tablets. Gate: zero crashes, zero ANRs. Skim the screenshot grid for clipped layouts. (The crawler probably can't get past the Microsoft sign-in page — that's expected, treat it as crash smoke, not functional coverage.)
 - [ ] **4. App bundle explorer** → vc14 → confirm it reads **`targetSdkVersion 36`** and shows no target-API or 16 KB warnings. This is the authoritative confirmation that we're compliant.
-- [ ] **5. Install from the internal track on the Fold** and re-run §13.1 plus **the paywall with an expired trial**. This matters: a sideloaded APK is signed with the upload key, so Play Billing won't resolve products and you'd be looking at the fallback screen, not the real paywall. Expire a test account with the SQL in the Phase 6 section below, check the paywall shows $3.99 / $39.99 and is **not blank**, then restore the trial.
+- [ ] **5. Install from the internal track on the Fold** and re-run §13.1 plus **the paywall with an expired trial — USE A THROWAWAY ACCOUNT** (`fly` or `fevg`; your own account now has a lifetime grant and will never see the paywall). Flip it with the SQL in the Phase 6 section below, check the paywall shows $3.99 / $39.99 and is **not blank** and logcat has no `Implementation Error`, then restore. **Also: one License-testing purchase** (add the throwaway's Google account under Play Console → Setup → License testing — purchases are free) — this is the Android billing validation that was descoped at vc9 and has never been done. **And one video upload end-to-end** (proves the post-APIM transcoder callback, unexercised since Jul 5).
 - [ ] **6. Promote internal → production at 100%.** Play Console → Internal testing → Promote release → Production. Release notes: *"Compatibility update for Android 16."*
       ⚠️ **Do NOT upload to the beta / open-testing track** — it still carries vc8 halted + vc7 completed, and a fresh AAB there would resurrect the "Join the beta" card you spent three rounds killing.
 - [ ] **7. After approval:** confirm the Play Console policy notice has cleared, then watch Android vitals (vc14 vs vc13) for 72h. A 100% rollout can't be reduced, so remediation would be a new vc15 — reserve 15 and never re-use 14.

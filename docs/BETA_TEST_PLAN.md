@@ -459,7 +459,12 @@ Pass criterion for every row: **back pops exactly one level, landing where the a
 - [ ] WorkManager (Layer 4) background refresh appears in Token Diagnostics
 - [ ] Battery-optimization exemption prompt (Layer 1) appears on first launch after login and can be granted
 - [ ] Deep link `https://clique-pix.com/invite/<code>` from another app opens the app directly (App Links verification intact) — both form factors
-- [ ] **Paywall on a non-entitled account, folded and unfolded** — real `PaywallView` renders $3.99 / $39.99, **never blank**. Requires the Play-signed build; expire a test account's trial with the SQL in `docs/GENE.md`, then restore it
+- [ ] **Paywall on a non-entitled account, folded and unfolded** — use a THROWAWAY account flipped non-entitled via the SQL in `docs/GENE.md` (granted accounts never see the paywall). Expectations are **build-specific**:
+      **Play-signed internal build:** the real `PaywallView` renders with **$3.99 / $39.99 visible**, and `adb logcat` contains **no** `Implementation Error` (the FlutterFragmentActivity requirement) and no `ClassNotFoundException`/`NoSuchMethodError` (R8 stripping — if seen, add RevenueCat's keep rules in `proguard-rules.pro`).
+      **Sideloaded upload-key build:** the real paywall *or* the branded `_PaywallFallback` (billing may not resolve products off-Play).
+      **A BLANK body is a FAIL on either build.**
+- [ ] **License-testing purchase** (Play-signed build; add the tester to Play Console → Setup → License testing first) — complete a monthly purchase at no charge; entitlement flips within ~30s (webhook or the app's auto-recovery) and the paywall dismisses into Home. This is the Android billing validation descoped at vc9. Cancel/refund via Play Console afterwards if desired
+- [ ] **One video upload end-to-end** — record or pick a short video, upload, processing card appears, poster + `video_ready` arrive (≤ ~60s for a phone clip incl. scale-from-zero cold start). Proves the transcoder callback through the post-APIM `api.clique-pix.com` path, which has not carried a real transcode since the 2026-07-05 cutover
 
 ---
 
