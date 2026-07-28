@@ -5,6 +5,7 @@ import 'package:workmanager/workmanager.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/constants/msal_constants.dart';
+import '../../../core/utils/brief_error.dart';
 import '../../../services/token_storage_service.dart';
 
 /// Layer 4: WorkManager Background Task (Android best-effort backup).
@@ -83,7 +84,7 @@ void callbackDispatcher() {
       return true;
     } catch (e) {
       debugPrint('[AUTH-LAYER-4] WorkManager refresh failed: $e');
-      await _recordIsolateEvent('wm_refresh_failed', errorCode: _briefError(e));
+      await _recordIsolateEvent('wm_refresh_failed', errorCode: briefError(e));
       // Return true so WorkManager doesn't retry aggressively — the next
       // foreground resume will handle Layer 3 / Layer 5 recovery.
       return true;
@@ -110,12 +111,12 @@ Future<void> _recordIsolateEvent(String event, {String? errorCode}) async {
   }
 }
 
-String _briefError(Object e) {
-  final s = e.toString();
-  final match = RegExp(r'AADSTS\d{5,6}').firstMatch(s);
-  if (match != null) return match.group(0)!;
-  return s.split('\n').first.substring(0, s.length > 64 ? 64 : s.length);
-}
+// _briefError removed 2026-07-28: it was a duplicated copy of main.dart's
+// briefError that STILL carried the RangeError bug PR #24 fixed there (bound
+// computed from the full string, applied to the first line) — on this Layer-4
+// failure path the throw happened inside the catch block and destroyed the
+// wm_refresh_failed telemetry that would have reported it. Both call sites now
+// share the tested implementation in core/utils/brief_error.dart.
 
 class BackgroundTokenService {
   Future<void> register() async {

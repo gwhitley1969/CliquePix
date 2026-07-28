@@ -8,6 +8,20 @@ Last updated **2026-07-27** — **⚠️ GOOGLE PLAY TARGET-API DEADLINE — ACT
 
 ---
 
+## 📅 vc15 = `1.0.2` (+15), target ~mid-August — RevenueCat SDK deadline + queued fixes (2026-07-28)
+
+**Why:** Play SDK-Console email (`SDKemail01.png`) — RevenueCat flagged the native SDK inside vc14 (`purchases:10.6.1`, "unnecessary API calls"); **from Oct 26 no new release may contain it.** Your call: vc15 ships as **1.0.2** (also re-unifies Android + iOS on one marketing version).
+
+**Already staged on `main`:** pubspec `1.0.2+15`; the Friday-reminder receivers (it has never fired on Android — and thanks to the `MY_PACKAGE_REPLACED` re-arm, existing users' reminders start working the moment the vc15 update installs); the `briefError` de-dup. **August work is only:** RC bump to latest 10.x → verify → ship.
+
+**Your vc15 checklist when we build (~mid-Aug):**
+- [ ] Device pass §13 rows incl. §7.2 (Friday reminder — the clock-roll test finally proves it fires)
+- [ ] Internal track → **Play-signed paywall render on a throwaway account** AND **the License-testing purchase — MANDATORY this time** (the purchase stack itself changes; this check has been skipped at vc9 and vc14)
+- [ ] Promote to production, confirm the SDK issue clears in Play Console → Policy → SDK issues
+- [ ] **Then the six tester grants before Aug 26** (Amber, Paige, Eugene, Zachary, René, Vanessa — have them sign in on vc15 once, then tell the assistant to grant)
+
+---
+
 ## ✅ RESOLVED 2026-07-27: the "app doesn't work / blank Home" report — you are UNBLOCKED NOW
 
 **What it was:** (1) every trial expired 2026-07-11 (the June extension ran out; the Phase-6 promo grants below were never issued) → the router correctly sent everyone to the paywall; (2) the Android paywall has never been able to render — RevenueCat's `PaywallView` requires `MainActivity` to extend `FlutterFragmentActivity`, ours didn't, and the failure mode is a BLANK dark screen with just the profile icon. NOT the APIM removal — the API was verified healthy end-to-end.
