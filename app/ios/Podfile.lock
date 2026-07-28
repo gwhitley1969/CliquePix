@@ -55,28 +55,28 @@ PODS:
   - GoogleDataTransport (10.1.0):
     - nanopb (~> 3.30910.0)
     - PromisesObjC (~> 2.4)
-  - GoogleUtilities/AppDelegateSwizzler (8.1.0):
+  - GoogleUtilities/AppDelegateSwizzler (8.1.2):
     - GoogleUtilities/Environment
     - GoogleUtilities/Logger
     - GoogleUtilities/Network
     - GoogleUtilities/Privacy
-  - GoogleUtilities/Environment (8.1.0):
+  - GoogleUtilities/Environment (8.1.2):
     - GoogleUtilities/Privacy
-  - GoogleUtilities/Logger (8.1.0):
+  - GoogleUtilities/Logger (8.1.2):
     - GoogleUtilities/Environment
     - GoogleUtilities/Privacy
-  - GoogleUtilities/Network (8.1.0):
+  - GoogleUtilities/Network (8.1.2):
     - GoogleUtilities/Logger
     - "GoogleUtilities/NSData+zlib"
     - GoogleUtilities/Privacy
     - GoogleUtilities/Reachability
-  - "GoogleUtilities/NSData+zlib (8.1.0)":
+  - "GoogleUtilities/NSData+zlib (8.1.2)":
     - GoogleUtilities/Privacy
-  - GoogleUtilities/Privacy (8.1.0)
-  - GoogleUtilities/Reachability (8.1.0):
+  - GoogleUtilities/Privacy (8.1.2)
+  - GoogleUtilities/Reachability (8.1.2):
     - GoogleUtilities/Logger
     - GoogleUtilities/Privacy
-  - GoogleUtilities/UserDefaults (8.1.0):
+  - GoogleUtilities/UserDefaults (8.1.2):
     - GoogleUtilities/Logger
     - GoogleUtilities/Privacy
   - image_cropper (0.0.4):
@@ -119,21 +119,21 @@ PODS:
     - FlutterMacOS
   - permission_handler_apple (9.3.0):
     - Flutter
-  - PromisesObjC (2.4.0)
-  - purchases_flutter (10.2.0):
+  - PromisesObjC (2.4.1)
+  - purchases_flutter (10.4.3):
     - Flutter
-    - PurchasesHybridCommon (= 18.8.0)
-  - purchases_ui_flutter (10.2.0):
+    - PurchasesHybridCommon (= 18.22.2)
+  - purchases_ui_flutter (10.4.3):
     - Flutter
-    - PurchasesHybridCommonUI (= 18.8.0)
-  - PurchasesHybridCommon (18.8.0):
-    - RevenueCat (= 5.74.0)
-  - PurchasesHybridCommonUI (18.8.0):
-    - PurchasesHybridCommon (= 18.8.0)
-    - RevenueCatUI (= 5.74.0)
-  - RevenueCat (5.74.0)
-  - RevenueCatUI (5.74.0):
-    - RevenueCat (= 5.74.0)
+    - PurchasesHybridCommonUI (= 18.22.2)
+  - PurchasesHybridCommon (18.22.2):
+    - RevenueCat (= 5.81.1)
+  - PurchasesHybridCommonUI (18.22.2):
+    - PurchasesHybridCommon (= 18.22.2)
+    - RevenueCatUI (= 5.81.1)
+  - RevenueCat (5.81.1)
+  - RevenueCatUI (5.81.1):
+    - RevenueCat (= 5.81.1)
   - SDWebImage (5.21.7):
     - SDWebImage/Core (= 5.21.7)
   - SDWebImage/Core (5.21.7)
@@ -289,7 +289,7 @@ SPEC CHECKSUMS:
   flutter_timezone: 7c838e17ffd4645d261e87037e5bebf6d38fe544
   gal: baecd024ebfd13c441269ca7404792a7152fde89
   GoogleDataTransport: aae35b7ea0c09004c3797d53c8c41f66f219d6a7
-  GoogleUtilities: 00c88b9a86066ef77f0da2fab05f65d7768ed8e1
+  GoogleUtilities: 766ace00c6b10d8148408f329d10c4f051931850
   image_cropper: c4326ea50132b1e1564499e5d32a84f01fb03537
   image_picker_ios: e0ece4aa2a75771a7de3fa735d26d90817041326
   in_app_review: 7dd1ea365263f834b8464673f9df72c80c17c937
@@ -301,13 +301,13 @@ SPEC CHECKSUMS:
   package_info_plus: af8e2ca6888548050f16fa2f1938db7b5a5df499
   path_provider_foundation: bb55f6dbba17d0dccd6737fe6f7f34fbd0376880
   permission_handler_apple: 4ed2196e43d0651e8ff7ca3483a069d469701f2d
-  PromisesObjC: f5707f49cb48b9636751c5b2e7d227e43fba9f47
-  purchases_flutter: 8e0d2c774c5bef250651b4b017864eac5105f48e
-  purchases_ui_flutter: e908fe7d4fbdf5f7626af6828b2ee3d4f2f278f0
-  PurchasesHybridCommon: e723f7c9b109be51f7ec6c85a104791369f1b562
-  PurchasesHybridCommonUI: 50cad0cd7729da2195b74edc618e605a89705bc6
-  RevenueCat: efcd02bf9b14ffce229e57dc6863a2513136b9ca
-  RevenueCatUI: c0eba5eccdd3eedd3d69ce8d552a445ebe62eff0
+  PromisesObjC: 752c3227f599e3467650e47ea36f433eeb10c273
+  purchases_flutter: 70ea95feca029142ca37761d1a0b57b8324e9a29
+  purchases_ui_flutter: ec34abc3188f7cf471ba108b741293640581da7d
+  PurchasesHybridCommon: e47bc4f611e86fcf8295bf1c984f187982270f02
+  PurchasesHybridCommonUI: e6756576ad454c6c15a4679f57446115382ff791
+  RevenueCat: 693b033863262f9776130cc6c1f9255a74ab23ff
+  RevenueCatUI: 2c7092fa0a485454d2a474e80f241e6db591dd36
   SDWebImage: e9fc87c1aab89a8ab1bbd74eba378c6f53be8abf
   SDWebImageWebPCoder: 0e06e365080397465cc73a7a9b472d8a3bd0f377
   share_plus: 50da8cb520a8f0f65671c6c6a99b3617ed10a58a
