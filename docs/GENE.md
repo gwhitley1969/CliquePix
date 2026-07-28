@@ -37,7 +37,7 @@ Last updated **2026-07-27** — **⚠️ GOOGLE PLAY TARGET-API DEADLINE — ACT
       ⚠️ **Do NOT upload to the beta / open-testing track** — it still carries vc8 halted + vc7 completed, and a fresh AAB there would resurrect the "Join the beta" card you spent three rounds killing.
 - [ ] **7. After approval:** confirm the Play Console policy notice has cleared, then watch Android vitals (vc14 vs vc13) for 72h. A 100% rollout can't be reduced, so remediation would be a new vc15 — reserve 15 and never re-use 14.
 
-**Deferred to vc15 (found while analyzing this, both unrelated to Android 16, neither urgent):** the weekly Friday 5 PM reminder has **never fired on Android** (the notification plugin stopped declaring its receivers in v16 and the app never declared them — the alarm broadcasts into nothing, and the health check reads the plugin's own cache so it self-reports as working); and a duplicated `briefError` in the WorkManager isolate still has the `RangeError` bug that PR #24 fixed in `main.dart`.
+**Deferred to vc15 (neither urgent):** the weekly Friday 5 PM reminder has **never fired on Android** (the notification plugin stopped declaring its receivers in v16 and the app never declared them — the alarm broadcasts into nothing, and the health check reads the plugin's own cache so it self-reports as working); and a duplicated `briefError` in the WorkManager isolate still has the `RangeError` bug that PR #24 fixed in `main.dart`. **Already fixed on `main` for vc15 (2026-07-28):** the About dialog / Profile version row showed a hardcoded "Version 1.0.0" (stale in the shipped 1.0.1) — now read live from the platform via `package_info_plus`, so the displayed version can never drift from pubspec again.
 
 ---
 

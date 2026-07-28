@@ -84,6 +84,11 @@ dependencies:
   in_app_review: ^2.0.12
   purchases_flutter: ^10.2.0
   purchases_ui_flutter: ^10.2.0
+  # Version display (About dialog + Profile version row). Already in the dependency
+  # graph transitively — promoting to direct adds zero binary weight. Reads the REAL
+  # versionName/versionCode so the UI can never drift from pubspec again (the
+  # hardcoded 'Version 1.0.0' literal shipped stale in 1.0.1+14).
+  package_info_plus: ^9.0.0
 
 dev_dependencies:
   flutter_test:

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/theme/app_colors.dart';
@@ -127,18 +128,22 @@ class ProfileScreen extends ConsumerWidget {
                         icon: Icons.info_outline_rounded,
                         iconColors: [AppColors.electricAqua, AppColors.deepBlue],
                         title: 'About CLIQUE Pix',
-                        onTap: () {
+                        onTap: () async {
+                          // Real versionName + build from the platform — never a
+                          // hardcoded literal (shipped stale as "1.0.0" in 1.0.1+14).
+                          final info = await PackageInfo.fromPlatform();
+                          if (!context.mounted) return;
                           showDialog<void>(
                             context: context,
                             builder: (ctx) => AlertDialog(
                               title: const Text('CLIQUE Pix'),
-                              content: const Column(
+                              content: Column(
                                 mainAxisSize: MainAxisSize.min,
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text('Version 1.0.0'),
-                                  SizedBox(height: 12),
-                                  Text('Private photo and video sharing for your inner circle.'),
+                                  Text('Version ${info.version} (${info.buildNumber})'),
+                                  const SizedBox(height: 12),
+                                  const Text('Private photo and video sharing for your inner circle.'),
                                 ],
                               ),
                               actions: [
@@ -393,6 +398,17 @@ class _VersionTapCounter extends ConsumerStatefulWidget {
 class _VersionTapCounterState extends ConsumerState<_VersionTapCounter> {
   int _taps = 0;
   bool _unlocked = false;
+  String _version = 'Version';
+
+  @override
+  void initState() {
+    super.initState();
+    // Platform-derived version — see the About dialog note. Resolves in ms;
+    // the placeholder text is visible for at most one frame.
+    PackageInfo.fromPlatform().then((info) {
+      if (mounted) setState(() => _version = 'Version ${info.version}');
+    });
+  }
 
   void _tap() {
     if (_unlocked) {
@@ -416,7 +432,7 @@ class _VersionTapCounterState extends ConsumerState<_VersionTapCounter> {
           behavior: HitTestBehavior.opaque,
           onTap: _tap,
           child: Text(
-            'Version 1.0.0',
+            _version,
             style: TextStyle(
                 fontSize: 12, color: Colors.white.withValues(alpha: 0.25)),
           ),
