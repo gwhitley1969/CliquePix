@@ -8,13 +8,13 @@ Last updated **2026-07-27** — **⚠️ GOOGLE PLAY TARGET-API DEADLINE — ACT
 
 ---
 
-## 📅 vc15 = `1.0.2` (+15), target ~mid-August — RevenueCat SDK deadline + queued fixes (2026-07-28)
+## 📅 vc15 = `1.0.2` (+15) — RevenueCat SDK deadline + queued fixes — ⚡ BUILT TODAY (2026-07-28)
 
-**Why:** Play SDK-Console email (`SDKemail01.png`) — RevenueCat flagged the native SDK inside vc14 (`purchases:10.6.1`, "unnecessary API calls"); **from Oct 26 no new release may contain it.** Your call: vc15 ships as **1.0.2** (also re-unifies Android + iOS on one marketing version).
+**Why:** Play SDK-Console email (`SDKemail01.png`) — RevenueCat flagged the native SDK inside vc14 (`purchases:10.6.1`, "unnecessary API calls"); **from Oct 26 no new release may contain it.** Your calls: vc15 ships as **1.0.2** (re-unifies Android + iOS marketing versions) and we did it **today**, not mid-August.
 
-**Already staged on `main`:** pubspec `1.0.2+15`; the Friday-reminder receivers (it has never fired on Android — and thanks to the `MY_PACKAGE_REPLACED` re-arm, existing users' reminders start working the moment the vc15 update installs); the `briefError` de-dup. **August work is only:** RC bump to latest 10.x → verify → ship.
+**All code complete + verified:** RC pinned exactly **10.4.3** (native `purchases:10.14.1` + Billing 8.3.0, verified in the actual release classpath — the flagged version is gone); pubspec `1.0.2+15`; the Friday-reminder receivers (never fired on Android before — and the `MY_PACKAGE_REPLACED` re-arm means existing users' reminders start working the moment the vc15 update installs); the `briefError` de-dup. Merged-manifest assertions all pass.
 
-**Your vc15 checklist when we build (~mid-Aug):**
+**Your vc15 checklist (now — the AAB is ready):**
 - [ ] Device pass §13 rows incl. §7.2 (Friday reminder — the clock-roll test finally proves it fires)
 - [ ] Internal track → **Play-signed paywall render on a throwaway account** AND **the License-testing purchase — MANDATORY this time** (the purchase stack itself changes; this check has been skipped at vc9 and vc14)
 - [ ] Promote to production, confirm the SDK issue clears in Play Console → Policy → SDK issues
