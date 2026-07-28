@@ -1,8 +1,10 @@
 # CLIQUE Pix — Open Beta Smoke Test Plan
 
-**Last Updated:** May 4, 2026
+**Last Updated:** July 27, 2026
 
 This is a manual smoke test checklist to run before each beta release. Every item must pass on **both iOS and Android** unless noted otherwise.
+
+**§13 is different:** it is the targeted pass for an Android `targetSdk` bump (Google Play's annual deadline). Run it *instead of* a full §1–§12 sweep when the only change is the platform target, and run it on a device that is actually on the new OS version.
 
 ---
 
@@ -13,6 +15,7 @@ This is a manual smoke test checklist to run before each beta release. Every ite
 - Device B = "Member" (secondary tester)
 - Good WiFi connection for initial testing; repeat video upload on LTE to verify resumability
 - Fresh app install (clear data or reinstall)
+- **For an Android platform-target bump (§13) only:** a device with a **≥600 dp** display (foldable inner screen or tablet) that is **running the OS version being targeted** — a Galaxy Z Fold 7 covers both the ≥600 dp and <600 dp cases in one device
 
 ---
 
@@ -280,7 +283,7 @@ Client-only, scheduled via `flutter_local_notifications.zonedSchedule`. No FCM, 
 - [ ] **Contact Us — Send Email** — tap "Send Email" → device mail app opens with To `support@xtend-ai.com` and Subject `CLIQUE Pix Support` pre-populated (Android requires the `mailto` `<queries>` entry in `AndroidManifest.xml`)
 - [ ] **Delete account** — confirmation dialog appears, account deletion succeeds, redirects to login
 
-## 11. Performance Checks
+## 11a. Performance Checks
 
 - [ ] **Photo upload speed** — capture to visible in feed: < 5 seconds on WiFi
 - [ ] **Video transcoding** — compatible source (H.264 SDR): ready within ~25 seconds total
@@ -388,6 +391,80 @@ Run in a fresh browser window per test where possible; for cross-browser coverag
 - [ ] **`prefers-reduced-motion`** — enable in OS accessibility settings → gradient-drift animations stop on the landing hero; scroll-reveal falls through to immediate visibility
 - [ ] **Lighthouse** — desktop, incognito landing page → Performance ≥ 90, Accessibility ≥ 90
 - [ ] **Bundle budget** — initial JS ≤ 400 KB total / 130 KB gzip; `hls.js` loads as a separate on-demand chunk
+
+---
+
+## 13. Android platform-target / large-screen regression pass
+
+**Run this whenever `targetSdk` changes** (Google Play's annual deadline — see `docs/HANDOFF.md` §6). It is the *targeted* pass for a platform-target bump and does **not** replace §1–§12 for feature releases. Added 2026-07-27 for the API 35 → 36 (Android 16) bump; reuse verbatim for API 37.
+
+### Preconditions — check these first or the whole pass is meaningless
+
+- [ ] **The test device is actually running the new OS version.** Behavior changes for apps targeting API N only take effect on API-N devices; on an older device every row below passes and proves nothing.
+      `adb shell getprop ro.build.version.release` → expect `16`
+      `adb shell getprop ro.build.version.sdk` → expect `36`
+- [ ] **A ≥600 dp device is available** (foldable inner display or tablet). Android 16 ignores orientation/resizability restrictions only at `sw600dp`+. A Galaxy Z Fold 7 covers both cases in one device: inner display ≥600 dp (adaptive path), cover display <600 dp (restricted path — the control).
+- [ ] Build under test is the **release** build. Ideally installed from the Play **internal testing** track — a sideloaded APK is upload-key-signed, so Play Billing will not resolve products and the paywall renders its fallback instead of the real `PaywallView`.
+- [ ] `adb logcat | grep -iE "OnBackInvoked|setRequestedOrientation|SecurityException"` running throughout.
+
+### 13.1 Back navigation — **THE RELEASE GATE**
+
+At `targetSdk` 36+ predictive back is on by default: `onBackPressed()` is no longer called and `KEYCODE_BACK` is no longer dispatched. Back reaches Flutter only while an `OnBackInvokedCallback` is registered. **Run this whole block twice — once in gesture navigation, once in 3-button navigation.**
+
+Pass criterion for every row: **back pops exactly one level, landing where the app-bar back arrow would land. No route exits the app except a tab root.**
+
+- [ ] Back at each tab root (Home / Cliques / Notifications / Profile) — predictive peek reveals the launcher; release exits; dragging back to the edge **cancels** and returns with state intact
+- [ ] Back from Event detail
+- [ ] Back from Event feed
+- [ ] Back from photo lightbox / photo detail
+- [ ] Back from video player
+- [ ] Back from camera capture
+- [ ] Back from Clique detail, and from the Invite screen
+- [ ] Back from DM thread list, and from a DM chat
+- [ ] Back from Profile sub-screens and Token Diagnostics
+- [ ] Back from the Paywall route
+- [ ] Deep stack: `/events/:id/dm/:threadId` → back ×3 walks back out, does not exit the app
+- [ ] **Tab-switch interaction** — navigate deep inside Cliques, switch to the Home tab, press back; then switch back to Cliques and confirm its stack survived
+- [ ] Mid-flow: create-event form → back returns to the previous screen (no "discard?" prompt is expected — criterion is *identical to the previous release*)
+- [ ] Mid-flow: create-clique form → same
+- [ ] Confirm-destructive dialog → back dismisses the dialog only
+- [ ] Avatar picker sheet → back dismisses the sheet only
+- [ ] Reactor list sheet (`isScrollControlled`) → back dismisses the sheet only
+- [ ] Back inside **UCrop** (avatar crop) → returns to the picker, no avatar change, no crash, no stuck black screen
+- [ ] Back inside the **MSAL Custom Tab** → returns to LoginScreen cleanly, no raw `MsalUserCancelledException` text, spinner resolves rather than hanging to the 15-second escape hatch
+- [ ] Back inside the **Android Photo Picker** → returns to the app with no selection
+- [ ] Back from the **RevenueCat `PaywallView`** → pops the route (watch for the platform view swallowing the gesture)
+- [ ] Cold-start deep link to `/invite/:code`, then back
+
+> **If any row fails:** the supported fix is `android:enableOnBackInvokedCallback="false"` on `<application>` in `AndroidManifest.xml` — mechanically identical to pre-36 behavior and it also covers UCrop and MSAL. Apply, rebuild, re-run this block, and record the reversal in `DEPLOYMENT_STATUS.md`. Mind the "no literal `--` in an XML comment" rule.
+
+### 13.2 Large screen (≥600 dp) — Fold inner display
+
+- [ ] **Avatar crop (UCrop) on the inner display; rotate mid-crop** — crop usable, ✓/✕ not clipped, result is a correct square. `UCropActivity` declares no `configChanges`, so a recreate that restarts the crop is **acceptable**. FAIL = crash, black screen, or a mis-cropped upload
+- [ ] **Avatar crop on the cover display (<600 dp)** — still portrait-locked, exactly as before (the control proving the change is display-scoped)
+- [ ] **Chewie fullscreen on the inner display — landscape-source video.** Expected, acceptable: no auto-rotate (orientation forcing is ignored ≥600 dp). FAIL = black video, stuck fullscreen, off-screen controls, crash on exit
+- [ ] **Chewie fullscreen on the inner display — portrait-source video.** Same: forcing is lost in **both** directions
+- [ ] **Chewie fullscreen on the cover display / phone** — orientation forcing still works as before
+- [ ] **Fold ↔ unfold while running** — Home scrolled, Event feed mid-scroll, video playing (windowed *and* fullscreen), DM chat with keyboard open, camera capture, UCrop mid-crop, paywall. `MainActivity` handles the config change itself, so layout reflows with scroll position and playback intact. UCrop and the paywall are the non-Flutter surfaces; UCrop will recreate
+- [ ] **Split-screen / multi-window on the inner display** — renders and stays interactive at small width, no crash
+
+### 13.3 Regression surface
+
+- [ ] Pick a photo from the gallery → upload. **No runtime permission dialog** — any `READ_MEDIA_*` prompt means the manifest pins broke
+- [ ] Save a photo to gallery, and a video — no permission prompt
+- [ ] Camera capture → editor → upload
+- [ ] Full MSAL sign-in via Custom Tabs (both displays on the foldable, plus the phone); sign out; sign back in
+- [ ] Cold start as a returning user — first frame is Events, no splash flash
+- [ ] Push notification delivered, tap routes to the right screen
+- [ ] WorkManager (Layer 4) background refresh appears in Token Diagnostics
+- [ ] Battery-optimization exemption prompt (Layer 1) appears on first launch after login and can be granted
+- [ ] Deep link `https://clique-pix.com/invite/<code>` from another app opens the app directly (App Links verification intact) — both form factors
+- [ ] **Paywall on a non-entitled account, folded and unfolded** — use a THROWAWAY account flipped non-entitled via the SQL in `docs/GENE.md` (granted accounts never see the paywall). Expectations are **build-specific**:
+      **Play-signed internal build:** the real `PaywallView` renders with **$3.99 / $39.99 visible**, and `adb logcat` contains **no** `Implementation Error` (the FlutterFragmentActivity requirement) and no `ClassNotFoundException`/`NoSuchMethodError` (R8 stripping — if seen, add RevenueCat's keep rules in `proguard-rules.pro`).
+      **Sideloaded upload-key build:** the real paywall *or* the branded `_PaywallFallback` (billing may not resolve products off-Play).
+      **A BLANK body is a FAIL on either build.**
+- [ ] **License-testing purchase** (Play-signed build; add the tester to Play Console → Setup → License testing first) — complete a monthly purchase at no charge; entitlement flips within ~30s (webhook or the app's auto-recovery) and the paywall dismisses into Home. This is the Android billing validation descoped at vc9. Cancel/refund via Play Console afterwards if desired
+- [ ] **One video upload end-to-end** — record or pick a short video, upload, processing card appears, poster + `video_ready` arrive (≤ ~60s for a phone clip incl. scale-from-zero cold start). Proves the transcoder callback through the post-APIM `api.clique-pix.com` path, which has not carried a real transcode since the 2026-07-05 cutover
 
 ---
 
