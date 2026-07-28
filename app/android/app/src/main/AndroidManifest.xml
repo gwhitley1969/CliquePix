@@ -143,6 +143,31 @@
             android:screenOrientation="portrait"
             android:theme="@style/UCropTheme" />
 
+        <!-- flutter_local_notifications scheduled-notification receivers (added
+             2026-07-28, vc15). Since v16 the plugin no longer declares these in its
+             own manifest; the APP must declare them or every zonedSchedule alarm
+             broadcasts into nothing. That is exactly what happened: the weekly
+             Friday 5 PM reminder NEVER fired on Android, and it was undetectable
+             in-app because pendingNotificationRequests() reads the plugin's own
+             persisted store, so the health check self-certified as scheduled.
+             The boot receiver's MY_PACKAGE_REPLACED action also means the already
+             persisted schedule re-arms on app UPDATE, without waiting for an app
+             open. RECEIVE_BOOT_COMPLETED is already declared above. DO NOT remove
+             these while friday_reminder_service.dart uses zonedSchedule. -->
+        <receiver
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver"
+            android:exported="false" />
+        <receiver
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON" />
+            </intent-filter>
+        </receiver>
+
     </application>
 
     <!-- Required for file provider (image_picker) and url_launcher scheme resolution -->

@@ -14,6 +14,10 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'core/cache/list_bootstrap_providers.dart';
 import 'core/cache/list_cache_service.dart';
 import 'core/constants/msal_constants.dart';
+import 'core/utils/brief_error.dart';
+// Keep briefError importable from main.dart (test/brief_error_test.dart and
+// any external callers) after the 2026-07-28 extraction.
+export 'core/utils/brief_error.dart' show briefError;
 import 'features/auth/domain/app_lifecycle_service.dart'
     show pendingRefreshFlagKey;
 import 'features/auth/domain/auth_state.dart';
@@ -118,22 +122,11 @@ Future<void> _recordIsolateEvent(String event, {String? errorCode}) async {
   }
 }
 
-/// Short, log-safe summary of an error for telemetry. Visible for testing.
-///
-/// MUST NOT throw — it runs inside bootstrap catch blocks whose whole purpose is
-/// to keep the app launching on a storage failure. The previous version bounded
-/// the substring by `s.length` (the FULL multi-line string) but applied it to
-/// `s.split('\n').first` (the first line only): when the total exceeded 64 chars
-/// while the first line was shorter, `substring(0, 64)` threw RangeError on a
-/// shorter string, escaped the catch, and aborted `main()` before `runApp()` —
-/// a blank-screen launch crash. Bound by the FIRST LINE's own length instead.
-String briefError(Object e) {
-  final s = e.toString();
-  final match = RegExp(r'AADSTS\d{5,6}').firstMatch(s);
-  if (match != null) return match.group(0)!;
-  final first = s.split('\n').first;
-  return first.length > 64 ? first.substring(0, 64) : first;
-}
+// briefError moved to core/utils/brief_error.dart (2026-07-28) so the
+// WorkManager isolate shares the SAME tested implementation instead of a
+// duplicated copy — the duplicate still carried the RangeError bug PR #24
+// fixed here. Re-exported below so existing imports (incl. the test) keep
+// working unchanged.
 
 /// Full-screen diagnostic shown by [ErrorWidget.builder] when any widget
 /// throws during build/layout. Deliberately dependency-free and trivial to
