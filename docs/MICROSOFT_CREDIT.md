@@ -5,10 +5,34 @@ Azure Container Apps metering anomaly on the **Clique Pix** subscription. Everyt
 directly against Azure Cost Management, Azure Monitor platform metrics, and the Log Analytics workspace —
 each figure is reproducible with the commands in §9. Hand this to the support agent.
 
-> **Bottom line:** request a credit of **~$411.25 USD** (defensible conservative floor **$346.84**) for
-> anomalous `Azure Container Apps` **active-usage** billing during **June 3–11, 2026**, where the billed
-> cost rose ~20× with **zero** corresponding change in execution count, requested cores, CPU utilization,
-> log volume, or actual workload.
+---
+
+> ## ✅ RESOLVED 2026-07-30 — credit issued: **USD 336.84**
+>
+> Azure Billing support (case **2607090040008626**) processed a **courtesy credit of USD 336.84** and
+> **adjusted + regenerated invoice `G170253352` as `G174103920`** — **$1,226.67 → $889.83**, which is the
+> credit applied exactly ($1,226.67 − $336.84 = $889.83). **Independently verified against the live billing
+> API on 2026-07-31:** `G174103920` exists for period Jun 1–30 2026, total **$889.83**, status **Paid**, and
+> `G170253352` no longer appears in the billing-profile invoice list (superseded by the regeneration).
+>
+> **Outcome vs. the ask:** $336.84 = **81.9% of the $411.25 requested**, and **$10.00 under** the $346.84
+> conservative floor (§6). Shortfall vs. the ask: $74.41. Microsoft characterized it as a **courtesy credit**,
+> not an acknowledged metering defect — so if this recurs, expect to re-argue the evidence from scratch rather
+> than cite an accepted precedent.
+>
+> **⏳ One step remains (Gene):** confirm the **$336.84 refund has actually landed on the card on file** — the
+> invoice-side adjustment is proven, but a payment-method refund is not observable from the Azure APIs — then
+> reply to the support engineer so the case can be closed. Full outcome record + correspondence detail in §12.
+>
+> Everything below is the **evidence package exactly as filed**, preserved unchanged as the historical record
+> and as the working template if a metering anomaly ever recurs.
+
+---
+
+> **Bottom line (as filed):** requested a credit of **~$411.25 USD** (defensible conservative floor
+> **$346.84**) for anomalous `Azure Container Apps` **active-usage** billing during **June 3–11, 2026**, where
+> the billed cost rose ~20× with **zero** corresponding change in execution count, requested cores, CPU
+> utilization, log volume, or actual workload.
 
 ---
 
@@ -140,6 +164,13 @@ We subtract the **legitimate baseline** of **$3.74/day** — the real, non-dispu
 - We are **explicitly not** requesting credit for the ~$3.74/day idle baseline — that was caused by our own
   configuration and is a legitimate charge. We dispute **only** the platform-side anomalous excess.
 
+> **✅ ACTUAL OUTCOME (2026-07-30): Microsoft issued USD 336.84** — 81.9% of the $411.25 ask, and $10.00 below
+> the $346.84 floor. Microsoft did not publish a per-day derivation, so the exact basis is unknown; the figure
+> lands nearest the conservative floor (the Jun 4–8 full-rate days), which suggests they conceded the five
+> unambiguous days and declined the ramp-up/decay tail (Jun 3, 9, 10, 11 = $64.41 of the ask). **Lesson for a
+> future dispute: the conservative floor is what actually gets paid, so make the floor the number you lead
+> with and treat the fuller ask as the negotiating position.** See the §12 outcome block.
+
 ---
 
 ## 7. Why this is a platform-side anomaly, not customer usage (pre-empting the obvious questions)
@@ -230,12 +261,41 @@ escalated) should be visible to the support/billing engineering team and is the 
 4. Attach/cite the §4 table and the §9 reproduction commands. Lead with the contradiction: **flat
    `Executions` + `RequestedCores` + near-zero `UsageNanoCores`, but a 20× active-usage bill.**
 5. Record the support ticket number and follow it to either an issued credit or a written denial with reason.
+   ✅ **Done** — case `2607090040008626`, filed 2026-07-09, **credit of $336.84 issued 2026-07-30** with the
+   invoice regenerated. Outcome recorded in §12. Remaining: confirm the card refund + reply to close the case.
 
 ---
 
 ## 12. STAGED TICKET — ready to file the moment the June invoice posts (staged 2026-07-05)
 
-> ### ✅ FILED 2026-07-09 — support ticket **2607090040008626** (status Open)
+> ### ✅ FILED 2026-07-09 → ✅ **RESOLVED 2026-07-30 — credit issued $336.84** (case **2607090040008626**)
+>
+> #### Outcome (2026-07-30)
+>
+> - **Credit: USD 336.84**, described by Microsoft as a **courtesy credit** (not an acknowledged metering
+>   defect). Invoice **`G170253352` was adjusted and regenerated as `G174103920`**: **$1,226.67 → $889.83**.
+> - **Verified live 2026-07-31** (billing-profile invoice list — step 1 of the staged commands below, widened
+>   to `periodStartDate=2026-05-01&periodEndDate=2026-08-31`): `G174103920`, period
+>   Jun 1–30 2026, total **$889.83 USD**, status **Paid**; `G170253352` no longer listed. $1,226.67 − $336.84
+>   = $889.83 — the credit reconciles to the penny. *(Per project practice, this was checked against the live
+>   API rather than taken from the support email.)*
+> - **vs. the ask:** 81.9% of $411.25; $10.00 under the $346.84 conservative floor; shortfall $74.41. See the
+>   §6 outcome note for the likely basis and the lesson for any future dispute.
+> - **Correspondence:** resolution email from **Cynthia (Ogechukwu) Nwukam**, Support Engineer, Azure Billing
+>   and Subscription Management Support (TEKNOWLEDGE GLOBAL LTD; working hours Mon–Fri 07:00–16:00 UTC+1),
+>   received **Thu 2026-07-30 06:14** at bluebuildapps@gmail.com. Source screenshot: `MicrosoftCredit01.png`
+>   (repo root, untracked working file — delete once this record is committed).
+> - **⚠️ Record gap, stated honestly:** that email references "our previous communication" in which Microsoft
+>   proposed the $336.84 resolution and **Gene confirmed acceptance**. That proposal/acceptance exchange is
+>   **not recorded anywhere in this repo** and its date is unknown — the trail here jumps from filing
+>   (2026-07-09) to the confirmation email (2026-07-30). Nothing turns on it now, but if the case is ever
+>   reopened, the accepted-resolution terms live only in the mailbox.
+> - **⏳ REMAINING (Gene, closes the case):** confirm the **$336.84 has actually been refunded to the card on
+>   file** — the invoice adjustment is proven but a payment-method refund is not visible to the Azure APIs —
+>   then reply to the support engineer confirming resolution. They are explicitly holding the case open
+>   pending that reply.
+>
+> #### Filing record (2026-07-09)
 >
 > - **Invoice posted 2026-07-09:** `G170253352`, period Jun 1–30 2026, total **$1,226.67 USD**, due 07/09
 >   (card on file auto-charges; the credit comes back post-dispute).
@@ -254,8 +314,8 @@ escalated) should be visible to the support/billing engineering team and is the 
 >   ($411.25 ask, $346.84 floor, full per-day breakdown), and a corrective communication
 >   (`title-amount-correction`, 19:53:45 UTC) was attached restating the $411.25 ask. **Lesson: backtick-escape
 >   EVERY literal `$` in double-quoted PowerShell strings, titles included.**
-> - **Next (§10.5):** follow case **2607090040008626** (Azure Portal → Help + support, or replies to
->   bluebuildapps@gmail.com) to an issued credit or a written denial with reason. Record the outcome here.
+> - ~~**Next (§10.5):** follow case **2607090040008626** to an issued credit or a written denial.~~
+>   ✅ **Done 2026-07-30 — $336.84 credited. See the Outcome block above.**
 > - Aside noted on the invoice: a **$100/month "Microsoft Azure Support - 1 Month"** purchase (06/07→07/06 term).
 >   **Intentional — Gene keeps it for technical support** (confirmed 2026-07-09). Billing disputes like this one
 >   are free regardless, so the plan wasn't needed for the ticket itself.
