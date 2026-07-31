@@ -13,9 +13,11 @@
 > **Live status lives in:** `docs/GENE.md` (header = current deadlines) · `docs/DEPLOYMENT_STATUS.md` (top
 > entry) · `docs/BETA_OPERATIONS_RUNBOOK.md` §"Subscription comp grants" (the ONLY maintained grant roster).
 >
-> **One item from this plan was never verified anywhere:** RevenueCat **Transfer Behavior = "Keep with previous
-> App User ID" (`KEEP_ATTRIBUTION`)** — the API can't read it, so it needs a one-time dashboard check
-> (Project Settings → General). If you're reading this and it's still unconfirmed, that check is still owed.
+> ~~**One item from this plan was never verified anywhere:** RevenueCat Transfer Behavior~~ — ✅ **VERIFIED
+> 2026-07-31** (Gene, dashboard screenshot): Project Settings → General → "Transferring purchases seen on
+> multiple App User IDs" = **"Keep with original App User ID"**, sandbox override off. Note the label: RC's
+> dropdown says "original", not this plan's "previous" / `KEEP_ATTRIBUTION` paraphrase — same option, and
+> deliberately NOT the "Transfer to new App User ID" default. Every item this plan tracked is now closed.
 >
 > **Also note:** this plan's production gate ("full paywall test pass on BOTH platforms before promotion",
 > Hard Constraint 4) was bypassed at vc9 and vc14 — which is why the Play-signed paywall render +
@@ -108,7 +110,7 @@ Monetization is now **in scope for v1**. We are shipping a hard paywall fronted 
 
 ### B. RevenueCat dashboard — Phase 1c
 - [x] Attach `plus_monthly` → Monthly package and `plus_annual` → Annual package in the `default` offering. **(done via MCP)**
-- [ ] Verify Transfer Behavior = **Keep with previous App User ID** (`KEEP_ATTRIBUTION`). **← STILL TODO — the API can't read this; Gene must check Project Settings.**
+- [x] Verify Transfer Behavior — ✅ **DONE 2026-07-31** (Gene, dashboard): set to **"Keep with original App User ID"** (RC's actual label for what this plan called "Keep with previous App User ID" / `KEEP_ATTRIBUTION`), sandbox override off.
 - [x] Configure webhook → `https://api.clique-pix.com/api/internal/revenuecat-webhook` with `Bearer <secret>`. **(webhook `whintgr721b9e5264` created + verified 200; secret in Key Vault)**
 - [x] Generate **Secret API Key** (`sk_...`) → saved to Key Vault as `revenuecat-secret-api-key`.
 - [x] Capture **iOS public SDK key** → `appl_OvhNypnojnQSEebpQtBikJYTHBa` (still needs to land in `revenuecat_constants.dart`, Plan 2). Android `goog_...` later (blocked).
