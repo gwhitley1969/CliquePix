@@ -16,7 +16,7 @@ Source of truth for the web client's technical architecture. When code and this 
 - **Icons**: `lucide-react` (matches mobile's stated icon set)
 - **Telemetry**: `@microsoft/applicationinsights-web` — same App Insights resource as mobile
 - **Hosting**: Azure Static Web Apps at `clique-pix.com`. Landing page at `/`, authenticated app shell at `/events`, `/cliques`, etc. Static docs at `/docs/*`. Deep-link files at `/.well-known/*` preserved byte-for-byte so mobile Universal Links + App Links still work.
-- **Domain separation**: web at `clique-pix.com`, API at `api.clique-pix.com` — **different origins, so CORS is mandatory** (configured at APIM in `apim_policy.xml`).
+- **Domain separation**: web at `clique-pix.com`, API at `api.clique-pix.com` — **different origins, so CORS is mandatory**. **CORS lives in Function App platform CORS** (`az functionapp cors show -g rg-cliquepix-prod -n func-cliquepix-fresh`) since 2026-07-05, when APIM was cut from the request path; `apim_policy.xml` is a tombstone. **Never also emit CORS headers from function code** — duplicate `Access-Control-Allow-Origin` values make browsers hard-reject the response.
 
 ## 2. Directory layout
 
@@ -321,9 +321,27 @@ exceptions
 ## 12. Azure config checklist (one-time manual)
 
 1. **Entra app registration** (`7db01206-135b-4a34-a4d5-2622d1a888bf`) — add SPA platform redirect URIs for `https://clique-pix.com/auth/callback` and `http://localhost:5173/auth/callback`; front-channel logout URL `https://clique-pix.com/`. Implicit grant stays **unchecked**.
-2. **APIM CORS** — `apim_policy.xml` in this repo is the **CliquePix API v1 → All operations** policy (per-API scope, NOT global). Contains `<base />` + `<cors>` only. Deploy via `az rest PUT` against the management API policy URL with `format: rawxml` body, or via Azure Portal (APIM → APIs → CliquePix API v1 → Design → All operations → `</>`). **`<rate-limit-by-key>` was removed on 2026-04-27** after four consecutive user-blocking 429 incidents traced to APIM Developer-tier in-memory counter staleness — see `apim_policy.xml` in-file comment for the full incident history. Do not re-add `rate-limit-by-key` until APIM is migrated off Developer tier (Standard v2 has a distributed cache + SLA). Abuse protection now lives at the application layer: JWT auth, event-membership checks, User Delegation SAS expiry, orphan cleanup timer.
+2. **API CORS — Function App platform CORS** (the source of truth since 2026-07-05). Inspect and edit with:
+   ```bash
+   az functionapp cors show -g rg-cliquepix-prod -n func-cliquepix-fresh
+   az functionapp cors add  -g rg-cliquepix-prod -n func-cliquepix-fresh --allowed-origins <origin>
+   ```
+   Current origins: `https://clique-pix.com` + `http://localhost:5173`, allow-credentials **false**.
+   - ⚠️ **Never also emit CORS headers from function code.** Duplicate `Access-Control-Allow-Origin` headers make
+     browsers hard-reject the response. Platform CORS is the only place this is configured.
+   - ⚰️ **This used to be APIM** (`apim_policy.xml`, per-API scope). APIM was cut from the request path
+     2026-07-05 and the instance **deleted 2026-07-28** — by then its only remaining function was injecting these
+     CORS headers, for ~$148/month. `apim_policy.xml` and `bicep/apim/main.bicep` are tombstones; the six-incident
+     rate-limit history is preserved in their git history and `BETA_OPERATIONS_RUNBOOK.md` §2 (marked historical).
+   - **Do not re-introduce gateway rate limiting** (at Front Door WAF or anywhere else) without load-testing
+     against real traffic first — six user-blocking 429 incidents came from exactly that. Abuse protection lives
+     at the application layer: JWT auth, event-membership checks, User Delegation SAS expiry, orphan cleanup timer.
 3. **Blob Storage CORS** on `stcliquepixprod` → Blob service: origins `https://clique-pix.com` + `http://localhost:5173`, methods `GET PUT HEAD OPTIONS`, headers `*`, exposed headers `*`, max-age `3600`. Required because the browser PUTs 4 MB blocks directly to Blob Storage — each block triggers a CORS preflight that max-age=3600 caches for an hour.
-4. **Front Door** — no changes; Standard tier passes CORS through.
+4. **Front Door** — no changes; Standard tier passes CORS through. Since 2026-07-05 the route points directly at
+   `func-cliquepix-fresh` (origin group `func-origin-group`), and since 2026-07-28 the Function App carries the
+   `AllowFrontDoorOnly` access restriction (service tag `AzureFrontDoor.Backend` + header
+   `X-Azure-FDID = 4e41fded-8d53-4ecd-bc17-af06024ecfad`) — so **always probe via `api.clique-pix.com`; the raw
+   `*.azurewebsites.net` host returns 403.** The SCM/Kudu site is deliberately unrestricted so `func publish` works.
 
 ## 13. Deployment
 
@@ -364,7 +382,7 @@ npm install
 npm run dev
 ```
 
-Vite runs on `http://localhost:5173` with HMR. The dev server hits the **production** API at `https://api.clique-pix.com` — no local backend required. APIM CORS and Blob Storage CORS must include `http://localhost:5173` (already configured).
+Vite runs on `http://localhost:5173` with HMR. The dev server hits the **production** API at `https://api.clique-pix.com` — no local backend required. Function App platform CORS and Blob Storage CORS must both include `http://localhost:5173` (already configured — see §12.2).
 
 ## 15. Known limits
 

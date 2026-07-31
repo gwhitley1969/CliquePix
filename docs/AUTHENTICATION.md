@@ -117,7 +117,7 @@ LoginScreen "Get Started" tap
   → MSAL receives access_token (audience = client ID, signed by CIAM keys)
   → AuthRepository.verifyAndGetUser(token, 10s timeout)
   → POST https://api.clique-pix.com/api/auth/verify
-     → APIM (apim-cliquepix-003) → Function authVerify
+     → Front Door (fd-cliquepix-prod) → Function authVerify
      → JWT validation (issuer, audience, signature via JWKS)
      → upsert user   (no age check)
   → Returns enriched UserModel
@@ -305,11 +305,11 @@ Events expire after 7 days. **Re-seed within 48 hours of every App Store submiss
 - **Resource group:** `rg-cliquepix-prod` (eastus)
 - **CIAM tenant:** `cliquepix.onmicrosoft.com` (ID `27748e01-d49f-4f0b-b78f-b97c16be69dc`)
 - **App registration:** CLIQUE Pix (client ID `7db01206-135b-4a34-a4d5-2622d1a888bf`)
-- **API Management:** `apim-cliquepix-003` (Basic v2, $150/month, 99.95% SLA — migrated from Developer-tier `apim-cliquepix-002` on 2026-05-05)
-- **Function App:** `func-cliquepix-fresh` (validates JWTs)
-- **Front Door:** `fd-cliquepix-prod`
-- **Custom domain:** `api.clique-pix.com` (Front Door → APIM → Function App)
-- **Web origin:** `clique-pix.com` (Static Web App; CORS-allowlisted at APIM)
+- ~~**API Management**~~ — **removed from the request path 2026-07-05, instance `apim-cliquepix-003` deleted 2026-07-28** (FinOps: it had become a ~$148/mo CORS-only pass-through; JWT validation always lived in the Functions code, and rate limiting had been stripped after six 429 incidents). Front Door now routes directly to the Function App.
+- **Function App:** `func-cliquepix-fresh` (validates JWTs). Locked to Front Door traffic by the `AllowFrontDoorOnly` access restriction (service tag `AzureFrontDoor.Backend` + header `X-Azure-FDID = 4e41fded-8d53-4ecd-bc17-af06024ecfad`) — **direct `*.azurewebsites.net` calls 403; always probe auth endpoints via `api.clique-pix.com`.** SCM/Kudu stays unrestricted for `func publish`.
+- **Front Door:** `fd-cliquepix-prod` (origin group `func-origin-group`)
+- **Custom domain:** `api.clique-pix.com` (Front Door → Function App)
+- **Web origin:** `clique-pix.com` (Static Web App). **CORS is Function App platform CORS** — `az functionapp cors show -g rg-cliquepix-prod -n func-cliquepix-fresh`; never also emit CORS headers from function code.
 - **Web PubSub:** `wps-cliquepix-prod` (real-time DM + `video_ready` + `new_event`)
 
 ### MSAL scopes (mobile + web)

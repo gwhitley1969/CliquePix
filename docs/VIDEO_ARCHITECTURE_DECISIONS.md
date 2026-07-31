@@ -101,7 +101,7 @@ Client
   │
   │ 1. POST /api/events/{eventId}/videos/upload-url
   ▼
-APIM → Function App (upload-url handler)
+Front Door → Function App (upload-url handler)
   │ returns N block SAS URLs + commit URL
   ▼
 Client
@@ -110,7 +110,7 @@ Client
   │
   │ 3. POST /api/events/{eventId}/videos (commit)
   ▼
-APIM → Function App (commit handler)
+Front Door → Function App (commit handler)
   │
   │ 4. Put Block List (finalize blob)
   ▼

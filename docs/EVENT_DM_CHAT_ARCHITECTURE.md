@@ -188,11 +188,16 @@ Do not add yet:
 All client-originated message writes must still go through the current published API surface:
 
 ```text
-Flutter App → Front Door → APIM → Azure Functions → PostgreSQL
+Flutter App → Front Door (api.clique-pix.com) → Azure Functions → PostgreSQL
 ```
 
-Do **not** bypass APIM.
+Do **not** bypass Front Door — `api.clique-pix.com` is the only published API surface, and the Function App is
+locked to Front Door traffic (`AllowFrontDoorOnly` access restriction), so direct `*.azurewebsites.net` calls 403.
 Do **not** let the client write chat messages directly to Web PubSub as a source of truth.
+
+> **Updated 2026-07-31:** this path previously read `Front Door → APIM → Azure Functions` and carried a "do not
+> bypass APIM" rule. **APIM was cut from the request path 2026-07-05 and the instance deleted 2026-07-28** (FinOps
+> — it had become a ~$148/mo CORS-only pass-through). Front Door now routes straight to the Function App.
 
 ### Real-time fanout path
 
