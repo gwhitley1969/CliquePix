@@ -1,6 +1,6 @@
 # Microsoft Entra External ID Refresh Token Workaround — CLIQUE Pix
 
-**Last updated:** 2026-06-04
+**Last updated:** 2026-07-31 *(full content audit — every timeout, CRON, SQL window, payload header, flag ordering, mutex/epoch guard, and telemetry event name in this doc was re-verified against the code on 2026-07-31; one error corrected: the exact-alarm item in "Known unknowns" had claimed the manifest still declares the permission)*
 **Status:** 5-layer defense + optimistic auth bootstrap + concurrency/state-machine hardening (PR #25).
 **Issue type:** Known Microsoft bug — no portal-based fix.
 
@@ -74,6 +74,8 @@ The codebase previously contained all five service classes (`AlarmRefreshService
 On top of that, the original Layer 2 design was architecturally flawed: `flutter_local_notifications.zonedSchedule` with `exactAllowWhileIdle` **only schedules a notification to display** at a time — it does not execute code. `onDidReceiveNotificationResponse` fires only on user tap. A silent `Importance.min` notification the user never saw was never tapped, so no code ever ran. The primitive was the wrong tool.
 
 > **Note for future maintainers:** `zonedSchedule` IS still used in v1 — but for the legitimate use case it was designed for: *displaying* a static recurring reminder. The weekly Friday 5 PM nudge (`app/lib/services/friday_reminder_service.dart`, shipped 2026-04-30) uses it correctly with `inexactAllowWhileIdle` and `dayOfWeekAndTime` recurrence. The rule from CLAUDE.md's Notification Architecture section: *"Client-scheduled local notifications via `zonedSchedule` are permitted ONLY for displaying static recurring reminders, never for executing code."* Don't conflate the two when reading this section's deletion rationale.
+>
+> ⚠️ **Caveat on that exemplar (added 2026-07-31):** the primitive choice was correct, but the Friday reminder itself **never fired on Android from launch until `1.0.2+15`** — since `flutter_local_notifications` v16 the APP must declare the plugin's two scheduled-notification receivers in its manifest, and this app didn't, so the alarm broadcast into nothing while `pendingNotificationRequests()` self-certified the schedule as healthy. Fixed in vc15. See `NOTIFICATION_SYSTEM.md` "Weekly Friday Reminder" for the incident and the delivery-not-pending-list health-check lesson.
 
 The current architecture deletes the notification-based Layer 2 entirely and replaces it with a server-triggered silent push.
 
@@ -176,7 +178,7 @@ Four races across the auth state machine were closed in PR #25:
 1. **iOS `msal_auth` in a background FCM isolate.** The Keychain cache is process-wide so the account is visible. But `msal_auth`'s iOS plugin channel registration may or may not succeed in a background isolate. If `acquireTokenSilent` throws, the fallback flag keeps us correct — refresh happens on next foreground inside the 12h window because the silent push arrived at 9–11h. Worst case we fall to Layer 5 for users who got the silent push but didn't open the app for the next hour.
 2. **APNs throttling.** Apple delivers background pushes "opportunistically." The `refresh_push_timer_ran.sent` vs `silent_push_received` ratio in App Insights will quantify real-world deliverability.
 3. **Force-killed iOS apps do not receive silent pushes.** iOS policy. Layer 5 is the only recourse.
-4. **Android SCHEDULE_EXACT_ALARM (API 31+).** We no longer use `exactAllowWhileIdle` scheduled notifications, so this permission is not on the critical path for Layer 2 anymore. The manifest still declares it for future use; revisit if anything else needs exact alarms.
+4. **Android exact-alarm permissions are actively REMOVED — do not re-add.** *(Corrected 2026-07-31: this item previously said the manifest "still declares it for future use" — the opposite of reality.)* `AndroidManifest.xml` pins **both** `SCHEDULE_EXACT_ALARM` and `USE_EXACT_ALARM` with `tools:node="remove"`, stripping them from the merged manifest even if a plugin contributes them. `USE_EXACT_ALARM` is restricted by Google Play to alarm-clock/calendar apps (the same policy class that got versionCode 6 rejected), and the release checklist asserts a merged-manifest count of **0** for the four pinned permissions. Nothing in the 5-layer defense needs exact alarms — Layer 2 is silent push and the Friday reminder uses `inexactAllowWhileIdle`. If a future feature appears to need one, it almost certainly doesn't; see `.claude/CLAUDE.md` "Android Permissions".
 5. **Disabled Background App Refresh (iOS).** Background handler never runs; Layer 5 handles the re-login.
 6. **No iOS-native `BGTaskScheduler` Layer 4.** Layer 4 is Android-only (WorkManager). On iOS the equivalent windows are covered by Layers 2/3/5. **Do not** add `BGTaskSchedulerPermittedIdentifiers` to `app/ios/Runner/Info.plist` unless you also register a launch handler via `BGTaskScheduler.shared.register(forTaskWithIdentifier:using:launchHandler:)` in `AppDelegate.swift`. iOS raises `NSInternalInconsistencyException: 'No launch handler registered for task with identifier <ID>'` and SIGABRTs the app the moment it checks scheduling state for an unregistered identifier — typically when the FlutterViewController re-attaches after `SFSafariViewController` dismisses, producing the symptom "app vanishes after MSAL/Safari sign-in." Removed 2026-05-01 — see `DEPLOYMENT_STATUS.md` "BGTask SIGABRT iOS post-auth crash."
 
@@ -203,6 +205,8 @@ customEvents
 ```
 
 Target: `foreground_refresh_success` + `silent_push_refresh_success` + `wm_refresh_success` ≫ `welcome_back_shown`. If `welcome_back_shown` is dominant, a background layer is broken.
+
+> ⚠️ **`wm_refresh_failed` data caveat (added 2026-07-31):** on builds before `1.0.2+15`, this event was **structurally unemittable** — the WorkManager isolate carried a stale copy of `briefError` that threw `RangeError` inside Layer 4's catch block, destroying the failure report before it could be recorded. Zero `wm_refresh_failed` rows in a pre-vc15 window is therefore NOT evidence that Layer 4 never failed. Fixed in vc15 by de-duplicating `briefError` into `core/utils/brief_error.dart`.
 
 Silent push deliverability:
 

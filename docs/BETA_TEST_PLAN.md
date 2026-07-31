@@ -26,7 +26,7 @@ This is a manual smoke test checklist to run before each beta release. Every ite
 - [ ] **Sign in — email + password (happy path, added 2026-05-06)** — lands on Events.
 - [ ] **Sign in — wrong password (added 2026-05-06)** — retry handled inside the Entra-hosted page, no app crash, no raw MsalException toast. Cancel browser → clean LoginScreen, no error banner.
 - [ ] **Sign in — Google federation (regression, added 2026-05-06)** — lands on Events. Existing Google users unaffected by local-account method change.
-- [ ] **Sign in — Apple federation (regression, added 2026-05-06)** — lands on Events. Critical regression check given iOS `Broker.msAuthenticator` config in `auth_repository.dart:55-59`.
+- [ ] **Sign in — Apple federation (regression, added 2026-05-06)** — lands on Events. Critical regression check given the iOS `Broker.msAuthenticator` config at the `SingleAccountPca.create` site in `auth_repository.dart` (find with `grep -n "Broker.msAuthenticator"` — must return exactly 3 hits across `app/lib`).
 - [ ] **Forgot password / SSPR (added 2026-05-06)** — hosted sign-in page → "Forgot password?" link → SSPR OTP delivered to email → set new password → sign in succeeds.
 - [ ] **Apple reviewer account (added 2026-05-06)** — `vwhitley1967@gmail.com` on real iPhone, fresh install → lands on Events with seeded "Apple Review Demo" Clique visible → tap event → sample photos and video render → react ❤️ on a photo → send a DM → sign out and sign back in.
 - [ ] **No raw MSAL leak on browser cancel (added 2026-05-06)** — when user cancels browser mid-sign-in, app does NOT show raw `MsalUserCancelledException` text. Confirms `auth_providers.dart:200` reset-to-`AuthUnauthenticated` path still works.

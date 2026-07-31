@@ -1,6 +1,6 @@
 # Authentication — CLIQUE Pix
 
-**Last Updated:** 2026-05-06
+**Last Updated:** 2026-07-31 *(content audit: config values, flow diagrams, platform specifics, and sign-out sequence re-verified against the code; stale line-number pointers replaced with symbol references. ⚠️ One claim still under verification: the "Apple `.p8` client secret renews September 2026" line in the Apple-federation section conflates the non-expiring `.p8` key with the 6-month client-secret JWT — whether any September action exists depends on whether the Entra Apple IdP is Microsoft-managed; pending a portal check by Gene.)*
 **Status:** Email + password is the primary local sign-in method (migrated from email OTP on 2026-05-06 to satisfy Apple App Store reviewer credential requirements). Google + Apple federation unchanged. Existing pre-2026-05-06 OTP users preserved per Microsoft documented behavior.
 
 ---
@@ -182,7 +182,7 @@ The `setApiMsalInstance(msalInstance)` call in `webapp/src/main.tsx` MUST happen
 
 ### iOS — `Broker.msAuthenticator` + ASWebAuthenticationSession (load-bearing)
 
-All three PCA-creation sites (`auth_repository.dart:55-59`, `main.dart:81`, `background_token_service.dart:68`) use `Broker.msAuthenticator` (NOT `Broker.safariBrowser`).
+All three PCA-creation sites use `Broker.msAuthenticator` (NOT `Broker.safariBrowser`): the `SingleAccountPca.create` calls in `auth_repository.dart` (interactive), `main.dart` (`_firebaseMessagingBackgroundHandler`, Layer 2), and `background_token_service.dart` (`callbackDispatcher`, Layer 4). *(Symbol references, not line numbers — the previously cited lines had drifted. Find them with `grep -n "Broker.msAuthenticator" app/lib -r`, which must always return exactly 3 hits.)*
 
 **Why:** `msal_auth` 3.3.0 unconditionally sets `prefersEphemeralWebBrowserSession = true` on iOS 13+, but the flag is only honored when `webviewType` falls into the `default:` case (ASWebAuthenticationSession). `Broker.safariBrowser` overrides to `safariViewController`, which has a per-app **persistent** cookie jar that ignores the ephemeral flag. Result with `safariBrowser`: signing out user A and trying to sign in as user B traps on CIAM's "Continue as A" prompt because the session cookie at `cliquepix.ciamlogin.com` survives `pca.signOut()`.
 
@@ -345,7 +345,7 @@ If the MSAL config requested only OIDC scopes (no custom API scope), `result.acc
 | MSAL constants (authority, client ID, scopes) | `app/lib/core/constants/msal_constants.dart` |
 | MSAL JSON config (Android-only) | `app/assets/msal_config.json` |
 | Auth repository (signIn, silentSignIn, refreshToken) | `app/lib/features/auth/domain/auth_repository.dart` |
-| Auth state machine | `app/lib/features/auth/presentation/auth_providers.dart` (the catch block at lines 174-200 is the canonical sign-in error router) |
+| Auth state machine | `app/lib/features/auth/presentation/auth_providers.dart` — the `catch` in `AuthNotifier.signIn` (tagged `[AUTH-SIGNIN-FAIL]`) is the canonical sign-in error router; `_verifyInBackground` + `_handleSilentSignInFailure` own the background-verify failure path. *(A stale "lines 174-200" pointer here used to land on the wrong function — search the `[AUTH-SIGNIN-FAIL]` tag instead.)* |
 | Login screen | `app/lib/features/auth/presentation/login_screen.dart` |
 | Welcome Back dialog | `app/lib/features/auth/presentation/welcome_back_dialog.dart` |
 | 5-layer refresh services | `app/lib/features/auth/domain/{app_lifecycle_service,background_token_service,battery_optimization_service}.dart` |
@@ -475,7 +475,7 @@ Removed the claim-based 13+ age gate entirely. Motivated by Apple App Store Guid
 
 **Root cause:** `AuthNotifier.signOut()` did not invalidate any user-scoped Riverpod providers. AsyncNotifiers and FutureProviders holding User A's data (events, cliques, photos, videos, DM threads, notifications) retained their state across the sign-out → sign-in transition. `eventsBootstrapProvider` / `cliquesBootstrapProvider` were also seeded once at `main()` with User A's `userId` and could not be re-evaluated mid-session.
 
-**Fix:** Added a derived `currentUserIdProvider` (returning `String?`) and a `ref.listen` in `_CliquePixState.build()` that invalidates 16 user-scoped providers + the in-memory `imageCache` whenever the authenticated identity changes. Bootstrap providers now carry a sibling `bootstrapUserIdProvider` so consumers can fail-closed when the bootstrap belongs to a different user. Backend was untouched (it was already correctly enforcing membership).
+**Fix:** Added a derived `currentUserIdProvider` (returning `String?`) and a `ref.listen` in `_CliquePixState.build()` that invalidates every user-scoped provider + the in-memory `imageCache` whenever the authenticated identity changes (16 providers at the time of the fix; 17 + `optimisticEntitlementProvider` as of 2026-07-31 — the authoritative list is `_invalidateUserScopedState` in `app/lib/app/app.dart`, which any new user-scoped provider MUST be added to). Bootstrap providers now carry a sibling `bootstrapUserIdProvider` so consumers can fail-closed when the bootstrap belongs to a different user. Backend was untouched (it was already correctly enforcing membership).
 
 **Migration impact:** Pure client-side change. No DB migration. No backend deploy. Existing users see no behavior change on a normal cold start; the listener only fires when an identity actually changes mid-session.
 

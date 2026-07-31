@@ -1,8 +1,29 @@
 # CLIQUE Pix — Paywall + Free Trial + Review Prompts: Master Plan & Status
 
-**Last updated:** 2026-06-02
-**Branch:** `feat/paywall-trial-and-review-prompts` (all work below lives here; not yet merged to `main`)
-**Owner doc:** this file is the single source of truth for "what's left." The deep specs/plans it points to have the exact code.
+> ## ⚠️ HISTORICAL RECORD — this plan is COMPLETE and this file is frozen (marked 2026-07-31)
+>
+> Everything below is a snapshot of **2026-06-02**, preserved as the record of how the paywall was planned and
+> built. **Do NOT resume work from this file and do NOT trust its status lines** — the branch it references was
+> merged to `main` long ago (its commits are ancestors of `main`; the branch no longer exists), the paywall has
+> been live in production since 2026-06-02, and CLIQUE Pix has been public on both stores since 2026-07-02.
+> Notable things that changed after this snapshot: the Android `goog_` key shipped (2026-06-16), Play billing
+> fully unblocked (2026-06-17), three trial cliffs + the `FlutterFragmentActivity` paywall-render fix
+> (2026-07-27), and the RevenueCat 10.4.3 pin (vc15).
+>
+> **Live status lives in:** `docs/GENE.md` (header = current deadlines) · `docs/DEPLOYMENT_STATUS.md` (top
+> entry) · `docs/BETA_OPERATIONS_RUNBOOK.md` §"Subscription comp grants" (the ONLY maintained grant roster).
+>
+> **One item from this plan was never verified anywhere:** RevenueCat **Transfer Behavior = "Keep with previous
+> App User ID" (`KEEP_ATTRIBUTION`)** — the API can't read it, so it needs a one-time dashboard check
+> (Project Settings → General). If you're reading this and it's still unconfirmed, that check is still owed.
+>
+> **Also note:** this plan's production gate ("full paywall test pass on BOTH platforms before promotion",
+> Hard Constraint 4) was bypassed at vc9 and vc14 — which is why the Play-signed paywall render +
+> License-testing purchase are MANDATORY for vc15.
+
+**Last updated:** 2026-06-02 *(frozen — see banner)*
+**Branch:** `feat/paywall-trial-and-review-prompts` — **merged to `main` and deleted** (the "not yet merged" note this line used to carry described the 2026-06-02 state)
+**Owner doc:** ~~this file is the single source of truth for "what's left."~~ **No longer true — see the banner.** The deep specs/plans it points to remain the record of the exact code as designed.
 
 ---
 
@@ -148,10 +169,14 @@ All to be executed subagent-driven on this branch, two-stage review per task (sp
 ---
 
 ## Plan 6 — Beta tester + reviewer migration (after backend live + mobile built, before TestFlight)
-- [ ] `SELECT id, email_or_phone FROM users WHERE created_at < '<cutoff>';`
-- [ ] RC dashboard → grant **Promotional** `plus`: `vwhitley1967@gmail.com` → lifetime; 4 beta testers → 1 year.
+> **Roster note (2026-07-31):** the grant list as planned here ("4 beta testers") is long superseded — the
+> maintained roster (5 granted, 6 owed, named, with the 2026-08-26 cliff) lives ONLY in
+> `docs/BETA_OPERATIONS_RUNBOOK.md` §"Subscription comp grants". The checklist below is the frozen plan.
+
+- [x] `SELECT id, email_or_phone FROM users ...` — done; roster in the runbook.
+- [~] RC promo grants — reviewer lifetime ✅ 2026-06-11; tester grants partially issued 2026-07-27, six owed (runbook).
 - [ ] App Store Connect review notes: explain promo grant + sandbox tester path. (Reviewer needs BOTH: promo grant to see the app, sandbox tester to exercise the IAP.)
-- [ ] Document grants in `docs/BETA_OPERATIONS_RUNBOOK.md`.
+- [x] Document grants in `docs/BETA_OPERATIONS_RUNBOOK.md` — ✅ done 2026-07-27.
 
 > **Hard rule (CORRECTED 2026-06-02):** A promo grant requires the RevenueCat **customer to already exist**, and a customer is only created when the account runs the SDK build and signs in (`Purchases.logIn(users.id)`). So you **cannot** grant before the gated build ships — a grant to a never-seen App User ID returns **404 `resource_missing`** (verified). Correct order: **ship the gated build → reviewer + testers sign in once (the backfilled 7-day trial covers them, zero lockout) → grant the promo within that 7-day window.** Reviewer UUID already resolved: `vwhitley1967@gmail.com` → `users.id a16a8a7c-74ca-4efc-9460-27c08db4061e` (recreated 2026-06-11 under the password flow; lifetime grant re-issued + verified — see DEPLOYMENT_STATUS.md).
 
@@ -229,6 +254,8 @@ Plans that parallelize freely: Plan 3 + Plan 5 can run now alongside Gene's conf
 
 ---
 
-## How to resume
+## ~~How to resume~~ Do NOT resume from this file
 
-Tell the assistant: *"Resume paywall work — see docs/PLAN.md."* Then pick an execution-order step above. If Azure login + RC MCP are in, the assistant can run Task 6 and verify; otherwise it executes the unblocked plans (3, 5) first.
+This section used to instruct *"Resume paywall work — see docs/PLAN.md."* **That instruction is retired** — the
+plan completed and shipped; resuming from this snapshot would act on a 2026-06-02 world. Resume from
+`docs/GENE.md` (live deadlines in the header) and `docs/DEPLOYMENT_STATUS.md` (top entry) instead.
