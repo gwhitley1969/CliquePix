@@ -1,6 +1,6 @@
 # Authentication — CLIQUE Pix
 
-**Last Updated:** 2026-07-31 *(content audit: config values, flow diagrams, platform specifics, and sign-out sequence re-verified against the code; stale line-number pointers replaced with symbol references. ⚠️ One claim still under verification: the "Apple `.p8` client secret renews September 2026" line in the Apple-federation section conflates the non-expiring `.p8` key with the 6-month client-secret JWT — whether any September action exists depends on whether the Entra Apple IdP is Microsoft-managed; pending a portal check by Gene.)*
+**Last Updated:** 2026-07-31 *(content audit: config values, flow diagrams, platform specifics, and sign-out sequence re-verified against the code; stale line-number pointers replaced with symbol references. The former "Apple `.p8` client secret renews September 2026" claim was verified FALSE against the live Entra portal — the Apple IdP is Microsoft-managed (`.p8` uploaded, Entra mints the client secrets); no renewal exists. See the Apple-federation section.)*
 **Status:** Email + password is the primary local sign-in method (migrated from email OTP on 2026-05-06 to satisfy Apple App Store reviewer credential requirements). Google + Apple federation unchanged. Existing pre-2026-05-06 OTP users preserved per Microsoft documented behavior.
 
 ---
@@ -91,7 +91,9 @@ Configured in Google Cloud Console as a Web Application OAuth client; authorized
 
 ### Apple federation (Sign in with Apple)
 
-Users tap "Sign in with Apple" → Apple authorization → Entra brokers via the Sign in with Apple Services ID `com.cliquepix.app.service` (Team ID `4ML27KY869`, Key ID `4NYXZNV9VD`). The `.p8` client secret renews **September 2026** (calendar reminder required).
+Users tap "Sign in with Apple" → Apple authorization → Entra brokers via the Sign in with Apple Services ID `com.cliquepix.app.service` (Team ID `4ML27KY869`, Key ID `4NYXZNV9VD`).
+
+**No credential renewal is required — verified against the live Entra portal 2026-07-31.** The Apple IdP in the external tenant is configured the Microsoft-managed way: the **`.p8` key file itself is uploaded to Entra** (the configure pane takes Service ID + Team ID + Key ID + the `.p8` file — there is no client-secret field and no expiry), and **Entra mints the short-lived Apple client-secret JWTs from that key automatically**. Apple's 6-month client-secret cap therefore never becomes an operator chore. The `.p8` key itself does not expire. *(This paragraph previously said "the `.p8` client secret renews September 2026 (calendar reminder required)" — a phantom deadline: Apple's 6-month JWT cap misapplied to the non-expiring key at setup time. The claim survived in two docs for four months; no such renewal exists.)* What CAN break Apple sign-in: revoking key `4NYXZNV9VD` in the Apple Developer portal, an Apple Developer Program membership lapse, or deleting/misediting the Entra IdP config — all event-driven, none calendar-driven.
 
 Required by Apple Guideline 4.8 since the app offers other social sign-in options.
 

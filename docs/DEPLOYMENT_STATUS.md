@@ -1707,7 +1707,7 @@ Health endpoint confirmed at:
 | App ID | `com.cliquepix.app` | Team ID: `4ML27KY869` |
 | Services ID | `com.cliquepix.app.service` | Sign In with Apple configured with CIAM domains |
 | Key | `CliquePix Sign In` | Key ID: `4NYXZNV9VD` |
-| Client secret (.p8) | Active | **Renewal required: September 2026** |
+| Client secret (.p8) | Active | ~~**Renewal required: September 2026**~~ **← CORRECTED 2026-07-31: no renewal exists.** Verified against the live Entra portal: the Apple IdP is Microsoft-managed — the `.p8` key file is uploaded to Entra, which mints the 6-month Apple client-secret JWTs automatically; the key itself never expires. The September date was Apple's JWT cap misapplied at setup. See `docs/AUTHENTICATION.md` §Apple federation. |
 
 ### Configuration Notes
 
