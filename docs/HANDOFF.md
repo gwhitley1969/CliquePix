@@ -1,6 +1,6 @@
 # HANDOFF.md — CLIQUE Pix
 
-**Last updated:** 2026-07-28
+**Last updated:** 2026-07-31
 **Purpose:** Single entry-point for anyone taking over (or returning to) CLIQUE Pix. Read this top-to-bottom; it points into the deep docs for detail. If you read only one file, read this one.
 
 > **What's authoritative:** `.claude/CLAUDE.md` is the development guardrails (it wins on scope/architecture/patterns). This file is the *operational* handoff — how to build, deploy, where things live, current state, and the rules you must not break. Where they overlap, CLAUDE.md is the source of truth and this file links to it.
@@ -19,7 +19,7 @@
 
 ## 1. Project overview & current status
 
-**CLIQUE Pix** is a **private, event-based photo and video sharing** mobile + web app. Users create **Cliques** (persistent groups), start **Events** (temporary media sessions, 24h/3d/7d), and share photos/videos that **auto-expire from the cloud** when the event ends. It is *not* a social network, feed, or messaging app.
+**CLIQUE Pix** is a **private, event-based photo and video sharing** mobile + web app. Users create **Cliques** (persistent groups), start **Events** (temporary media sessions, 3d/7d/14d — 24h was dropped 2026-07-05, though the backend still accepts it from installed builds ≤1.0.0+12), and share photos/videos that **auto-expire from the cloud** when the event ends. It is *not* a social network, feed, or messaging app.
 
 **The two core loops** (every line of code serves one):
 - **Photo:** sign in → create Event → capture/pick photo → edit (crop/draw/stickers/filters) → compress on-device → upload to Blob via SAS → feed + push → react/save/share → auto-delete.
@@ -192,13 +192,16 @@ All actions are pinned to `@v6` (Node 24). **Path-filter gotcha:** Backend/Flutt
 
 **SWA staging-env auto-cleanup:** the SWA Free tier caps staging (preview) envs at **3 concurrent**; every PR creates one. Cleanup is handled by `.github/workflows/swa-cleanup.yml` (`pull_request: types: [closed]`, **no paths filter**). It's a *separate* workflow on purpose — `webapp-deploy.yml`'s trigger omits `types:` so it never receives `closed` (the old in-workflow close job ran 0 times across ~30 PRs and orphaned envs until the cap blocked deploys). Break-glass if it ever fails: `az staticwebapp environment delete --name swa-cliquepix-prod --resource-group rg-cliquepix-prod --environment-name <PR#> --yes`.
 
-**Current live state (2026-06-11):**
-- ✅ **Backend** lockout-incident fixes **deployed + verified 2026-06-11** (webhook `app_user_id` resolution order + RC REST client rewritten on API v2; `/api/health` 200 direct + Front Door; reviewer promo grant verified RC → webhook → `entitlement_active=t`). Prior `#22/#23` hardening also live.
-- ⏰ **All non-entitled users are on a trial that ends 2026-07-11** (extended +30d via SQL during the 2026-06-11 lockout incident). Before that date: Play billing + `goog_` key, tester promo grants, or another extension. Reviewer is permanently covered (lifetime promo grant, verified).
+**Current live state (2026-07-31):**
+- ✅ **Mobile:** Android **`1.0.1` (vc14) live on Play production at 100%** since 2026-07-28 (target API 36 + the `FlutterFragmentActivity` paywall fix). **`1.0.2+15` (vc15) is built** — AAB ready for Play upload; the iOS `1.0.2 (15)` IPA is **in Apple review**. Live iOS remains `1.0 (12)` until that approves. ⚠️ Before promoting vc15 to production: the **Play-signed paywall render check AND a License-testing purchase are mandatory** (both were skipped at vc9 and vc14, and the purchase stack changed with the RevenueCat pin).
+- ⏰ **Trial cliff: 2026-08-26.** All non-entitled accounts were extended to that date during the 2026-07-27 incident (the third such cliff — 2026-06-09, 2026-07-11, 2026-08-26). Gene + Paula hold lifetime promo grants; Chase + Paul hold 1-year; the App Store reviewer is permanently covered. **Six testers (Amber, Paige, Eugene, Zachary, René, Vanessa) still owe 1-year grants** — they cannot be granted until each signs in on a real-key build. Authoritative roster + procedure: `BETA_OPERATIONS_RUNBOOK.md` §"Subscription comp grants".
+- ✅ **Backend** on the post-FinOps topology: Front Door → Functions direct, `AllowFrontDoorOnly` lockdown applied + verified 2026-07-28, APIM deleted. Lockout-incident fixes (webhook `app_user_id` resolution, RC REST client on API v2) and `#22/#23` hardening all live. Run-rate ≈ **$107/mo** (measured — see `BETA_OPERATIONS_RUNBOOK.md` §5).
 - ✅ **Transcoder** running `v0.1.8` (TQ-1 poison-message guard). **Scale config changed 2026-06-11: `minExecutions` 1 → 0** (true scale-to-zero) after a cost incident — `minExecutions=1` was spawning an empty-poll execution every ~30s 24/7 (~$110-150/mo idle) and hosted a June 3-9 Azure metering anomaly (~$435; disputed as $411.25 in Azure support case `2607090040008626` and **settled 2026-07-30 for a $336.84 courtesy credit** — invoice regenerated `G170253352` → `G174103920`, see `docs/MICROSOFT_CREDIT.md`). Do not set it back to 1. See `DEPLOYMENT_STATUS.md` cost-incident entry + `VIDEO_ARCHITECTURE_DECISIONS.md` Decision 12 revision note.
 - ✅ **Web** live with all recent fixes (DM ownership, EntitlementGuard error state, Lightbox MP4 download, web DM mark-read, **photo 3024/q88**, **avatar quality**).
-- ⏳ **PENDING the next mobile build:** the 2026-06-11 Flutter fixes (never-blank paywall fallback, stable router, paywall allowlist, 402 handling — PR #55) + photo-quality 3024/q88 + avatar q90 + #24/#25. All on `main`; ships only in a new Play/TestFlight build. versionCode 7 (in Google review 2026-06-10) predates these.
+- ✅ **Shipped since:** the 2026-06-11 Flutter fixes (never-blank paywall fallback, stable router, paywall allowlist, 402 handling — PR #55), photo-quality 3024/q88, avatar q90, and #24/#25 all reached users via vc9 (public 2026-06-18) and later builds. Nothing from that batch is still pending.
+- ⏳ **Pending only in vc15** (built, not yet promoted): the `flutter_local_notifications` receivers that make the Friday reminder fire on Android for the first time, the `briefError` de-dup, and the platform-derived version display.
 - ✅ All 4 CI workflows green.
+- ⏰ **Next dated deadlines:** tester grants before **2026-08-26**; RevenueCat native SDK release-block **2026-10-26** (cleared by vc15's 10.4.3 pin, but only once vc15 is on production); Play target **API 37 by ~2026-08-31** (start July 2027).
 
 Deploy history + per-item status: `docs/DEPLOYMENT_STATUS.md`.
 

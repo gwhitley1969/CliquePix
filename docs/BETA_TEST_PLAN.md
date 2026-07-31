@@ -239,7 +239,7 @@ Client-only, scheduled via `flutter_local_notifications.zonedSchedule`. No FCM, 
 
 ## 8. Auto-Deletion / Expiration
 
-- [ ] **24h warning** — event created with 24h duration → "Event Expiring Soon" push arrives ~24h before expiry
+- [ ] **24h warning** — "Event Expiring Soon" push arrives ~24h before an event expires. ⚠️ **The 24-hour *duration* preset was dropped 2026-07-05** (presets are now 3 / 7 / 14 days), so this can no longer be tested by creating a short event and waiting. Either create a **3-day** event and check on day 2, or force it: `UPDATE events SET expires_at = NOW() + INTERVAL '24 hours' WHERE id = '<eventId>'` and wait for the hourly `notifyExpiring` timer (it fires at minute 0 on a 23-25h window, deduped against an `event_expiring` row sent in the last 20h). The 24h *warning* itself is unchanged — only the setup differs.
 - [ ] **Photos deleted** — after event expires, photos no longer load (SAS URLs invalid)
 - [ ] **Videos deleted** — after event expires, video playback fails gracefully
 - [ ] **Event removed** — expired event disappears from event list

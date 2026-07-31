@@ -1,6 +1,6 @@
 # CLIQUE Pix — Beta Operations Runbook
 
-**Last Updated:** May 4, 2026
+**Last Updated:** July 31, 2026
 
 Operational procedures for the CLIQUE Pix open beta. Covers incident response, common troubleshooting, and maintenance tasks.
 
@@ -824,33 +824,85 @@ The Container Apps Job uses a function key to call `POST /api/internal/video-pro
 
 ## 5. Cost Monitoring
 
-### Current Budget
+> **Every figure below was measured against live Azure Cost Management + the Consumption budgets API on
+> 2026-07-31**, not estimated. The previous version of this section was written pre-FinOps and had drifted badly
+> (it claimed a $50 budget, listed APIM as a live ~$0-3/mo line four months after it became a ~$148/mo one and
+> three days after it was deleted, and understated Front Door and Web PubSub by ~7-10× each). **Re-measure with
+> the commands at the end of this section after any infrastructure change rather than trusting these numbers.**
 
-- **Budget:** $50/month
-- **Alert:** 80% ($40) triggers email to bluebuildapps@gmail.com
-- **Expected cost at beta scale (~100 videos/month):** $25-40/month
+### Budgets & alerts (as actually configured)
 
-### Cost Breakdown
+| Budget | Scope | Amount | Fires at | Notifies |
+|---|---|---|---|---|
+| `Clique_Pix` | Subscription | **$120/mo** | actual > 100%, forecast > 90% | gwhitley@xtend-ai.com, genewhitley2017@gmail.com |
+| `budget-cliquepix-video` | `rg-cliquepix-prod` | **$100/mo** | actual > 85% | gwhitley@xtend-ai.com, genewhitley2017@gmail.com |
 
-| Service | Estimated Monthly | Notes |
-|---------|------------------|-------|
-| PostgreSQL Flexible Server | ~$13 | Burstable B1ms |
-| Storage Account (GZRS) | ~$5-10 | Depends on media volume |
-| Function App (Consumption) | ~$0-2 | Pay-per-execution |
-| Container Apps Job | ~$3-11 | Pay-per-execution, KEDA-triggered |
-| Front Door (Standard) | ~$5 | Base fee |
-| APIM (Consumption) | ~$0-3 | Pay-per-call |
-| Web PubSub (Free/Standard) | ~$0-5 | Depends on connections |
-| App Insights | ~$0-2 | Data ingestion |
-| ACR (Standard) | ~$5 | Image storage |
+Both were cut from $450 on 2026-07-05: at a ~$110 run-rate, $450 thresholds would have let a June-style anomaly
+burn for ~6 days before alerting.
+
+⚠️ **Neither budget notifies `bluebuildapps@gmail.com`** — the address named as the ops contact at the top of
+this runbook. The separate **daily cost-anomaly alert** (created 2026-06-22, verified Enabled) *does* notify all
+three addresses. If you expect budget mail at bluebuildapps@, it must be added to the budgets' contact lists; it
+is not there today.
+
+### Actual spend — July 2026 (measured)
+
+| Service | July 2026 | Notes |
+|---|---:|---|
+| API Management | **$136.23** | ⚰️ **Deleted 2026-07-28** — ~27 days of a service that no longer exists. Goes to $0. |
+| Web PubSub | $48.30 | S1 — the largest *remaining* line. S1→Free (−$48) is deferred, not declined: peak was 2 concurrent connections against Free's 20 cap |
+| Front Door | $34.67 | Standard, base fee. (The old table said "~$5".) |
+| PostgreSQL Flexible Server | $16.13 | Burstable B1ms. 1-yr RI would save ~$4-5 |
+| Container Registry | $7.51 | Standard→Basic on 07-05, so July blends both tiers; Basic alone ≈ $5 |
+| Storage | $2.51 | Blob + queue |
+| Azure DNS | $0.50 | |
+| **Container Apps** | **$0.00** | scale-to-zero is working (`minExecutions=0`) |
+| Functions / Key Vault / Log Analytics / Bandwidth / App Service | $0.00 | within free grants |
+| **Total** | **$245.86** | |
+
+**Go-forward run-rate ≈ $107/month** (July minus the APIM tail, with ACR at Basic).
+
+⚠️ **This supersedes the "~$85/month" projection in the 2026-07-05 FinOps entry of `DEPLOYMENT_STATUS.md`** —
+that figure's own component list ($48 + $31 + $16 + $5) summed to $100, so its arithmetic never closed. The real
+number is ~$107. **August 2026 is the first full month with no APIM and is the month to judge the FinOps pass by.**
+
+Both budgets read as breached for July ($245.54 spent vs $120/$100) purely because of the APIM tail. That should
+clear in August — if it does not, something else moved and is worth chasing.
 
 ### If costs spike
 
-1. Check App Insights for unusual traffic patterns
-2. Check storage account metrics for unexpected blob growth
-3. Check Container Apps Job execution count — runaway transcoding jobs?
-4. Check APIM `Requests` metric for unusual call volume per JWT subject (rate-limit-by-key was removed 2026-04-27; APIM no longer auto-throttles, so abuse appears as raw request volume not 429s)
-5. If a single user is making excessive API calls, options are: (a) revoke their CIAM token, (b) add a temporary `is_blocked` column / check at the Function-App layer, (c) re-enable rate-limit-by-key on APIM Standard v2 tier (NOT Developer — see `apim_policy.xml` incident history)
+1. Check App Insights for unusual traffic patterns.
+2. Check storage account metrics for unexpected blob growth.
+3. **Check the Container Apps Job — this is where the June 2026 incident lived.** `minExecutions` MUST be `0`;
+   at `1` KEDA spawns an empty-poll execution every ~30s, 24/7 (~$110-150/mo of pure idle burn):
+   ```bash
+   az containerapp job show -n caj-cliquepix-transcoder -g rg-cliquepix-prod \
+     --query "properties.configuration.eventTriggerConfig.scale.{min:minExecutions,max:maxExecutions,poll:pollingInterval}"
+   ```
+   Then compare **billed** active-usage against the `Executions` / `RequestedCores` / `UsageNanoCores` platform
+   metrics. **Billed cost climbing while those stay flat is the signature of the June 3-9 metering anomaly** —
+   `docs/MICROSOFT_CREDIT.md` is a ready-made evidence package for that dispute and it recovered $336.84.
+4. ~~Check APIM `Requests`~~ — **APIM was deleted 2026-07-28; there is no gateway to inspect.** Front Door is the
+   equivalent surface now: `az monitor metrics list --resource <fd-profile-id> --metric RequestCount`.
+5. If a single user is making excessive API calls: (a) revoke their CIAM token, or (b) add a temporary
+   `is_blocked` column / check at the Function-App layer. **Do NOT re-introduce gateway rate limiting** — six
+   user-blocking 429 incidents came from exactly that, and the standing rule is that any limiter must be
+   load-tested against real traffic patterns first (§2, historical).
+
+### Re-measure (read-only)
+
+```bash
+# Actual cost by service for a period
+az rest --method post \
+  --url "/subscriptions/25410e67-b3c8-49a2-8cf0-ab9f77ce613f/providers/Microsoft.CostManagement/query?api-version=2023-11-01" \
+  --headers "Content-Type=application/json" \
+  --body '{"type":"ActualCost","timeframe":"Custom","timePeriod":{"from":"2026-08-01","to":"2026-08-31"},
+           "dataset":{"granularity":"None","aggregation":{"totalCost":{"name":"Cost","function":"Sum"}},
+           "grouping":[{"type":"Dimension","name":"ServiceName"}]}}'
+
+# Budget amounts, thresholds and notification recipients
+az rest --method get --url "/subscriptions/25410e67-b3c8-49a2-8cf0-ab9f77ce613f/providers/Microsoft.Consumption/budgets?api-version=2023-05-01"
+```
 
 ---
 
