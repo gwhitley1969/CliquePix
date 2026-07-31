@@ -1,6 +1,6 @@
 # CLIQUE Pix Notification System
 
-**Last Updated**: April 10, 2026
+**Last Updated**: July 31, 2026 *(substantive content last changed 2026-07-28 — the Friday-reminder receiver incident; the header had read "April 10, 2026" for three months after that)*
 
 This document describes the notification architecture for CLIQUE Pix — push notifications (FCM), real-time events (Web PubSub), in-app notification list, and the push token lifecycle.
 
