@@ -18,11 +18,13 @@ class OptimisticEntitlementNotifier extends StateNotifier<bool> {
   bool _running = false;
 
   /// Called when a purchase/restore grants the `plus` entitlement. Sets the
-  /// optimistic flag (router dismisses the paywall immediately), then reconciles
-  /// with the backend up to ~30s, clearing the flag once the backend confirms
-  /// effective access. If the webhook is still slow after 30s the flag stays
-  /// set — the user paid, so they stay OUT of the paywall; the next normal auth
-  /// verify reconciles. No user-facing error after a successful charge.
+  /// optimistic flag (router dismisses the mandatory paywall immediately; the
+  /// trial prompts hide), then reconciles with the backend up to ~30s,
+  /// clearing the flag once the backend confirms the subscription
+  /// ([isPurchaseConfirmed]). If the webhook is still slow after 30s the flag
+  /// stays set — the user paid, so they stay OUT of the paywall; the next
+  /// normal auth verify reconciles. No user-facing error after a successful
+  /// charge.
   Future<void> onEntitlementGranted() async {
     state = true;
     if (_running) return;
@@ -35,8 +37,7 @@ class OptimisticEntitlementNotifier extends StateNotifier<bool> {
       ]) {
         if (delay > Duration.zero) await Future.delayed(delay);
         await _ref.read(authStateProvider.notifier).refreshEntitlement();
-        final s = _ref.read(authStateProvider);
-        if (s is AuthAuthenticated && s.user.entitlement.effectiveActive) {
+        if (isPurchaseConfirmed(_ref.read(authStateProvider))) {
           state = false; // gate now keys off the authoritative backend state
           return;
         }
@@ -46,6 +47,14 @@ class OptimisticEntitlementNotifier extends StateNotifier<bool> {
     }
   }
 }
+
+/// True once the backend reports an actual subscription. Deliberately NOT
+/// `effectiveActive`: a trial user buying from /subscribe already has
+/// effective access, so that would end the reconcile loop before the
+/// purchase lands and bring the trial banner back. For a lapsed user (no
+/// trial) the two are identical.
+bool isPurchaseConfirmed(AuthState state) =>
+    state is AuthAuthenticated && state.user.entitlement.active;
 
 final optimisticEntitlementProvider =
     StateNotifierProvider<OptimisticEntitlementNotifier, bool>(

@@ -29,6 +29,7 @@ import '../../features/auth/domain/auth_state.dart';
 import '../../features/auth/presentation/auth_providers.dart';
 import '../../features/paywall/presentation/paywall_screen.dart';
 import '../../features/paywall/presentation/paywall_providers.dart';
+import 'subscription_gate.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   // STABLE-ROUTER PATTERN (2026-06-11) — do not ref.watch auth state here.
@@ -60,8 +61,8 @@ final routerProvider = Provider<GoRouter>((ref) {
     initialLocation: '/events',
     refreshListenable: refresh,
     redirect: (context, state) {
-      final isAuthenticated = ref.read(authStateProvider) is AuthAuthenticated;
-      final hasAccess = ref.read(hasAppAccessProvider);
+      final auth = ref.read(authStateProvider);
+      final isAuthenticated = auth is AuthAuthenticated;
       final loc = state.matchedLocation;
       final isLoginRoute = loc == '/login';
 
@@ -75,31 +76,16 @@ final routerProvider = Provider<GoRouter>((ref) {
         final redirect = state.uri.queryParameters['redirect'];
         return redirect ?? '/events';
       }
+      if (auth is! AuthAuthenticated) return null;
 
-      // Paywall gate: authenticated but no access (trial lapsed + unsubscribed)
-      // → paywall, except the allowlist. Trial/subscribed users (effective
-      // access) pass through, preserving the invite loop during the trial.
-      //
-      // /invite/* is allowlisted so a lapsed user tapping an invite link (or
-      // the Play install-referrer auto-join) reaches JoinCliqueScreen instead
-      // of silently losing the invite code to a paywall bounce — the join
-      // POST itself is still backend-gated by requireActiveEntitlement.
-      // /diagnostics is allowlisted because Token Diagnostics matters most
-      // exactly when a user is locked out. (Security audit 2026-06-04,
-      // "Remaining" items.)
-      final paywallExempt = loc == '/paywall' ||
-          loc == '/profile' ||
-          loc == '/login' ||
-          loc.startsWith('/invite/') ||
-          loc.startsWith('/diagnostics');
-      if (isAuthenticated && !hasAccess && !paywallExempt) {
-        return '/paywall';
-      }
-      // Access regained while sitting on the paywall → into the app.
-      if (isAuthenticated && hasAccess && loc == '/paywall') {
-        return '/events';
-      }
-      return null;
+      // Paywall gate — see subscription_gate.dart for the allowlist and the
+      // /paywall vs /subscribe rules.
+      return subscriptionGateRedirect(
+        location: loc,
+        hasAccess: ref.read(hasAppAccessProvider),
+        isSubscribed: auth.user.entitlement.active ||
+            ref.read(optimisticEntitlementProvider),
+      );
     },
     routes: [
       GoRoute(
@@ -109,6 +95,15 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/paywall',
         builder: (context, state) => const PaywallScreen(),
+      ),
+      // Dismissible paywall a trial user opens on purpose. `source` is the
+      // entry point, for telemetry: home_banner | profile | push.
+      GoRoute(
+        path: '/subscribe',
+        builder: (context, state) => PaywallScreen(
+          dismissible: true,
+          entry: state.uri.queryParameters['source'] ?? 'unknown',
+        ),
       ),
       GoRoute(
         path: '/invite/:inviteCode',

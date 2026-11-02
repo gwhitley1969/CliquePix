@@ -436,6 +436,7 @@ Relational model fits the cliques/events/memberships domain cleanly. Predictable
 | entitlement_last_event_id | TEXT | Nullable. Webhook idempotency |
 | entitlement_updated_at | TIMESTAMPTZ | Nullable. Last webhook upsert |
 | trial_ends_at | TIMESTAMPTZ | Nullable. App-granted 7-day free trial end (migration 013). Set NOW()+7d at first sign-in, COALESCE-preserved |
+| trial_reminder_sent_for | TIMESTAMPTZ | Nullable. The trial_ends_at the `trial_ending` push was delivered for (migration 017). notifyTrialEnding skips users where it equals trial_ends_at — one reminder per trial end |
 | created_at | TIMESTAMPTZ | |
 | updated_at | TIMESTAMPTZ | |
 

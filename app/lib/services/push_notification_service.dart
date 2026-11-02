@@ -7,6 +7,8 @@ import '../core/routing/app_router.dart';
 import '../features/auth/presentation/auth_providers.dart';
 import '../features/events/presentation/events_providers.dart';
 import '../features/notifications/presentation/notifications_providers.dart';
+import '../features/paywall/presentation/open_subscribe.dart';
+import '../features/paywall/presentation/paywall_providers.dart';
 import '../features/photos/presentation/photos_providers.dart';
 import '../features/videos/presentation/videos_providers.dart';
 import 'telemetry_service.dart';
@@ -154,6 +156,18 @@ class PushNotificationService {
           // telemetry is best-effort
         }
         router.go('/events');
+        return;
+      }
+
+      // Trial ends in about a day (backend notifyTrialEnding timer). Push-only:
+      // no notifications-table row, so the in-app list has no case for it.
+      if (type == 'trial_ending') {
+        openSubscribe(
+          router,
+          hasAccess: _ref.read(hasAppAccessProvider),
+          source: 'push',
+          telemetry: _ref.read(telemetryServiceProvider),
+        );
         return;
       }
 
