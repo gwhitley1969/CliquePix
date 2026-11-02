@@ -55,6 +55,16 @@ class RevenueCatService {
       _configureError = e.runtimeType.toString();
       debugPrint('[RC] configure failed: $e');
       onConfigureFailed?.call('configure_exception');
+      return;
+    }
+    // Apple Ads attribution (AdServices token → RevenueCat). Standard data
+    // only — no ATT prompt; do NOT add one (App Privacy is "Does not track").
+    if (Platform.isIOS) {
+      try {
+        await Purchases.enableAdServicesAttributionTokenCollection();
+      } catch (e) {
+        debugPrint('[RC] AdServices attribution not enabled: $e');
+      }
     }
   }
 
