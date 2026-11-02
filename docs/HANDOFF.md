@@ -47,7 +47,7 @@ Deep docs: `docs/PRD.md`, `docs/ARCHITECTURE.md`, `.claude/CLAUDE.md`.
 |---|---|---|---|
 | **Mobile** | Flutter (Dart), Riverpod, Dio, `pro_image_editor`, `msal_auth`, `video_player`+`chewie`, `purchases_flutter` | `app/` | CLAUDE.md "Project Structure"; `docs/AUTHENTICATION.md` |
 | **Web** | React 18 + Vite 5 + TS, Tailwind, Radix, React Query, `@azure/msal-browser`, `hls.js` | `webapp/` | `docs/WEB_CLIENT_ARCHITECTURE.md` |
-| **Backend API** | Azure Functions (TypeScript, Node 20) | `backend/` | `docs/ARCHITECTURE.md` |
+| **Backend API** | Azure Functions (TypeScript, Node 22, Linux Consumption) | `backend/` | `docs/ARCHITECTURE.md` |
 | **Transcoder** | FFmpeg in a SHA-pinned `jrottenberg/ffmpeg:6-alpine` container, on Container Apps Jobs | `backend/transcoder/` | `docs/VIDEO_ARCHITECTURE_DECISIONS.md`, `docs/VIDEO_INFRASTRUCTURE_RUNBOOK.md` |
 
 **Request path (control plane, no exceptions):** client → **Front Door** (`fd-cliquepix-prod`, custom domain `api.clique-pix.com`, route → origin group `func-origin-group`) → **Functions** (`func-cliquepix-fresh`) → **PostgreSQL** (`pg-cliquepixdb`) / **Blob** (`stcliquepixprod`). No direct Function URLs are published to clients; the Function App is locked to Front Door traffic (access restriction on `AzureFrontDoor.Backend` + `X-Azure-FDID`, applied post-soak — direct azurewebsites calls 403). CORS = Function App platform CORS. **APIM was removed 2026-07-05** (it had become a ~$148/mo CORS-only pass-through).
@@ -150,7 +150,13 @@ cd backend
 npm ci
 npm run lint && npx tsc --noEmit && npm test   # exactly what Backend CI runs (221 tests)
 npm run build                                  # tsc → dist/src/functions/*.js
-func azure functionapp publish func-cliquepix-fresh   # deploy (manual)
+# REQUIRED when publishing from Windows/macOS: the Function App is LINUX (Node, Consumption) and
+# `func publish` zips local node_modules as-is (SCM_DO_BUILD_DURING_DEPLOYMENT=false). Without this
+# the package ships only this machine's `sharp` binary and avatar confirm / photo thumbs fail on Linux.
+# Use the sharp version in package-lock.json. (Found 2026-11-02 on the Windows dev box.)
+npm install --no-save --os=linux --cpu=x64 --libc=glibc sharp@0.33.5
+func azure functionapp publish func-cliquepix-fresh --subscription 25410e67-b3c8-49a2-8cf0-ab9f77ce613f   # deploy (manual)
+npm ci                                         # afterwards: restore this machine's own sharp binary
 # health: GET https://api.clique-pix.com/api/health → 200
 #   (the raw azurewebsites URL 403s once the Front Door lockdown is applied — always probe via the custom domain)
 ```

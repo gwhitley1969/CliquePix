@@ -202,7 +202,7 @@ Do not introduce npm dependencies not listed in `docs/WEB_CLIENT_ARCHITECTURE.md
 | Layer | Service | Purpose |
 |-------|---------|---------|
 | Entry point | Azure Front Door | Custom domain `api.clique-pix.com`, SSL termination, routes directly to the Function App (APIM removed 2026-07-05 — see Architecture Pattern below) |
-| Compute (API) | Azure Functions (TypeScript, Node.js) | REST API, timer cleanup, photo thumbnail generation, video upload orchestration. Platform CORS is the CORS source of truth |
+| Compute (API) | Azure Functions (TypeScript, Node.js 22, **Linux** Consumption) | REST API, timer cleanup, photo thumbnail generation, video upload orchestration. Platform CORS is the CORS source of truth. Node 22 is the LAST version Linux Consumption gets (end of support 2027-04-30; the plan retires 2028-09-30) — migrate to Flex Consumption before 2027-04-30. Publishing from Windows/macOS needs Linux `sharp` binaries (see `docs/HANDOFF.md` backend deploy) |
 | Compute (video transcode) | Azure Container Apps Jobs | Runs FFmpeg transcoder per-video (HDR→SDR, 1080p HLS package, MP4 fallback, poster). Scale-to-zero. See `docs/VIDEO_ARCHITECTURE_DECISIONS.md` Decision 0. |
 | Container registry | Azure Container Registry (Basic SKU) | Hosts the FFmpeg transcoder image (`cracliquepix`). Downgraded Standard → Basic 2026-07-05 (FinOps): registry stores ~265 MB of Basic's 10 GB allowance and the scale-to-zero job pulls one image occasionally — Standard's throughput headroom was paying ~$15/month for nothing. CI pushes via the `gh-actions-transcoder` ACR token (survived the downgrade, verified). |
 | Job dispatch | Azure Storage Queue | Queues video transcoding jobs. Triggered by video upload-confirm endpoint; polled by Container Apps Job |

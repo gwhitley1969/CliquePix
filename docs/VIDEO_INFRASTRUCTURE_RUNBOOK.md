@@ -524,7 +524,7 @@ az containerapp job update \
 
 - **CLI bug:** Re-test `az role assignment create` after upgrading Azure CLI from 2.77.0
 - **Storage account:** App code uses `DefaultAzureCredential` (audited 2026-04-10), but `allowSharedKeyAccess` must stay `true` because Azure Functions runtime (`AzureWebJobsStorage`) requires shared keys. To fully disable: migrate to identity-based `AzureWebJobsStorage__accountName` first (v1.5).
-- **Function App:** Migrate from Node 20 to Node 24 before 2026-04-30 (Node 20 EOL)
+- **Function App:** Node 20 → **Node 22** (2026-11). Node 24 is never coming to Linux Consumption — Node 22 is its last version (end of support **2027-04-30**), and Linux Consumption itself retires **2028-09-30**. Migrate to the **Flex Consumption** plan before 2027-04-30 to stay on a supported Node.
 - **Bicep IaC:** Convert this runbook to Bicep templates in v1.5
 - **Sample test videos:** Create the `dev-assets` blob container and upload reference videos for the `download-sample-videos.sh` script (Phase 3)
 - **KEDA scaler auto-trigger:** FIXED 2026-04-08. Root cause: the `az containerapp job create --scale-rule-auth "identity=system"` flag creates a broken auth array that references a nonexistent secret. Fix: PATCH the ARM resource with `identity: "system"` on the rule itself via `az rest` + preview API version `2024-08-02-preview`. See "KEDA scaler identity fix" section above. Verified end-to-end: test message enqueued at 17:00:48, job auto-started at 17:01:02 (14 seconds later, well under the 30-second polling interval).
