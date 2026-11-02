@@ -11,42 +11,85 @@ import 'package:clique_pix/features/paywall/presentation/paywall_providers.dart'
 import 'package:clique_pix/core/constants/revenuecat_constants.dart';
 import 'package:clique_pix/services/telemetry_service.dart';
 
-/// Hosted Paywalls v2 paywall. Shown by the router when the user lacks access
-/// (no subscription and trial lapsed). On a successful purchase/restore the
-/// optimistic flag dismisses it instantly; the detached reconcile loop in
-/// [OptimisticEntitlementNotifier] folds in the authoritative backend state.
+/// Hosted Paywalls v2 paywall, in two modes:
+///
+/// - Mandatory (`/paywall`, the default): shown by the router when the user
+///   lacks access (no subscription and trial lapsed). On a successful
+///   purchase/restore the optimistic flag dismisses it instantly; the detached
+///   reconcile loop in [OptimisticEntitlementNotifier] folds in the
+///   authoritative backend state.
+/// - Dismissible (`/subscribe`, [dismissible] = true): opened on purpose by a
+///   trial user (Home banner, Profile, trial-ending push). Has a Close button
+///   and closes itself after a purchase/restore — the router can't, because a
+///   trial user already had access before buying.
 ///
 /// HARD RULE: PaywallView is only ever mounted behind the
 /// [paywallOfferingProvider] pre-flight. It is a bare platform view with no
 /// load-failure callback — mounting it with an unconfigured SDK or unloadable
 /// offerings renders a BLANK SCREEN (the 2026-06-11 Android lockout incident).
-class PaywallScreen extends ConsumerWidget {
-  const PaywallScreen({super.key});
+class PaywallScreen extends ConsumerStatefulWidget {
+  const PaywallScreen({super.key, this.dismissible = false, this.entry = 'gate'});
 
-  void _onEntitlementGranted(WidgetRef ref, String source) {
-    ref
-        .read(telemetryServiceProvider)
-        .record('purchase_succeeded', extra: {'source': source});
+  /// True for the voluntary `/subscribe` route.
+  final bool dismissible;
+
+  /// Where the user came from, for telemetry:
+  /// gate | home_banner | profile | push.
+  final String entry;
+
+  @override
+  ConsumerState<PaywallScreen> createState() => _PaywallScreenState();
+}
+
+class _PaywallScreenState extends ConsumerState<PaywallScreen> {
+  bool _closing = false;
+
+  void _onEntitlementGranted(String source) {
+    ref.read(telemetryServiceProvider).record('purchase_succeeded',
+        extra: {'source': source, 'entry': widget.entry});
     unawaited(
       ref.read(optimisticEntitlementProvider.notifier).onEntitlementGranted(),
     );
+    if (widget.dismissible) _close();
+  }
+
+  /// Leaves the dismissible paywall. Idempotent: after a purchase the SDK
+  /// fires both onPurchaseCompleted and onDismiss.
+  void _close() {
+    if (_closing || !mounted) return;
+    _closing = true;
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go('/events');
+    }
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final preflight = ref.watch(paywallOfferingProvider);
     return Scaffold(
       backgroundColor: const Color(0xFF0E1525),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
+        // PaywallView's own close button is ignored for V2 paywalls, so the
+        // dismissible mode supplies one here.
+        leading: widget.dismissible
+            ? IconButton(
+                icon: const Icon(Icons.close_rounded, color: Colors.white),
+                tooltip: 'Close',
+                onPressed: _close,
+              )
+            : null,
         actions: [
-          IconButton(
-            icon:
-                const Icon(Icons.account_circle_outlined, color: Colors.white),
-            tooltip: 'Account',
-            onPressed: () => context.push('/profile'),
-          ),
+          if (!widget.dismissible)
+            IconButton(
+              icon: const Icon(Icons.account_circle_outlined,
+                  color: Colors.white),
+              tooltip: 'Account',
+              onPressed: () => context.push('/profile'),
+            ),
         ],
       ),
       extendBodyBehindAppBar: true,
@@ -54,7 +97,7 @@ class PaywallScreen extends ConsumerWidget {
         loading: () => const Center(
           child: CircularProgressIndicator(color: Colors.white),
         ),
-        data: (offering) => _buildPaywall(ref, offering),
+        data: _buildPaywall,
         error: (e, _) => _PaywallFallback(
           reason: e is PaywallUnavailableException ? e.reason : 'unknown',
           onRetry: () => ref.invalidate(paywallOfferingProvider),
@@ -63,17 +106,18 @@ class PaywallScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildPaywall(WidgetRef ref, Offering offering) {
+  Widget _buildPaywall(Offering offering) {
     return PaywallView(
       offering: offering,
       onPurchaseCompleted: (customerInfo, storeTransaction) =>
-          _onEntitlementGranted(ref, 'purchase'),
+          _onEntitlementGranted('purchase'),
       onRestoreCompleted: (customerInfo) {
         if (customerInfo.entitlements.active
             .containsKey(RevenueCatConstants.entitlementId)) {
-          _onEntitlementGranted(ref, 'restore');
+          _onEntitlementGranted('restore');
         }
       },
+      onDismiss: widget.dismissible ? _close : null,
     );
   }
 }

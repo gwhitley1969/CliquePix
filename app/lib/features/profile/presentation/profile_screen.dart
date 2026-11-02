@@ -16,6 +16,9 @@ import '../../../widgets/branded_sliver_app_bar.dart';
 import '../../../widgets/confirm_destructive_dialog.dart';
 import '../../auth/presentation/auth_providers.dart';
 import '../../auth/domain/auth_state.dart';
+import '../../paywall/domain/trial_status.dart';
+import '../../paywall/presentation/open_subscribe.dart';
+import '../../paywall/presentation/paywall_providers.dart';
 import '../../../models/user_model.dart';
 import 'avatar_editor_screen.dart';
 import 'avatar_picker_sheet.dart';
@@ -31,6 +34,15 @@ class ProfileScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authStateProvider);
+    final purchasePending = ref.watch(optimisticEntitlementProvider);
+    final entitlement =
+        authState is AuthAuthenticated ? authState.user.entitlement : null;
+    final showSubscribe =
+        entitlement != null && !entitlement.active && !purchasePending;
+    final trial = entitlement == null
+        ? null
+        : computeTrialStatus(entitlement,
+            purchasePending: purchasePending, now: DateTime.now());
 
     return Scaffold(
       backgroundColor: const Color(0xFF0E1525),
@@ -265,6 +277,25 @@ class ProfileScreen extends ConsumerWidget {
                   // Subscription
                   _SettingsGroup(
                     children: [
+                      if (showSubscribe)
+                        _SettingsTile(
+                          icon: Icons.workspace_premium_rounded,
+                          iconColors: const [
+                            AppColors.violetAccent,
+                            AppColors.electricAqua,
+                          ],
+                          title: 'Subscribe',
+                          subtitle: trial?.shortLabel ??
+                              (entitlement.trialEndsAt != null
+                                  ? 'Your free trial has ended'
+                                  : null),
+                          onTap: () => openSubscribe(
+                            GoRouter.of(context),
+                            hasAccess: ref.read(hasAppAccessProvider),
+                            source: 'profile',
+                            telemetry: ref.read(telemetryServiceProvider),
+                          ),
+                        ),
                       _SettingsTile(
                         icon: Icons.workspace_premium_outlined,
                         iconColors: const [AppColors.electricAqua, AppColors.deepBlue],
@@ -622,6 +653,7 @@ class _SettingsTile extends StatelessWidget {
   final IconData icon;
   final List<Color> iconColors;
   final String title;
+  final String? subtitle;
   final Color? titleColor;
   final VoidCallback onTap;
   final bool showDivider;
@@ -630,6 +662,7 @@ class _SettingsTile extends StatelessWidget {
     required this.icon,
     required this.iconColors,
     required this.title,
+    this.subtitle,
     this.titleColor,
     required this.onTap,
     this.showDivider = true,
@@ -663,13 +696,26 @@ class _SettingsTile extends StatelessWidget {
                   ),
                   const SizedBox(width: 14),
                   Expanded(
-                    child: Text(
-                      title,
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500,
-                        color: titleColor ?? Colors.white,
-                      ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                            color: titleColor ?? Colors.white,
+                          ),
+                        ),
+                        if (subtitle != null)
+                          Text(
+                            subtitle!,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.white.withValues(alpha: 0.5),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                   Icon(

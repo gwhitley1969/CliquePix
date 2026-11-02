@@ -19,6 +19,10 @@ import '../../auth/presentation/auth_providers.dart';
 import '../../../services/telemetry_service.dart';
 import '../../events/presentation/events_providers.dart';
 import '../../cliques/presentation/cliques_providers.dart';
+import '../../paywall/domain/trial_status.dart';
+import '../../paywall/presentation/open_subscribe.dart';
+import '../../paywall/presentation/paywall_providers.dart';
+import '../../paywall/presentation/trial_banner.dart';
 import '../../profile/presentation/avatar_editor_screen.dart';
 import '../../profile/presentation/avatar_picker_sheet.dart';
 import '../../profile/presentation/avatar_providers.dart';
@@ -185,6 +189,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final authState = ref.watch(authStateProvider);
 
     final userName = authState is AuthAuthenticated ? authState.user.displayName : '';
+    // Recomputed on every build; the 1-minute _countdownTimer keeps it fresh.
+    final trial = authState is AuthAuthenticated
+        ? computeTrialStatus(
+            authState.user.entitlement,
+            purchasePending: ref.watch(optimisticEntitlementProvider),
+            now: DateTime.now(),
+          )
+        : null;
 
     return Scaffold(
       backgroundColor: const Color(0xFF0E1525),
@@ -194,6 +206,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           const BrandedSliverAppBar(
             screenTitle: 'Home',
           ),
+
+          // Free-trial countdown + Subscribe — only while in an unpaid trial.
+          if (trial != null)
+            SliverToBoxAdapter(
+              child: TrialBanner(
+                status: trial,
+                onSubscribe: () => openSubscribe(
+                  GoRouter.of(context),
+                  hasAccess: ref.read(hasAppAccessProvider),
+                  source: 'home_banner',
+                  telemetry: ref.read(telemetryServiceProvider),
+                ),
+              ),
+            ),
 
           // Inline refresh / refresh-error pill — only renders when relevant.
           _buildRefreshPill(eventsAsync, cliquesAsync),

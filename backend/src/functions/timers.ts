@@ -6,6 +6,7 @@ import { trackEvent } from '../shared/services/telemetryService';
 import { initTelemetry } from '../shared/services/telemetryService';
 import { sweepStaleNotifications } from '../shared/db/notificationCleanup';
 import { findExpiredActive, markExpired } from '../shared/services/entitlementService';
+import { sendTrialEndingReminders } from '../shared/services/trialReminderService';
 import * as path from 'path';
 
 // Helper: prefix-delete all blobs under a video's directory
@@ -474,6 +475,22 @@ async function entitlementReconciliationTimer(
   context.log(`entitlementReconciliationTimer: corrected ${corrected}/${expired.length}`);
 }
 
+// ====================================================================================
+// notifyTrialEnding
+// ====================================================================================
+// One push ~24h before an unsubscribed user's 7-day app trial ends, so the
+// first time they hear about the price isn't a hard paywall. See
+// trialReminderService.ts (dedup per trial end via migration 017).
+async function notifyTrialEnding(_myTimer: Timer, context: InvocationContext): Promise<void> {
+  initTelemetry();
+  const result = await sendTrialEndingReminders((userId, err) =>
+    context.error(`notifyTrialEnding: failed for user ${userId}:`, err),
+  );
+  context.log(
+    `notifyTrialEnding: reminded ${result.reminded}/${result.users} users (${result.failed} token sends failed)`,
+  );
+}
+
 app.timer('cleanupExpired', {
   schedule: '0 */15 * * * *',
   handler: cleanupExpired,
@@ -500,4 +517,12 @@ app.timer('refreshTokenPushTimer', {
 app.timer('entitlementReconciliationTimer', {
   schedule: '0 12 */6 * * *',
   handler: entitlementReconciliationTimer,
+});
+
+// Hourly at :33 — clear of every other timer's minute (:00/:05 multiples,
+// :07/:22/:37/:52, :12). The 23-25h window is two runs wide; the per-trial-end
+// dedup keeps it to one push.
+app.timer('notifyTrialEnding', {
+  schedule: '0 33 * * * *',
+  handler: notifyTrialEnding,
 });

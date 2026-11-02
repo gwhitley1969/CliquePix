@@ -102,8 +102,9 @@ class NotificationsScreen extends ConsumerWidget {
 
   // Type-aware tap routing. Mirrors `_navigateFromNotification` in
   // `app/lib/services/push_notification_service.dart` — keep the two in sync.
-  // `dm_message` is intentionally NOT handled here: the notifications table's
-  // CHECK constraint forbids it, so a DM row can never appear in this list.
+  // `dm_message` and `trial_ending` are intentionally NOT handled here: both
+  // are push-only (the notifications table's CHECK constraint forbids them),
+  // so neither can ever appear in this list.
   void _handleNotificationTap(
     BuildContext context,
     WidgetRef ref,
