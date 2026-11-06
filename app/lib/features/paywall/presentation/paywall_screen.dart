@@ -73,8 +73,14 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
+        // HARD RULE: the paywall renders full-bleed under this bar
+        // (extendBodyBehindAppBar). Without transparency-type Material the
+        // bar absorbs every tap in the status-bar + toolbar strip, making any
+        // template control there (e.g. Restore Purchases) untappable.
+        forceMaterialTransparency: true,
         // PaywallView's own close button is ignored for V2 paywalls, so the
-        // dismissible mode supplies one here.
+        // dismissible mode supplies one here. The RevenueCat template must
+        // not draw its own close button or controls in this strip.
         leading: widget.dismissible
             ? IconButton(
                 icon: const Icon(Icons.close_rounded, color: Colors.white),
