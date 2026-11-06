@@ -96,4 +96,27 @@ void main() {
     expect(find.byTooltip('Account'), findsOneWidget);
     expect(find.byTooltip('Close'), findsNothing);
   });
+
+  // The RevenueCat template draws full-bleed under the AppBar; a canvas-type
+  // AppBar would swallow taps on template controls in the top strip
+  // (Restore Purchases sat there when 1.0.4 was reviewed).
+  testWidgets('AppBar lets taps pass through in both paywall modes',
+      (tester) async {
+    for (final dismissible in [true, false]) {
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          paywallOfferingProvider.overrideWith(
+            (ref) => throw const PaywallUnavailableException('offerings_error'),
+          ),
+          telemetryServiceProvider.overrideWithValue(_FakeTelemetry()),
+        ],
+        child: MaterialApp(home: PaywallScreen(dismissible: dismissible)),
+      ));
+      await tester.pumpAndSettle();
+
+      final appBar = tester.widget<AppBar>(find.byType(AppBar));
+      expect(appBar.forceMaterialTransparency, isTrue,
+          reason: 'dismissible=$dismissible');
+    }
+  });
 }

@@ -223,7 +223,7 @@ Deploy history + per-item status: `docs/DEPLOYMENT_STATUS.md`.
 | Web app | `clique-pix.com` · API `api.clique-pix.com` (the only owned domain; **no email mailboxes** on it) |
 | ⚠️ `cliquepix.com` (no hyphen) | **NOT owned** — never reference it |
 | Public contact (footer, legal, "Contact Us") | `support@xtend-ai.com` (company: **Xtend-AI, LLC**) |
-| App Store reviewer login | `vwhitley1967@gmail.com` — **email+password** (NOT Google/Apple SSO); password held by Gene, **not** in Key Vault. `users.id a16a8a7c-74ca-4efc-9460-27c08db4061e` (account **recreated 2026-06-11** — the original was an OTP-era Entra account that emailed codes instead of accepting a password; deleted in-app + in Entra and re-signed-up under the password flow; lifetime promo grant re-issued + verified) |
+| App Store reviewer login | `vwhitley1967@gmail.com` — **email+password** (NOT Google/Apple SSO); password held by Gene, **not** in Key Vault. `users.id 1386926c-f63a-4fd0-ab17-cfe38e01c5b2` (row **recreated 2026-11-04**: the account was deleted in-app on 2026-11-02, which removes the DB row but not the Entra identity, so Apple's next sign-in created a fresh empty row and the old promo was lost — lifetime promo re-granted to `1386926c` the same day. **Never test Delete Account on this login.** Before that: `a16a8a7c-74ca-4efc-9460-27c08db4061e`, recreated 2026-06-11 — the original was an OTP-era Entra account that emailed codes instead of accepting a password; deleted in-app + in Entra and re-signed-up under the password flow; lifetime promo grant re-issued + verified) |
 | App Store Connect contact / account owner | `genewhitley2017@gmail.com` |
 | Azure admin notifications + budget alerts (was the APIM publisher address) | `gwhitley@xtend-ai.com` |
 | Ops / Azure budget-alert recipient | `bluebuildapps@gmail.com` (old "BlueBuildApps" brand) |
@@ -307,6 +307,7 @@ These are load-bearing rules — each was added after an incident, an audit find
 - **`PaywallView` is ONLY mounted behind the `paywallOfferingProvider` pre-flight** — it's a bare platform view with no load-failure callback; unconfigured SDK (placeholder key) or unloadable offerings = BLANK SCREEN (the 2026-06-11 lockout). Failures must render the branded `_PaywallFallback`.
 - **RC webhook resolves the user as the FIRST valid UUID among `app_user_id` → `original_app_user_id` → `aliases[]`** — RC pins `original_app_user_id` to `$RCAnonymousID:…` forever for SDK-created customers; preferring it dropped every webhook for anonymous-origin customers (incl. promo grants).
 - **`revenuecatRestClient.ts` stays on RC API v2** — the Key Vault secret is a v2-only key; v1 endpoints reject it (error 7723) and the failures are invisible (best-effort paths).
+- **Paywall copy is price-first (Apple 3.1.2(c), rejection of 1.0.4 (17) on 2026-11-06).** The RevenueCat template (dashboard, not repo) must keep the billed amount (`$39.99/year`, `$3.99/month`) as the largest, boldest pricing text. No trial wording in package headlines, badges, or the purchase button (button = "Continue"); trial terms only in small secondary text; no calculated per-month price. Restore Purchases sits in the bottom link row; the template draws no controls under the app's AppBar strip, and the AppBar keeps `forceMaterialTransparency: true` so taps reach the template. Full copy spec: `docs/DEPLOYMENT_STATUS.md` top entry.
 
 ### Router — stable instance, refreshListenable for redirects
 - **`routerProvider` must NOT `ref.watch` auth/access state** — GoRouter recreation resets navigation to `initialLocation` (proven in `app/test/router_recreation_behavior_test.dart`). Router is created once per signed-in identity (watches `currentUserIdProvider` only — keeps the cross-user tab-stack reset); redirect re-eval via `refreshListenable` + `ref.read`. Paywall-exempt prefixes include `/invite/` + `/diagnostics`. `DeepLinkService` takes a router *getter*, never a captured instance.
@@ -348,6 +349,10 @@ These are load-bearing rules — each was added after an incident, an audit find
 ---
 
 ## 7. Recent work log
+
+### 2026-11-06 — App Store 3.1.2(c) rejection of 1.0.4 (17) → price-first paywall, 1.0.5 (18)
+- Apple rejected 1.0.4 (17) because the paywall's annual card led with "free for 1 week" and the billed amount sat below it in small grey text; the badge and the "Start Free Trial" button also pushed the trial. (The earlier 2.1(a) demo-account rejection of the same build was resolved.)
+- Fix is mostly in the RevenueCat dashboard (price-first headlines, trial in secondary text, "Continue" button, Restore moved to the bottom link row, template close button removed) — live for every installed build at once. App side: paywall AppBar `forceMaterialTransparency: true` (the bar was swallowing taps on template controls under it) + regression test; `pubspec` → `1.0.5+18`. Resubmitted as **1.0.5 (18)**. Details: `docs/DEPLOYMENT_STATUS.md` top entry.
 
 ### 2026-06-18 — first App Store production build + branded iOS launch screen
 - **`1.0.0 (9)` IPA built on the Mac and uploaded to App Store Connect via Transporter — first production submission, now in Apple review.** (Build number `+9` matches Android Play vc9; iOS/TestFlight build numbers are tracked independently from Play, so verify the highest `+N` already in TestFlight under `1.0.0` before each iOS build to avoid a duplicate-rejection — bump just iOS with `flutter build ipa --release --build-number=<next>`.)
